@@ -218,7 +218,7 @@ ALL_STOPS_XML = """\
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
   <soap:Body>
     <GetDurak_jsonResponse xmlns="http://tempuri.org/">
-      <GetDurak_jsonResult>[{"SDURAKKODU":100022,"SDURAKADI":"OKTAY RIFAT CADDESİ","KOORDINAT":"POINT (28.6952 41.0046)","ILCEADI":"Esenyurt"},{"SDURAKKODU":100151,"SDURAKADI":"MENEKŞE","KOORDINAT":"POINT (28.6599 40.9783)","ILCEADI":"Beylikdüzü"},{"SDURAKKODU":301341,"SDURAKADI":"4.LEVENT METRO","KOORDINAT":"POINT (29.0073 41.0842)","ILCEADI":"Sisli"}]</GetDurak_jsonResult>
+      <GetDurak_jsonResult>[{"SDURAKKODU":100022,"SDURAKADI":"OKTAY RIFAT CADDES\u0130","KOORDINAT":"POINT (28.6952 41.0046)","ILCEADI":"Esenyurt","SYON":"BEYLIKD\u00dcZ\u00dc"},{"SDURAKKODU":100151,"SDURAKADI":"MENEK\u015eE","KOORDINAT":"POINT (28.6599 40.9783)","ILCEADI":"Beylikd\u00fcz\u00fc","SYON":"AVCILAR"},{"SDURAKKODU":301341,"SDURAKADI":"4.LEVENT METRO","KOORDINAT":"POINT (29.0073 41.0842)","ILCEADI":"Sisli","SYON":null}]</GetDurak_jsonResult>
     </GetDurak_jsonResponse>
   </soap:Body>
 </soap:Envelope>"""

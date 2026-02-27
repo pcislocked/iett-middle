@@ -304,6 +304,14 @@ class TestParseAllStops:
         assert abs(levent.latitude - 41.0842) < 0.001
         assert abs(levent.longitude - 29.0073) < 0.001
         assert levent.district == "Sisli"
+        assert levent.direction is None  # SYON is null for this stop
+
+    def test_direction_field(self):
+        stops = parse_all_stops_json(ALL_STOPS_XML)
+        oktay = next(s for s in stops if s.stop_code == "100022")
+        assert oktay.direction == "BEYLIKDÜZÜ"
+        menekse = next(s for s in stops if s.stop_code == "100151")
+        assert menekse.direction == "AVCILAR"
 
     def test_skips_missing_point(self):
         xml = (
