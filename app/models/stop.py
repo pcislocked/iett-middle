@@ -10,6 +10,14 @@ class StopSearchResult(BaseModel):
     path: str | None = None
 
 
+class StopDetail(BaseModel):
+    """Stop name + optional coordinates (for map pin)."""
+    dcode: str
+    name: str
+    latitude: float | None = None
+    longitude: float | None = None
+
+
 class RouteStop(BaseModel):
     route_code: str
     direction: str
@@ -19,3 +27,13 @@ class RouteStop(BaseModel):
     latitude: float
     longitude: float
     district: str | None = None
+
+
+class NearbyStop(BaseModel):
+    """A stop with its distance from a query point."""
+    stop_code: str
+    stop_name: str
+    latitude: float
+    longitude: float
+    district: str | None = None
+    distance_m: float = 0.0

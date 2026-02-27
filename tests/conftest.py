@@ -152,3 +152,73 @@ SEARCH_JSON: dict[str, list[dict[str, Any]]] = {
         },
     ]
 }
+
+ROUTE_SEARCH_JSON: dict[str, list[dict[str, Any]]] = {
+    "list": [
+        {
+            "Path": "/RouteDetail?hkod=500T",
+            "Code": "500T",
+            "Name": "TUZLA ŞİFA MAHALLESİ - 4. LEVENT METRO",
+            "Location": None,
+            "Stationcode": 0,
+        },
+        {
+            "Path": "/StationDetail?dkod=220602",
+            "Code": "<img>",
+            "Name": "SOME STOP",
+            "Location": None,
+            "Stationcode": 220602,
+        },
+    ]
+}
+
+ROUTE_METADATA_JSON: list[dict[str, Any]] = [
+    {
+        "GUZERGAH_ADI": "TUZLA ŞİFA MAHALLESİ - 4. LEVENT METRO",
+        "GUZERGAH_GUZERGAH_KODU": "500T_D_D0",
+        "GUZERGAH_YON": 0,
+        "GUZERGAH_DEPAR_NO": 1,
+        "GUZERGAH_GUZERGAH_ADI": "4. LEVENT METRO YÖNÜ",
+        "HAT_HAT_ADI": None,
+        "HAT_HAT_KODU": None,
+    },
+    {
+        "GUZERGAH_ADI": "TUZLA ŞİFA MAHALLESİ - 4. LEVENT METRO",
+        "GUZERGAH_GUZERGAH_KODU": "500T_G_G0",
+        "GUZERGAH_YON": 1,
+        "GUZERGAH_DEPAR_NO": 2,
+        "GUZERGAH_GUZERGAH_ADI": "TUZLA YÖNÜ",
+        "HAT_HAT_ADI": None,
+        "HAT_HAT_KODU": None,
+    },
+]
+
+GARAGE_XML = """\
+<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <GetGaraj_jsonResponse xmlns="http://tempuri.org/">
+      <GetGaraj_jsonResult>[{"GarajAdi":"IKITELLI GARAJ","GarajKodu":"IKT","KoordinatX":"28.7980","KoordinatY":"41.0620"},{"GarajAdi":"ANADOLU GARAJ","GarajKodu":"AND","KoordinatX":"29.1500","KoordinatY":"40.9800"}]</GetGaraj_jsonResult>
+    </GetGaraj_jsonResponse>
+  </soap:Body>
+</soap:Envelope>"""
+
+STOP_DETAIL_XML = """\
+<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <GetDurak_jsonResponse xmlns="http://tempuri.org/">
+      <GetDurak_jsonResult>[{"SDURAKKODU":220602,"SDURAKADI":"AHMET MİTHAT EFENDİ","KOORDINAT":"POINT (29.0871 41.1234)","ILCEADI":"Beykoz"}]</GetDurak_jsonResult>
+    </GetDurak_jsonResponse>
+  </soap:Body>
+</soap:Envelope>"""
+
+ALL_STOPS_XML = """\
+<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <GetDurak_jsonResponse xmlns="http://tempuri.org/">
+      <GetDurak_jsonResult>[{"SDURAKKODU":100022,"SDURAKADI":"OKTAY RIFAT CADDESİ","KOORDINAT":"POINT (28.6952 41.0046)","ILCEADI":"Esenyurt"},{"SDURAKKODU":100151,"SDURAKADI":"MENEKŞE","KOORDINAT":"POINT (28.6599 40.9783)","ILCEADI":"Beylikdüzü"},{"SDURAKKODU":301341,"SDURAKADI":"4.LEVENT METRO","KOORDINAT":"POINT (29.0073 41.0842)","ILCEADI":"Sisli"}]</GetDurak_jsonResult>
+    </GetDurak_jsonResponse>
+  </soap:Body>
+</soap:Envelope>"""

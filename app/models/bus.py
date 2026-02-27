@@ -4,6 +4,12 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 
+class TrailPoint(BaseModel):
+    lat: float
+    lon: float
+    ts: str  # value of last_seen at that snapshot
+
+
 class BusPosition(BaseModel):
     kapino: str
     plate: str | None = None
@@ -18,8 +24,15 @@ class BusPosition(BaseModel):
     nearest_stop: str | None = None
 
 
+class BusPositionWithTrail(BusPosition):
+    """BusPosition extended with a rolling position history."""
+    trail: list[TrailPoint] = []
+
+
 class Arrival(BaseModel):
     route_code: str
     destination: str
     eta_minutes: int | None
     eta_raw: str
+    plate: str | None = None
+    kapino: str | None = None

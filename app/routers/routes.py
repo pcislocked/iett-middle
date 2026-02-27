@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 
 from app.config import settings
-from app.main import get_session
+from app.deps import get_session
 from app.models.bus import BusPosition
 from app.models.route import Announcement, RouteMetadata, RouteSearchResult, ScheduledDeparture
 from app.models.stop import RouteStop

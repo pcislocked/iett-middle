@@ -7,16 +7,20 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Any
 
 import aiohttp
 
 from app.config import settings
 from app.models.bus import Arrival, BusPosition
+from app.models.garage import Garage
 from app.models.route import Announcement, RouteMetadata, RouteSearchResult, ScheduledDeparture
-from app.models.stop import RouteStop, StopSearchResult
+from app.models.stop import NearbyStop, RouteStop, StopDetail, StopSearchResult
 from app.services.iett_parser import (
     parse_all_fleet_xml,
+    parse_all_stops_json,
     parse_announcements_xml,
+    parse_garages_xml,
     parse_route_fleet_xml,
     parse_route_metadata_json,
     parse_route_schedule_xml,
@@ -25,6 +29,7 @@ from app.services.iett_parser import (
     parse_routes_from_html,
     parse_search_results,
     parse_stop_arrivals_html,
+    parse_stop_detail_xml,
 )
 
 logger = logging.getLogger(__name__)
@@ -68,7 +73,7 @@ class IettClient:
         except Exception as exc:
             raise IettApiError(f"SOAP POST to {url} failed: {exc}") from exc
 
-    async def _get_text(self, url: str, params: dict | None = None) -> str:
+    async def _get_text(self, url: str, params: dict[str, Any] | None = None) -> str:
         try:
             async with self._session.get(
                 url,
@@ -80,7 +85,7 @@ class IettClient:
         except Exception as exc:
             raise IettApiError(f"GET {url} failed: {exc}") from exc
 
-    async def _get_json(self, url: str, params: dict | None = None) -> dict:
+    async def _get_json(self, url: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         try:
             async with self._session.get(
                 url,
@@ -159,6 +164,33 @@ class IettClient:
         )
         return [StopSearchResult(**item) for item in parse_search_results(raw)]
 
+    async def get_stop_detail(self, dcode: str) -> StopDetail | None:
+        """Stop name + coordinates via GetDurak_json (single SOAP call)."""
+        xml = await self._soap_post(
+            f"{settings.iett_soap_base}/UlasimAnaVeri/HatDurakGuzergah.asmx",
+            f'<GetDurak_json xmlns="http://tempuri.org/"><DurakKodu>{dcode}</DurakKodu></GetDurak_json>',
+            '"http://tempuri.org/GetDurak_json"',
+        )
+        return parse_stop_detail_xml(xml, dcode)
+
+    async def get_all_stops(self) -> list[NearbyStop]:
+        """All ~15 k IETT stops with coordinates (GetDurak_json, empty DurakKodu)."""
+        xml = await self._soap_post(
+            f"{settings.iett_soap_base}/UlasimAnaVeri/HatDurakGuzergah.asmx",
+            '<GetDurak_json xmlns="http://tempuri.org/"><DurakKodu></DurakKodu></GetDurak_json>',
+            '"http://tempuri.org/GetDurak_json"',
+        )
+        return parse_all_stops_json(xml)
+
+    async def get_garages(self) -> list[Garage]:
+        """All IETT bus garage locations via GetGaraj_json."""
+        xml = await self._soap_post(
+            f"{settings.iett_soap_base}/UlasimAnaVeri/HatDurakGuzergah.asmx",
+            '<GetGaraj_json xmlns="http://tempuri.org/"/>',
+            '"http://tempuri.org/GetGaraj_json"',
+        )
+        return parse_garages_xml(xml)
+
     async def search_routes(self, query: str) -> list[RouteSearchResult]:
         """Search routes by name or code. Returns hat_kodu + name."""
         raw = await self._get_json(
@@ -183,7 +215,7 @@ class IettClient:
         """Ordered stop list for a route (SOAP)."""
         xml = await self._soap_post(
             f"{settings.iett_soap_base}/ibb/ibb.asmx",
-            f'<DurakDetay_GYY xmlns="http://tempuri.org/"><hat_kodu>{hat_kodu}</hat_kodu></DurakDetay_GYY>',
+            f'<DurakDetay_GYY xmlns="http://tempuri.org/"><HatKodu>{hat_kodu}</HatKodu></DurakDetay_GYY>',
             '"http://tempuri.org/DurakDetay_GYY"',
         )
         return parse_route_stops_xml(xml)
@@ -206,5 +238,6 @@ class IettClient:
         )
         announcements = parse_announcements_xml(xml)
         if hat_kodu:
-            announcements = [a for a in announcements if a.route_code == hat_kodu]
+            hat_upper = hat_kodu.upper().strip()
+            announcements = [a for a in announcements if a.route_code.upper().strip() == hat_upper]
         return announcements

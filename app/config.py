@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     cache_ttl_traffic: int = 30
     cache_ttl_search: int = 300
 
+    # Background fleet poller
+    fleet_poll_interval: int = 30   # seconds between polls
+    fleet_trail_minutes: int = 5    # how many minutes of trail to keep per bus
+
     log_level: str = "info"
     port: int = 8000
 

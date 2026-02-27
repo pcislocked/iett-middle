@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from app.config import settings
-from app.main import get_session
+from app.deps import get_session
 from app.models.traffic import TrafficIndex, TrafficSegment
 from app.services.cache import cache_get, cache_set
 from app.services.iett_client import IettApiError
