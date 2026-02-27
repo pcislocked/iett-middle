@@ -68,6 +68,11 @@ def get_buses_near_stop(dcode: str) -> list[dict[str, Any]]:
     return [b for b in _fleet.values() if b.get("nearest_stop") == dcode]
 
 
+def get_plate_by_kapino(kapino: str) -> str | None:
+    """Look up the plate for a given kapino from the in-memory fleet store."""
+    return _fleet.get(kapino, {}).get("plate")
+
+
 def update_fleet(buses: list[BusPosition]) -> None:  # noqa: C901
     """Called by the background poller.  Updates fleet dict and trail deques."""
     global _fleet_updated_at  # noqa: PLW0603

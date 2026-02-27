@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 
 from app.config import settings
-from app.deps import get_buses_near_stop, get_session
+from app.deps import get_buses_near_stop, get_plate_by_kapino, get_session
 from app.models.bus import Arrival
 from app.models.stop import NearbyStop, StopDetail, StopSearchResult
 from app.services.cache import cache_get, cache_set
@@ -68,18 +68,13 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
         arrivals_data = [a.model_dump() for a in arrivals]
         await cache_set(key, arrivals_data, settings.cache_ttl_arrivals)
 
-    # Enrich with live plate/kapino from in-memory fleet store (free, no HTTP)
-    fleet_at_stop = get_buses_near_stop(dcode)
-    plate_map: dict[str, tuple[str | None, str | None]] = {}
-    for bus in fleet_at_stop:
-        rc = bus.get("route_code")
-        if rc and rc not in plate_map:
-            plate_map[rc] = (bus.get("plate"), bus.get("kapino"))
-
+    # Enrich with plate from in-memory fleet store keyed by kapino (free, no HTTP).
+    # Arrivals already carry kapino (KapiNo from IETT SOAP); we just fill in plate.
     result = []
     for a in arrivals_data:
-        plate, kapino = plate_map.get(a.get("route_code", ""), (None, None))
-        result.append({**a, "plate": plate, "kapino": kapino})
+        kapino = a.get("kapino")
+        plate = get_plate_by_kapino(kapino) if kapino else None
+        result.append({**a, "plate": plate})
     return result
 
 
