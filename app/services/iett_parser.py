@@ -374,6 +374,7 @@ def parse_all_stops_json(xml_text: str) -> list[NearbyStop]:
       SDURAKADI   – str stop name
       KOORDINAT   – WKT "POINT (lon lat)"
       ILCEADI     – district name
+      SYON        – str direction/terminus label (optional, may be absent or blank)
     """
     records = _extract_soap_json(xml_text, "GetDurak_jsonResult")
     result: list[NearbyStop] = []
@@ -395,7 +396,7 @@ def parse_all_stops_json(xml_text: str) -> list[NearbyStop]:
                     latitude=lat,
                     longitude=lon,
                     district=(r.get("ILCEADI") or None),
-                    direction=(r.get("SYON") or None),
+                    direction=((r.get("SYON") or "").strip() or None),
                 )
             )
         except (TypeError, ValueError):
