@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 
 from app.config import settings
-from app.deps import get_buses_near_stop, get_plate_by_kapino, get_session
+from app.deps import get_plate_by_kapino, get_session
 from app.models.bus import Arrival
 from app.models.stop import NearbyStop, StopDetail, StopSearchResult
 from app.services.cache import cache_get, cache_set
@@ -69,7 +69,9 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
         await cache_set(key, arrivals_data, settings.cache_ttl_arrivals)
 
     # Enrich with plate from in-memory fleet store keyed by kapino (free, no HTTP).
-    # Arrivals already carry kapino (KapiNo from IETT SOAP); we just fill in plate.
+    # NOTE: the HTML arrivals parser (GetStationInfo) does not populate kapino, so
+    # plate will be None until arrivals are sourced from a JSON/SOAP endpoint that
+    # includes KapiNo.
     result = []
     for a in arrivals_data:
         kapino = a.get("kapino")

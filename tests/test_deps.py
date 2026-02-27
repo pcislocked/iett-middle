@@ -103,6 +103,15 @@ class TestFleetStore:
         nearby = deps.get_buses_near_stop("301341")
         assert len(nearby) == 2
 
+    def test_get_plate_by_kapino_known_returns_plate(self) -> None:
+        deps.update_fleet([_bus("K-999", 41.0, 29.0)])
+        plate = deps.get_plate_by_kapino("K-999")
+        assert plate == "34 HO 1000"
+
+    def test_get_plate_by_kapino_unknown_returns_none(self) -> None:
+        plate = deps.get_plate_by_kapino("NOTEXIST")
+        assert plate is None
+
 
 # ---------------------------------------------------------------------------
 # Stop spatial index

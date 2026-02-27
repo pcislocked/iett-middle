@@ -213,7 +213,7 @@ class TestStopArrivals:
             patch("app.routers.stops.cache_set", AsyncMock()),
             patch("app.routers.stops.get_session", return_value=MagicMock()),
             patch("app.routers.stops.IettClient", return_value=mock_client),
-            patch("app.routers.stops.get_buses_near_stop", return_value=[]),
+            patch("app.routers.stops.get_plate_by_kapino", return_value=None),
         ):
             resp = client.get("/v1/stops/220602/arrivals")
         assert resp.status_code == 200
@@ -226,7 +226,7 @@ class TestStopArrivals:
             patch("app.routers.stops.cache_set", AsyncMock()),
             patch("app.routers.stops.get_session", return_value=MagicMock()),
             patch("app.routers.stops.IettClient", return_value=mock_client),
-            patch("app.routers.stops.get_buses_near_stop", return_value=[]),
+            patch("app.routers.stops.get_plate_by_kapino", return_value=None),
         ):
             resp = client.get("/v1/stops/220602/arrivals")
         assert resp.status_code == 200
