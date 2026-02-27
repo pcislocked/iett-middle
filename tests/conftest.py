@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from collections.abc import AsyncIterator
+from typing import Any
 
 # Windows: aiohttp needs SelectorEventLoop
 if sys.platform == "win32":
@@ -132,7 +134,7 @@ ROUTES_BY_STATION_HTML = """\
   </div>
 </div>"""
 
-SEARCH_JSON = {
+SEARCH_JSON: dict[str, list[dict[str, Any]]] = {
     "list": [
         {
             "Path": "/StationDetail?dkod=220602&stationname=ahmet-mithat",
