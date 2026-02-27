@@ -36,4 +36,5 @@ class NearbyStop(BaseModel):
     latitude: float
     longitude: float
     district: str | None = None
+    direction: str | None = None
     distance_m: float = 0.0

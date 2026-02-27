@@ -395,6 +395,7 @@ def parse_all_stops_json(xml_text: str) -> list[NearbyStop]:
                     latitude=lat,
                     longitude=lon,
                     district=(r.get("ILCEADI") or None),
+                    direction=(r.get("SYON") or None),
                 )
             )
         except (TypeError, ValueError):
