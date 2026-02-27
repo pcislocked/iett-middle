@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Env files (may contain secrets)
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+
+# Docker
+*.dockerignore

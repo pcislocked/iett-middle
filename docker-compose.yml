@@ -1,0 +1,19 @@
+services:
+  middle:
+    build: .
+    image: iett-middle:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - IETT_SOAP_BASE=https://api.ibb.gov.tr/iett
+      - IETT_REST_BASE=https://iett.istanbul
+      - TRAFIK_BASE=https://trafik.ibb.gov.tr
+      - LOG_LEVEL=info
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

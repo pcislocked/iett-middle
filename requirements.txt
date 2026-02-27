@@ -1,0 +1,7 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+aiohttp>=3.11
+beautifulsoup4>=4.12
+lxml>=5.3
+pydantic>=2.7
+pydantic-settings>=2.3
