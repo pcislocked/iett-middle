@@ -4,7 +4,6 @@
 [![Coverage](https://img.shields.io/badge/coverage-73%25-yellow)](#running-tests)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.1-orange)](https://github.com/pcislocked/iett-middle/releases/tag/v0.1)
 
 Smart caching proxy for Istanbul IETT public transit APIs.
@@ -99,7 +98,3 @@ docker compose logs -f middle
 - `GetStationInfo` returns HTML, not JSON. Parsed with BeautifulSoup.
 - `DurakDetay_GYY`: `XKOORDINATI` = **longitude**, `YKOORDINATI` = **latitude** (confusingly swapped).
 - OSRM enrichment is on-demand only (nearest bus per route) to avoid public rate limits.
-
-## Licence
-
-MIT
