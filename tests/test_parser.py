@@ -163,6 +163,8 @@ class TestParseRouteStops:
         assert s.stop_code == "301341"
         assert s.stop_name == "4.LEVENT METRO"
         # XKOORDINATI=29.007309 (lon), YKOORDINATI=41.084170 (lat)
+        assert s.latitude is not None
+        assert s.longitude is not None
         assert abs(s.latitude - 41.084170) < 0.0001
         assert abs(s.longitude - 29.007309) < 0.0001
         assert s.district == "Sisli"

@@ -262,7 +262,7 @@ def parse_route_stops_html(html: str, hat_kodu: str = "") -> list[dict[str, Any]
             p = item.select_one("p")
             if not a or not p:
                 continue
-            href = a.get("href", "")
+            href = str(a.get("href", ""))
             dkod_match = re.search(r"dkod=(\d+)", href)
             if not dkod_match:
                 continue
