@@ -16,6 +16,7 @@ class StopDetail(BaseModel):
     name: str
     latitude: float | None = None
     longitude: float | None = None
+    direction: str | None = None
 
 
 class RouteStop(BaseModel):

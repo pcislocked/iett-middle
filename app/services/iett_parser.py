@@ -101,6 +101,7 @@ def parse_stop_arrivals_html(html: str) -> list[Arrival]:
     """Parse GetStationInfo HTML fragment into Arrival list."""
     soup = BeautifulSoup(html, "html.parser")
     result: list[Arrival] = []
+    _kapino_re = re.compile(r'\bC-\d{4,6}\b')
     for item in soup.select("div.line-item div.content:not(.content-header)"):
         route_el = item.select_one("span")
         b = item.select_one("b")
@@ -108,12 +109,14 @@ def parse_stop_arrivals_html(html: str) -> list[Arrival]:
         if not route_el or not b or not p:
             continue
         eta_match = re.search(r"(\d+)\s*dk", b.text)
+        kapino_m = _kapino_re.search(item.get_text())
         result.append(
             Arrival(
                 route_code=route_el.text.strip(),
                 destination=p.text.replace(b.text, "").strip(),
                 eta_minutes=int(eta_match.group(1)) if eta_match else None,
                 eta_raw=b.text.strip(),
+                kapino=kapino_m.group(0) if kapino_m else None,
             )
         )
     return result
@@ -410,7 +413,8 @@ def parse_stop_detail_xml(xml_text: str, dcode: str) -> StopDetail | None:
         else:
             lon = _coord_float(r, "KoordinatX", "Boylam", "X", "boylam")
             lat = _coord_float(r, "KoordinatY", "Enlem", "Y", "enlem")
-        return StopDetail(dcode=dcode, name=name, latitude=lat, longitude=lon)
+        return StopDetail(dcode=dcode, name=name, latitude=lat, longitude=lon,
+                           direction=((r.get("SYON") or "").strip() or None))
     except (TypeError, ValueError):
         return None
 

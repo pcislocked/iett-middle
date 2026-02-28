@@ -124,16 +124,11 @@ class IettClient:
     # ------------------------------------------------------------------
 
     async def get_stop_arrivals(self, dcode: str) -> list[Arrival]:
-        """Real-time ETAs at a stop (HTML endpoint)."""
-        try:
-            html = await self._get_text(
-                f"{settings.iett_rest_base}/tr/RouteStation/GetStationInfo",
-                params={"dcode": dcode, "langid": "1"},
-            )
-        except IettApiError:
-            # GetStationInfo returns 500 for some codes gracefully
-            logger.warning("GetStationInfo returned error for dcode=%s", dcode)
-            return []
+        """Real-time ETAs at a stop (HTML endpoint). Propagates IettApiError on failure."""
+        html = await self._get_text(
+            f"{settings.iett_rest_base}/tr/RouteStation/GetStationInfo",
+            params={"dcode": dcode, "langid": "1"},
+        )
         return parse_stop_arrivals_html(html)
 
     async def get_routes_at_stop(self, dcode: str) -> set[str]:
@@ -165,13 +160,24 @@ class IettClient:
         return [StopSearchResult(**item) for item in parse_search_results(raw)]
 
     async def get_stop_detail(self, dcode: str) -> StopDetail | None:
-        """Stop name + coordinates via GetDurak_json (single SOAP call)."""
+        """Stop name + coordinates via GetDurak_json (single SOAP call).
+
+        Falls back to the in-memory stop index for coordinates when the SOAP
+        response omits or zeroes them out.
+        """
+        from app.deps import get_stop_coords  # noqa: PLC0415
+
         xml = await self._soap_post(
             f"{settings.iett_soap_base}/UlasimAnaVeri/HatDurakGuzergah.asmx",
             f'<GetDurak_json xmlns="http://tempuri.org/"><DurakKodu>{dcode}</DurakKodu></GetDurak_json>',
             '"http://tempuri.org/GetDurak_json"',
         )
-        return parse_stop_detail_xml(xml, dcode)
+        detail = parse_stop_detail_xml(xml, dcode)
+        if detail is not None and detail.latitude is None:
+            coords = get_stop_coords(dcode)
+            if coords:
+                detail = detail.model_copy(update={"latitude": coords[0], "longitude": coords[1]})
+        return detail
 
     async def get_all_stops(self) -> list[NearbyStop]:
         """All ~15 k IETT stops with coordinates (GetDurak_json, empty DurakKodu)."""
