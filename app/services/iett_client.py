@@ -25,7 +25,7 @@ from app.services.iett_parser import (
     parse_route_metadata_json,
     parse_route_schedule_xml,
     parse_route_search_results,
-    parse_route_stops_xml,
+    parse_route_stops_html,
     parse_routes_from_html,
     parse_search_results,
     parse_stop_arrivals_html,
@@ -212,13 +212,29 @@ class IettClient:
     # ------------------------------------------------------------------
 
     async def get_route_stops(self, hat_kodu: str) -> list[RouteStop]:
-        """Ordered stop list for a route (SOAP)."""
-        xml = await self._soap_post(
-            f"{settings.iett_soap_base}/ibb/ibb.asmx",
-            f'<DurakDetay_GYY xmlns="http://tempuri.org/"><HatKodu>{hat_kodu}</HatKodu></DurakDetay_GYY>',
-            '"http://tempuri.org/DurakDetay_GYY"',
+        """Ordered stop list for a route (scrapes GetStationForRoute HTML).
+
+        Coordinates are filled from the in-memory stop index when available;
+        they are None for stops not yet indexed (e.g. before startup finishes).
+        """
+        from app.deps import get_stop_coords  # noqa: PLC0415
+
+        html = await self._get_text(
+            f"{settings.iett_rest_base}/tr/RouteStation/GetStationForRoute",
+            params={"hatkod": hat_kodu, "hatstart": "X", "hatend": "Y", "langid": "1"},
         )
-        return parse_route_stops_xml(xml)
+        raw = parse_route_stops_html(html, hat_kodu)
+        result: list[RouteStop] = []
+        for s in raw:
+            coords = get_stop_coords(s["stop_code"])
+            result.append(
+                RouteStop(
+                    **s,
+                    latitude=coords[0] if coords else None,
+                    longitude=coords[1] if coords else None,
+                )
+            )
+        return result
 
     async def get_route_schedule(self, hat_kodu: str) -> list[ScheduledDeparture]:
         """Planned departure times for a route."""

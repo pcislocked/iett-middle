@@ -24,8 +24,8 @@ class RouteStop(BaseModel):
     sequence: int
     stop_code: str
     stop_name: str
-    latitude: float
-    longitude: float
+    latitude: float | None = None
+    longitude: float | None = None
     district: str | None = None
 
 

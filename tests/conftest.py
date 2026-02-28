@@ -124,6 +124,34 @@ ROUTE_STOPS_XML = """\
   </soap:Body>
 </soap:Envelope>"""
 
+# Minimal two-direction HTML from GetStationForRoute (real format, 2026-02-27)
+ROUTE_STOPS_HTML = """\
+<div class="col-md-6 col-12">
+  <div class="line-pass-header">ŞAHİNKAYA GARAJI KALKIŞ</div>
+  <div class="line-pass-body">
+    <div class="line-pass-item">
+      <a href="/StationDetail?dkod=262541&amp;stationname=%C5%9EAH%C4%B0NKAYA%20GARAJI-Beykoz">
+        <p>1. ŞAHİNKAYA GARAJI<span> - Beykoz</span></p>
+      </a>
+    </div>
+    <div class="line-pass-item">
+      <a href="/StationDetail?dkod=403031&amp;stationname=KADIK%C3%96Y-Kad%C4%B1k%C3%B6y">
+        <p>2. KADIKÖY<span> - Kadıköy</span></p>
+      </a>
+    </div>
+  </div>
+</div>
+<div class="col-md-6 col-12">
+  <div class="line-pass-header">KADIKÖY KALKIŞ</div>
+  <div class="line-pass-body">
+    <div class="line-pass-item">
+      <a href="/StationDetail?dkod=403031&amp;stationname=KADIK%C3%96Y-Kad%C4%B1k%C3%B6y">
+        <p>1. KADIKÖY<span> - Kadıköy</span></p>
+      </a>
+    </div>
+  </div>
+</div>"""
+
 ROUTES_BY_STATION_HTML = """\
 <div class="line-list">
   <div class="line-item">

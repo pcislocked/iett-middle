@@ -21,10 +21,10 @@ from tests.conftest import (
     ROUTE_FLEET_XML,
     ROUTE_METADATA_JSON,
     ROUTE_SEARCH_JSON,
+    ROUTE_STOPS_HTML,
     ROUTES_BY_STATION_HTML,
     SCHEDULE_XML,
     ANNOUNCEMENTS_XML,
-    ROUTE_STOPS_XML,
     SEARCH_JSON,
     STOP_DETAIL_XML,
 )
@@ -35,7 +35,7 @@ ARRIVALS_URL = re.compile(r"https://iett\.istanbul/tr/RouteStation/GetStationInf
 ROUTES_AT_STOP_URL = re.compile(r"https://iett\.istanbul/tr/RouteStation/GetRouteByStation.*")
 SCHEDULE_URL = "https://api.ibb.gov.tr/iett/UlasimAnaVeri/PlanlananSeferSaati.asmx"
 ANNOUNCEMENTS_URL = "https://api.ibb.gov.tr/iett/UlasimDinamikVeri/Duyurular.asmx"
-STOPS_URL = "https://api.ibb.gov.tr/iett/ibb/ibb.asmx"
+ROUTE_STATION_FOR_ROUTE_URL = re.compile(r"https://iett\.istanbul/tr/RouteStation/GetStationForRoute.*")
 SEARCH_URL = re.compile(r"https://iett\.istanbul/tr/RouteStation/GetSearchItems.*")
 ALL_ROUTE_URL = re.compile(r"https://iett\.istanbul/tr/RouteStation/GetAllRoute.*")
 
@@ -164,10 +164,19 @@ class TestGetAnnouncements:
 class TestGetRouteStops:
     async def test_returns_stops(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.post(STOPS_URL, body=ROUTE_STOPS_XML)  # type: ignore[misc]
-            stops: list[RouteStop] = await client.get_route_stops("500T")
-        assert stops[0].stop_code == "301341"
-        assert stops[0].route_code == "500T"
+            m.get(ROUTE_STATION_FOR_ROUTE_URL, body=ROUTE_STOPS_HTML)  # type: ignore[misc]
+            stops: list[RouteStop] = await client.get_route_stops("15F")
+        assert stops[0].stop_code == "262541"
+        assert stops[0].route_code == "15F"
+        assert stops[0].direction == "\u015eAH\u0130NKAYA GARAJI"
+        assert stops[0].sequence == 1
+        assert stops[0].latitude is None  # stop index not populated in unit tests
+
+    async def test_raises_on_error(self, client: IettClient) -> None:
+        with aioresponses() as m:
+            m.get(ROUTE_STATION_FOR_ROUTE_URL, exception=Exception("timeout"))  # type: ignore[misc]
+            with pytest.raises(IettApiError):
+                await client.get_route_stops("15F")
 
 
 class TestSearchStops:
@@ -358,12 +367,12 @@ class TestGetAnnouncements:
         assert anns == []
 
 
-class TestGetRouteStops:
+class TestGetRouteStops:  # type: ignore[no-redef]
     async def test_returns_stops(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.post(STOPS_URL, body=ROUTE_STOPS_XML)  # type: ignore[misc]
-            stops: list[RouteStop] = await client.get_route_stops("500T")
-        assert stops[0].stop_code == "301341"
+            m.get(ROUTE_STATION_FOR_ROUTE_URL, body=ROUTE_STOPS_HTML)  # type: ignore[misc]
+            stops: list[RouteStop] = await client.get_route_stops("15F")
+        assert stops[0].stop_code == "262541"
 
 
 class TestSearchStops:

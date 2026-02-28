@@ -11,6 +11,7 @@ from tests.conftest import (
     ROUTE_FLEET_XML,
     ROUTE_METADATA_JSON,
     ROUTE_SEARCH_JSON,
+    ROUTE_STOPS_HTML,
     ROUTE_STOPS_XML,
     ROUTES_BY_STATION_HTML,
     SCHEDULE_XML,
@@ -26,6 +27,7 @@ from app.services.iett_parser import (
     parse_route_metadata_json,
     parse_route_schedule_xml,
     parse_route_search_results,
+    parse_route_stops_html,
     parse_route_stops_xml,
     parse_routes_from_html,
     parse_search_results,
@@ -356,3 +358,36 @@ class TestScheduleDayTypeNorm:
         )
         deps = parse_route_schedule_xml(xml)
         assert deps[0].day_type == "C"
+
+
+# ---------------------------------------------------------------------------
+# Route stops HTML (GetStationForRoute)
+# ---------------------------------------------------------------------------
+
+class TestParseRouteStopsHtml:
+    def test_returns_both_directions(self):
+        stops = parse_route_stops_html(ROUTE_STOPS_HTML, "15F")
+        directions = {s["direction"] for s in stops}
+        assert "ŞAHİNKAYA GARAJI" in directions
+        assert "KADIKÖY" in directions
+
+    def test_total_stop_count(self):
+        stops = parse_route_stops_html(ROUTE_STOPS_HTML, "15F")
+        assert len(stops) == 3  # 2 in dir-1, 1 in dir-2
+
+    def test_first_stop_fields(self):
+        s = parse_route_stops_html(ROUTE_STOPS_HTML, "15F")[0]
+        assert s["route_code"] == "15F"
+        assert s["stop_code"] == "262541"
+        assert s["stop_name"] == "ŞAHİNKAYA GARAJI"
+        assert s["sequence"] == 1
+        assert s["district"] == "Beykoz"
+        assert s["direction"] == "ŞAHİNKAYA GARAJI"
+
+    def test_no_lat_lon_in_output(self):
+        stops = parse_route_stops_html(ROUTE_STOPS_HTML)
+        assert "latitude" not in stops[0]
+        assert "longitude" not in stops[0]
+
+    def test_empty_html(self):
+        assert parse_route_stops_html("") == []
