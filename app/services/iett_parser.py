@@ -243,8 +243,11 @@ def parse_route_stops_xml(xml_text: str) -> list[RouteStop]:
 def parse_route_stops_html(html: str, hat_kodu: str = "") -> list[dict[str, Any]]:
     """Parse GetStationForRoute HTML fragment.
 
-    Returns two ordered lists (one per direction column).  Coordinates are
-    NOT in the HTML — the caller (IettClient) enriches from the stop index.
+    Returns a single flat list of stop dicts collected from both direction
+    columns in document order.  Each dict includes a ``direction`` field
+    indicating which column (departure terminal name) the stop belongs to.
+    Coordinates are NOT in the HTML — the caller (IettClient) enriches them
+    from the in-memory stop index.
 
     Each returned dict matches the RouteStop model fields, minus lat/lon.
     """
