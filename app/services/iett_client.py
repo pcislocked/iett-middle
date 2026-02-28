@@ -215,7 +215,10 @@ class IettClient:
         """Ordered stop list for a route (scrapes GetStationForRoute HTML).
 
         Coordinates are filled from the in-memory stop index when available;
-        they are None for stops not yet indexed (e.g. before startup finishes).
+        they are ``None`` for stops not yet indexed (e.g. before startup
+        finishes).  The API layer (``routes.py``) guards against poisoning
+        the long-lived cache: results are only stored when *all* stops carry
+        valid coordinates, so coord-less responses are never persisted.
         """
         from app.deps import get_stop_coords  # noqa: PLC0415
 
