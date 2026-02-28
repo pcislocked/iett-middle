@@ -78,7 +78,10 @@ async def get_route_stops(hat_kodu: str):
     except IettApiError as exc:
         raise HTTPException(502, detail=str(exc)) from exc
     data = [s.model_dump() for s in stops]
-    await cache_set(key, data, settings.cache_ttl_stops)
+    # Only cache when stop index was ready (all coords present);
+    # coord-less responses are cheap to re-fetch and should not poison the cache.
+    if stops and all(s.latitude is not None for s in stops):
+        await cache_set(key, data, settings.cache_ttl_stops)
     return stops
 
 
