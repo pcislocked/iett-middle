@@ -27,6 +27,7 @@ from tests.conftest import (
     ANNOUNCEMENTS_XML,
     SEARCH_JSON,
     STOP_DETAIL_XML,
+    STOP_DETAIL_ZERO_COORDS_XML,
 )
 
 FLEET_URL = "https://api.ibb.gov.tr/iett/FiloDurum/SeferGerceklesme.asmx"
@@ -91,11 +92,11 @@ class TestGetStopArrivals:
             arrivals: list[Arrival] = await client.get_stop_arrivals("220602")
         assert len(arrivals) == 2
 
-    async def test_returns_empty_on_500(self, client: IettClient) -> None:
-        with aioresponses() as m:
-            m.get(ARRIVALS_URL, status=500)  # type: ignore[misc]
-            arrivals: list[Arrival] = await client.get_stop_arrivals("000000")
-        assert arrivals == []
+    async def test_raises_on_500(self, client: IettClient) -> None:
+        with pytest.raises(IettApiError):
+            with aioresponses() as m:
+                m.get(ARRIVALS_URL, status=500)  # type: ignore[misc]
+                await client.get_stop_arrivals("000000")
 
 
 class TestGetRoutesAtStop:
@@ -239,6 +240,29 @@ class TestGetStopDetail:
             m.post(HAT_DURAK_URL, body=empty_xml)  # type: ignore[misc]
             detail = await client.get_stop_detail("000000")
         assert detail is None
+
+    async def test_coords_filled_from_stop_index_when_zero(self, client: IettClient) -> None:
+        """When SOAP returns (0.0, 0.0) coords the in-memory index should supply real ones."""
+        from unittest.mock import patch
+        with aioresponses() as m:
+            m.post(HAT_DURAK_URL, body=STOP_DETAIL_ZERO_COORDS_XML)  # type: ignore[misc]
+            with patch("app.deps.get_stop_coords", return_value=(41.1234, 29.0871)):
+                detail = await client.get_stop_detail("220602")
+        assert detail is not None
+        assert abs(detail.latitude - 41.1234) < 0.001
+        assert abs(detail.longitude - 29.0871) < 0.001
+
+    async def test_coords_stay_zero_when_index_has_no_entry(self, client: IettClient) -> None:
+        """When SOAP returns (0.0, 0.0) and the stop index has no entry, coords remain 0.0."""
+        from unittest.mock import patch
+        with aioresponses() as m:
+            m.post(HAT_DURAK_URL, body=STOP_DETAIL_ZERO_COORDS_XML)  # type: ignore[misc]
+            with patch("app.deps.get_stop_coords", return_value=None):
+                detail = await client.get_stop_detail("220602")
+        assert detail is not None
+        # coordinates remain 0.0 (the SOAP value) when index has no entry
+        assert detail.latitude == 0.0
+        assert detail.longitude == 0.0
 
 
 class TestGetAllStops:

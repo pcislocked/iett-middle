@@ -99,6 +99,16 @@ class TestParseArrivals:
         assert a.eta_minutes == 4
         assert "4.LEVENT METRO" in a.destination
 
+    def test_kapino_extracted(self):
+        # First arrival contains A-001 in the HTML (short-digit prefix form)
+        a = parse_stop_arrivals_html(ARRIVALS_HTML)[0]
+        assert a.kapino == "A-001"
+
+    def test_kapino_absent(self):
+        # Second arrival has no kapino token
+        arrivals = parse_stop_arrivals_html(ARRIVALS_HTML)
+        assert arrivals[1].kapino is None
+
     def test_skips_header(self):
         # The content-header div must not produce an arrival
         arrivals = parse_stop_arrivals_html(ARRIVALS_HTML)
@@ -281,6 +291,12 @@ class TestParseStopDetail:
         assert detail.longitude is not None
         assert abs(detail.latitude - 41.1234) < 0.001
         assert abs(detail.longitude - 29.0871) < 0.001
+
+    def test_direction_from_syon(self):
+        # Fixture includes SYON: "YENİ CAMİİ"
+        detail = parse_stop_detail_xml(STOP_DETAIL_XML, "220602")
+        assert detail is not None
+        assert detail.direction == "YENİ CAMİİ"
 
     def test_returns_none_on_empty(self):
         xml = (

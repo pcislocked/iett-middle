@@ -18,6 +18,10 @@ from app.models.stop import NearbyStop, RouteStop, StopDetail
 
 _TEMPURI = "http://tempuri.org/"
 
+# Kapı no (internal bus ID) pattern: one or more capital letters, dash, one or more digits.
+# Covers all observed formats: A-001, C-325, C-123456, M-999, etc. (not vehicle license plates)
+_KAPINO_RE = re.compile(r'\b[A-Z]+-\d+\b')
+
 
 def _extract_soap_json(xml_text: str, result_tag: str) -> list[dict[str, Any]]:
     """Extract and JSON-parse the payload embedded inside a SOAP XML element."""
@@ -108,12 +112,14 @@ def parse_stop_arrivals_html(html: str) -> list[Arrival]:
         if not route_el or not b or not p:
             continue
         eta_match = re.search(r"(\d+)\s*dk", b.text)
+        kapino_m = _KAPINO_RE.search(item.get_text(" ", strip=True))
         result.append(
             Arrival(
                 route_code=route_el.text.strip(),
                 destination=p.text.replace(b.text, "").strip(),
                 eta_minutes=int(eta_match.group(1)) if eta_match else None,
                 eta_raw=b.text.strip(),
+                kapino=kapino_m.group(0) if kapino_m else None,
             )
         )
     return result
@@ -410,7 +416,13 @@ def parse_stop_detail_xml(xml_text: str, dcode: str) -> StopDetail | None:
         else:
             lon = _coord_float(r, "KoordinatX", "Boylam", "X", "boylam")
             lat = _coord_float(r, "KoordinatY", "Enlem", "Y", "enlem")
-        return StopDetail(dcode=dcode, name=name, latitude=lat, longitude=lon)
+        return StopDetail(
+            dcode=dcode,
+            name=name,
+            latitude=lat,
+            longitude=lon,
+            direction=((r.get("SYON") or "").strip() or None),
+        )
     except (TypeError, ValueError):
         return None
 

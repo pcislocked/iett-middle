@@ -62,6 +62,7 @@ ARRIVALS_HTML = """\
     <div class="content">
       <span>500T</span>
       <p>4.LEVENT METRO - ŞİFA SONDURAK <b>(00:10) 4 dk</b></p>
+      <small>A-001</small>
     </div>
   </div>
   <div class="line-item">
@@ -236,7 +237,17 @@ STOP_DETAIL_XML = """\
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
   <soap:Body>
     <GetDurak_jsonResponse xmlns="http://tempuri.org/">
-      <GetDurak_jsonResult>[{"SDURAKKODU":220602,"SDURAKADI":"AHMET MİTHAT EFENDİ","KOORDINAT":"POINT (29.0871 41.1234)","ILCEADI":"Beykoz"}]</GetDurak_jsonResult>
+      <GetDurak_jsonResult>[{"SDURAKKODU":220602,"SDURAKADI":"AHMET M\u0130THAT EFEND\u0130","KOORDINAT":"POINT (29.0871 41.1234)","ILCEADI":"Beykoz","SYON":"YEN\u0130 CAM\u0130\u0130"}]</GetDurak_jsonResult>
+    </GetDurak_jsonResponse>
+  </soap:Body>
+</soap:Envelope>"""
+
+STOP_DETAIL_ZERO_COORDS_XML = """\
+<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <GetDurak_jsonResponse xmlns="http://tempuri.org/">
+      <GetDurak_jsonResult>[{"SDURAKKODU":220602,"SDURAKADI":"AHMET M\u0130THAT EFEND\u0130","KOORDINAT":"POINT (0.0 0.0)","ILCEADI":"Beykoz","SYON":"YEN\u0130 CAM\u0130\u0130"}]</GetDurak_jsonResult>
     </GetDurak_jsonResponse>
   </soap:Body>
 </soap:Envelope>"""
