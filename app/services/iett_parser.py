@@ -237,6 +237,62 @@ def parse_route_stops_xml(xml_text: str) -> list[RouteStop]:
 
 
 # ---------------------------------------------------------------------------
+# 6.5. Route stops (HTML — GetStationForRoute)
+# ---------------------------------------------------------------------------
+
+def parse_route_stops_html(html: str, hat_kodu: str = "") -> list[dict[str, Any]]:
+    """Parse GetStationForRoute HTML fragment.
+
+    Returns a single flat list of stop dicts collected from both direction
+    columns in document order.  Each dict includes a ``direction`` field
+    indicating which column (departure terminal name) the stop belongs to.
+    Coordinates are NOT in the HTML — the caller (IettClient) enriches them
+    from the in-memory stop index.
+
+    Each returned dict matches the RouteStop model fields, minus lat/lon.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    result: list[dict[str, Any]] = []
+    for col in soup.select("div.col-md-6"):
+        header_el = col.select_one("div.line-pass-header")
+        if not header_el:
+            continue
+        header_text = header_el.get_text(strip=True)
+        # "ŞAHİNKAYA GARAJI KALKIŞ" → "ŞAHİNKAYA GARAJI"
+        direction = header_text.removesuffix(" KALKIŞ").strip()
+        for item in col.select("div.line-pass-item"):
+            a = item.select_one("a[href]")
+            p = item.select_one("p")
+            if not a or not p:
+                continue
+            href = str(a.get("href", ""))
+            dkod_match = re.search(r"dkod=(\d+)", href)
+            if not dkod_match:
+                continue
+            stop_code = dkod_match.group(1)
+            span = p.select_one("span")
+            district: str | None = None
+            if span:
+                district = span.get_text(strip=True).lstrip("- ").strip() or None
+                span.decompose()
+            full_text = p.get_text(strip=True)  # "1. STOP NAME"
+            seq_match = re.match(r"^(\d+)\.\s*(.*)", full_text)
+            if not seq_match:
+                continue
+            result.append(
+                {
+                    "route_code": hat_kodu,
+                    "direction": direction,
+                    "sequence": int(seq_match.group(1)),
+                    "stop_code": stop_code,
+                    "stop_name": seq_match.group(2).strip(),
+                    "district": district,
+                }
+            )
+    return result
+
+
+# ---------------------------------------------------------------------------
 # 7. Stop search (JSON — already dict from caller)
 # ---------------------------------------------------------------------------
 

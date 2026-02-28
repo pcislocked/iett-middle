@@ -109,19 +109,29 @@ def update_fleet(buses: list[BusPosition]) -> None:  # noqa: C901
 # Holds the full 15 k stop catalogue fetched at startup; keyed by list index.
 # Each element is a NearbyStop model_dump dict with all fields populated.
 _stop_index: list[dict[str, Any]] = []
+_stop_by_code: dict[str, dict[str, Any]] = {}  # stop_code → stop dict
 _stop_index_updated_at: datetime | None = None
 
 _R_EARTH = 6_371_000.0  # metres
 
 
 def update_stop_index(stops: list[NearbyStop]) -> None:  # type: ignore[name-defined]
-    global _stop_index, _stop_index_updated_at  # noqa: PLW0603
+    global _stop_index, _stop_by_code, _stop_index_updated_at  # noqa: PLW0603
     _stop_index = [s.model_dump() for s in stops]
+    _stop_by_code = {s["stop_code"]: s for s in _stop_index}
     _stop_index_updated_at = datetime.now()
 
 
 def get_stop_index_updated_at() -> datetime | None:
     return _stop_index_updated_at
+
+
+def get_stop_coords(stop_code: str) -> tuple[float, float] | None:
+    """Return (latitude, longitude) for a stop code, or None if not in index."""
+    s = _stop_by_code.get(stop_code)
+    if s is None:
+        return None
+    return s["latitude"], s["longitude"]
 
 
 def get_nearby_stops(lat: float, lon: float, radius_m: float = 500.0) -> list[dict[str, Any]]:
