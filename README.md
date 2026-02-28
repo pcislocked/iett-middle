@@ -1,10 +1,10 @@
 # iett-middle
 
-[![Tests](https://img.shields.io/badge/tests-108%20passed-brightgreen)](#running-tests)
+[![Tests](https://img.shields.io/badge/tests-123%20passed-brightgreen)](#running-tests)
 [![Coverage](https://img.shields.io/badge/coverage-73%25-yellow)](#running-tests)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
-[![Version](https://img.shields.io/badge/version-0.1-orange)](https://github.com/pcislocked/iett-middle/releases/tag/v0.1)
+[![Version](https://img.shields.io/badge/version-0.1.4-orange)](https://github.com/pcislocked/iett-middle/releases/tag/v0.1.4)
 
 Smart caching proxy for Istanbul IETT public transit APIs.
 
