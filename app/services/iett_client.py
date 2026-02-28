@@ -173,10 +173,14 @@ class IettClient:
             '"http://tempuri.org/GetDurak_json"',
         )
         detail = parse_stop_detail_xml(xml, dcode)
-        if detail is not None and detail.latitude is None:
+        if detail is not None and (
+            detail.latitude in (None, 0.0) or detail.longitude in (None, 0.0)
+        ):
             coords = get_stop_coords(dcode)
             if coords:
-                detail = detail.model_copy(update={"latitude": coords[0], "longitude": coords[1]})
+                detail = detail.model_copy(
+                    update={"latitude": coords[0], "longitude": coords[1]}
+                )
         return detail
 
     async def get_all_stops(self) -> list[NearbyStop]:

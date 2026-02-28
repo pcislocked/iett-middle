@@ -91,11 +91,11 @@ class TestGetStopArrivals:
             arrivals: list[Arrival] = await client.get_stop_arrivals("220602")
         assert len(arrivals) == 2
 
-    async def test_returns_empty_on_500(self, client: IettClient) -> None:
-        with aioresponses() as m:
-            m.get(ARRIVALS_URL, status=500)  # type: ignore[misc]
-            arrivals: list[Arrival] = await client.get_stop_arrivals("000000")
-        assert arrivals == []
+    async def test_raises_on_500(self, client: IettClient) -> None:
+        with pytest.raises(IettApiError):
+            with aioresponses() as m:
+                m.get(ARRIVALS_URL, status=500)  # type: ignore[misc]
+                await client.get_stop_arrivals("000000")
 
 
 class TestGetRoutesAtStop:
