@@ -252,8 +252,8 @@ class TestGetStopDetail:
         assert abs(detail.latitude - 41.1234) < 0.001
         assert abs(detail.longitude - 29.0871) < 0.001
 
-    async def test_coords_stay_none_when_index_also_missing(self, client: IettClient) -> None:
-        """When SOAP returns (0.0, 0.0) and the stop index has no entry, coords stay as-is."""
+    async def test_coords_stay_zero_when_index_has_no_entry(self, client: IettClient) -> None:
+        """When SOAP returns (0.0, 0.0) and the stop index has no entry, coords remain 0.0."""
         from unittest.mock import patch
         with aioresponses() as m:
             m.post(HAT_DURAK_URL, body=STOP_DETAIL_ZERO_COORDS_XML)  # type: ignore[misc]

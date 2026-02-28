@@ -112,7 +112,7 @@ def parse_stop_arrivals_html(html: str) -> list[Arrival]:
         if not route_el or not b or not p:
             continue
         eta_match = re.search(r"(\d+)\s*dk", b.text)
-        kapino_m = _KAPINO_RE.search(item.get_text())
+        kapino_m = _KAPINO_RE.search(item.get_text(" ", strip=True))
         result.append(
             Arrival(
                 route_code=route_el.text.strip(),
@@ -416,8 +416,13 @@ def parse_stop_detail_xml(xml_text: str, dcode: str) -> StopDetail | None:
         else:
             lon = _coord_float(r, "KoordinatX", "Boylam", "X", "boylam")
             lat = _coord_float(r, "KoordinatY", "Enlem", "Y", "enlem")
-        return StopDetail(dcode=dcode, name=name, latitude=lat, longitude=lon,
-                           direction=((r.get("SYON") or "").strip() or None))
+        return StopDetail(
+            dcode=dcode,
+            name=name,
+            latitude=lat,
+            longitude=lon,
+            direction=((r.get("SYON") or "").strip() or None),
+        )
     except (TypeError, ValueError):
         return None
 
