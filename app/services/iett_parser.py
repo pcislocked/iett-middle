@@ -18,8 +18,8 @@ from app.models.stop import NearbyStop, RouteStop, StopDetail
 
 _TEMPURI = "http://tempuri.org/"
 
-# Bus plate / kapı no pattern: one or more capital letters, dash, one or more digits.
-# Covers all observed formats: A-001, C-325, C-123456, M-999, etc.
+# Kapı no (internal bus ID) pattern: one or more capital letters, dash, one or more digits.
+# Covers all observed formats: A-001, C-325, C-123456, M-999, etc. (not vehicle license plates)
 _KAPINO_RE = re.compile(r'\b[A-Z]+-\d+\b')
 
 
