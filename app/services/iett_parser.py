@@ -18,6 +18,10 @@ from app.models.stop import NearbyStop, RouteStop, StopDetail
 
 _TEMPURI = "http://tempuri.org/"
 
+# Bus plate / kapı no pattern: one or more capital letters, dash, one or more digits.
+# Covers all observed formats: A-001, C-325, C-123456, M-999, etc.
+_KAPINO_RE = re.compile(r'\b[A-Z]+-\d+\b')
+
 
 def _extract_soap_json(xml_text: str, result_tag: str) -> list[dict[str, Any]]:
     """Extract and JSON-parse the payload embedded inside a SOAP XML element."""
@@ -101,7 +105,6 @@ def parse_stop_arrivals_html(html: str) -> list[Arrival]:
     """Parse GetStationInfo HTML fragment into Arrival list."""
     soup = BeautifulSoup(html, "html.parser")
     result: list[Arrival] = []
-    _kapino_re = re.compile(r'\bC-\d{4,6}\b')
     for item in soup.select("div.line-item div.content:not(.content-header)"):
         route_el = item.select_one("span")
         b = item.select_one("b")
@@ -109,7 +112,7 @@ def parse_stop_arrivals_html(html: str) -> list[Arrival]:
         if not route_el or not b or not p:
             continue
         eta_match = re.search(r"(\d+)\s*dk", b.text)
-        kapino_m = _kapino_re.search(item.get_text())
+        kapino_m = _KAPINO_RE.search(item.get_text())
         result.append(
             Arrival(
                 route_code=route_el.text.strip(),

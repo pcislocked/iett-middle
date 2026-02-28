@@ -100,9 +100,9 @@ class TestParseArrivals:
         assert "4.LEVENT METRO" in a.destination
 
     def test_kapino_extracted(self):
-        # First arrival contains C-123456 in the HTML
+        # First arrival contains A-001 in the HTML (short-digit prefix form)
         a = parse_stop_arrivals_html(ARRIVALS_HTML)[0]
-        assert a.kapino == "C-123456"
+        assert a.kapino == "A-001"
 
     def test_kapino_absent(self):
         # Second arrival has no kapino token
