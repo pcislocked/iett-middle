@@ -66,9 +66,17 @@ def get_fleet_updated_at() -> datetime | None:
 
 
 def get_buses_by_route(hat_kodu: str) -> list[dict[str, Any]]:
-    """Return all fleet buses whose route_code matches hat_kodu (case-insensitive)."""
+    """Return all fleet buses whose route_code matches hat_kodu (case-insensitive, prefix-tolerant)."""
     upper = hat_kodu.upper()
-    return [b for b in _fleet.values() if (b.get("route_code") or "").upper() == upper]
+    result = []
+    for b in _fleet.values():
+        rc = (b.get("route_code") or "").upper().strip()
+        if not rc:
+            continue
+        # exact match OR variant suffixes like "14M_D", "14M_G", "14M D"
+        if rc == upper or rc.startswith(upper + "_") or rc.startswith(upper + " "):
+            result.append(b)
+    return result
 
 
 def get_buses_near_stop(dcode: str) -> list[dict[str, Any]]:

@@ -75,13 +75,23 @@ async def get_route_metadata(hat_kodu: str):
 
 @router.get("/{hat_kodu}/buses", response_model=list[BusPosition])
 async def get_route_buses(hat_kodu: str):
-    """GPS positions of buses on a route — filtered from the in-memory fleet store.
+    """GPS positions of buses on a route.
 
-    No upstream IETT call is made here.  ensure_fleet_fresh() triggers a
-    background refresh when the store is ≥30 s stale; this request returns
-    the current snapshot immediately (stale-while-revalidate).
+    Primary: calls IETT GetHatOtoKonum_json SOAP endpoint directly (most accurate).
+    Fallback: filters in-memory fleet store by route_code (stale-while-revalidate).
     """
     from app.deps import ensure_fleet_fresh, get_buses_by_route  # noqa: PLC0415
+
+    # Try the dedicated per-route SOAP endpoint first
+    try:
+        client = IettClient(get_session())
+        buses = await client.get_route_buses(hat_kodu)
+        if buses:
+            return buses
+    except (IettApiError, Exception) as exc:  # noqa: BLE001
+        logger.warning("get_route_buses SOAP failed for %s, falling back to fleet: %s", hat_kodu, exc)
+
+    # Fallback: filter in-memory fleet
     await ensure_fleet_fresh()
     return get_buses_by_route(hat_kodu)
 
