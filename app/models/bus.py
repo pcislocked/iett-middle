@@ -20,7 +20,8 @@ class BusPosition(BaseModel):
     last_seen: str
     route_code: str | None = None
     route_name: str | None = None
-    direction: str | None = None
+    direction: str | None = None          # terminal name, e.g. "YENİ CAMİİ"
+    direction_letter: str | None = None   # "G" or "D", derived from guzergahkodu
     nearest_stop: str | None = None
 
 
