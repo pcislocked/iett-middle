@@ -100,7 +100,7 @@ async def get_route_buses(hat_kodu: str):
             if raw_meta:
                 await cache_set(meta_key, raw_meta, settings.cache_ttl_search)
         if hat_id is not None:
-            buses = await ntcapi_client.get_route_buses_ybs(hat_id, session)
+            buses = await ntcapi_client.get_route_buses_ybs(hat_id, hat_kodu, session)
             if buses:
                 return buses
     except (NtcApiError, Exception) as exc:  # noqa: BLE001

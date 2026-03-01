@@ -252,13 +252,14 @@ async def get_route_metadata(
 
 async def get_route_buses_ybs(
     hat_id: int | str,
+    hat_kodu: str,
     session: aiohttp.ClientSession,
-) -> list[Any]:
+) -> list[BusPosition]:
     """Live bus positions for a route via ybs point-passing/{hat_id}.
 
     Uses the same ybs alias as stop arrivals but with the 'point-passing'
     path and the ntcapi internal HAT_ID (not the public hat_kodu string).
-    Returns a list of BusPosition-compatible dicts ready for serialisation.
+    Returns a list of BusPosition objects.
     """
     from app.models.bus import BusPosition  # noqa: PLC0415 — avoid circular at module level
 
@@ -287,14 +288,18 @@ async def get_route_buses_ybs(
                 direction_letter = p
                 break
         seq = item.get("H_GOREV_DURAK_GECIS_SIRANO")
+        try:
+            stop_seq: int | None = int(seq) if seq is not None and str(seq).strip() else None
+        except (ValueError, TypeError):
+            stop_seq = None
         positions.append(BusPosition(
             kapino=item.get("K_ARAC_KAPINUMARASI") or "",
             latitude=lat,
             longitude=lon,
             last_seen=item.get("SISTEMSAATI") or "",
-            route_code=guzergah or None,
+            route_code=hat_kodu or None,
             direction_letter=direction_letter,
-            stop_sequence=int(seq) if seq is not None else None,
+            stop_sequence=stop_seq,
         ))
     return positions
 
