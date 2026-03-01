@@ -25,7 +25,7 @@ class TestTrafficClient:
         from app.config import settings
         url = f"{settings.trafik_base}/TrafficIndex_Sc1_Cont"
         with aioresponses() as m:
-            m.get(url, payload=48)
+            m.get(url, payload=48)  # type: ignore[reportUnknownMemberType]
             result = await tc.get_traffic_index()
         assert result.percent == 48
         assert result.description  # should map to a label string
@@ -34,7 +34,7 @@ class TestTrafficClient:
         from app.config import settings
         url = f"{settings.trafik_base}/TrafficIndex_Sc1_Cont"
         with aioresponses() as m:
-            m.get(url, payload=0)
+            m.get(url, payload=0)  # type: ignore[reportUnknownMemberType]
             result = await tc.get_traffic_index()
         assert result.percent == 0
 
@@ -42,7 +42,7 @@ class TestTrafficClient:
         from app.config import settings
         url = f"{settings.trafik_base}/TrafficIndex_Sc1_Cont"
         with aioresponses() as m:
-            m.get(url, status=503)
+            m.get(url, status=503)  # type: ignore[reportUnknownMemberType]
             with pytest.raises(IettApiError):
                 await tc.get_traffic_index()
 
@@ -54,7 +54,7 @@ class TestTrafficClient:
             {"S": "1002", "V": "20", "C": "5", "D": "2026-03-02T01:00:00"},
         ]
         with aioresponses() as m:
-            m.get(url, payload=segment_data)
+            m.get(url, payload=segment_data)  # type: ignore[reportUnknownMemberType]
             result = await tc.get_traffic_segments()
         assert len(result) == 2
         assert result[0].segment_id == 1001
@@ -66,7 +66,7 @@ class TestTrafficClient:
         from app.config import settings
         url = f"{settings.trafik_base}/SegmentData"
         with aioresponses() as m:
-            m.get(url, payload={"error": "unavailable"})
+            m.get(url, payload={"error": "unavailable"})  # type: ignore[reportUnknownMemberType]
             result = await tc.get_traffic_segments()
         assert result == []
 
@@ -78,7 +78,7 @@ class TestTrafficClient:
             {"S": "2001", "V": "60", "C": "2", "D": "ts"},
         ]
         with aioresponses() as m:
-            m.get(url, payload=segment_data)
+            m.get(url, payload=segment_data)  # type: ignore[reportUnknownMemberType]
             result = await tc.get_traffic_segments()
         # Malformed entry is skipped; valid one retained
         assert len(result) == 1
@@ -88,7 +88,7 @@ class TestTrafficClient:
         from app.config import settings
         url = f"{settings.trafik_base}/SegmentData"
         with aioresponses() as m:
-            m.get(url, status=500)
+            m.get(url, status=500)  # type: ignore[reportUnknownMemberType]
             with pytest.raises(IettApiError):
                 await tc.get_traffic_segments()
 
@@ -98,7 +98,7 @@ class TestTrafficClient:
         url = f"{settings.trafik_base}/TrafficIndex_Sc1_Cont"
         # 48% → level ~3 → "Moderate"
         with aioresponses() as m:
-            m.get(url, payload=48)
+            m.get(url, payload=48)  # type: ignore[reportUnknownMemberType]
             result = await tc.get_traffic_index()
         assert result.percent == 48
         assert result.description == "Moderate"

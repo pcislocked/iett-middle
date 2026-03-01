@@ -36,7 +36,7 @@ async def cache_set(key: str, value: Any, ttl: int) -> None:
         _store[key] = (value, time.monotonic() + ttl)
 
 
-def get_cache_stats() -> dict:
+def get_cache_stats() -> dict[str, Any]:
     now = time.monotonic()
     active = sum(1 for _, (_, exp) in _store.items() if now < exp)
     return {
