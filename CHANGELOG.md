@@ -5,6 +5,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.2.0] – 2026-03-01
+
+### Added
+- `app/models/canonical.py` — internal TypedDict types: `CanonicalArrival`,
+  `CanonicalBusPosition`, `CanonicalRouteStop`, `CanonicalScheduledDeparture`,
+  `CanonicalStop`, `Amenities`
+- `app/services/normalizers/` package — 5 modules (`arrivals`, `positions`,
+  `route_stops`, `schedule`, `stops`) that map raw API dicts from any source
+  to the canonical shape.  Pure functions — no async, no I/O.
+- 42 unit tests for all normalizer functions in `tests/test_normalizers.py`
+
+### Changed
+- `app/models/bus.Arrival`: `speed` renamed to `speed_kmh`; flat amenity fields
+  `usb / wifi / klima / engelli` replaced by `amenities: dict | None`
+- `ntcapi_client.get_stop_arrivals()` now returns raw ybs dicts; callers apply
+  the normalizer (breaking change for direct callers)
+- `stops` router arrivals + nearby: ntcapi primary → normalizer → Pydantic
+- `routes` router stops / metadata / schedule: ntcapi primary → normalizer → Pydantic;
+  IETT SOAP fallback retained for all endpoints
+
+---
+
 ## [0.1.9] – 2026-03-01
 
 ### Added

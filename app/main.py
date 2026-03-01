@@ -107,7 +107,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
 app = FastAPI(
     title="iett-middle",
     description="Smart caching proxy for IETT Istanbul public transit APIs.",
-    version="0.1.9",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
