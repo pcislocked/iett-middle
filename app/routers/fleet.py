@@ -100,7 +100,9 @@ async def get_bus_detail(kapino: str):
     bus = {**match, "trail": get_trail(match["kapino"])}
 
     # Resolve route: prefer live field, fall back to last known
-    route_code: str | None = match.get("route_code") or get_last_route_by_kapino(kapino)
+    live_route_code: str | None = match.get("route_code")
+    route_code: str | None = live_route_code or get_last_route_by_kapino(kapino)
+    route_is_live: bool = bool(live_route_code)
 
     route_stops_data: list[dict] = []
     if route_code:
@@ -144,7 +146,7 @@ async def get_bus_detail(kapino: str):
                 except Exception:  # noqa: BLE001
                     pass
 
-    return {**bus, "resolved_route_code": route_code, "route_stops": route_stops_data}
+    return {**bus, "resolved_route_code": route_code, "route_is_live": route_is_live, "route_stops": route_stops_data}
 
 
 @router.get("/{kapino}", response_model=BusPositionWithTrail)

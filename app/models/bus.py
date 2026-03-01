@@ -37,10 +37,14 @@ class BusDetail(BusPositionWithTrail):
     ``resolved_route_code`` prefers the live ``route_code``; falls back to the
     last known route seen for this kapino since server startup (covers parked
     / nightly-service buses whose route_code returns to None between trips).
+    ``route_is_live`` is True when resolved_route_code comes from the live
+    fleet data (bus currently serving that route), False when it is a
+    last-known fallback (bus parked / between services).
     ``route_stops`` is the ordered stop list for both directions — client draws
     the direction that matches ``direction_letter``.
     """
     resolved_route_code: str | None = None
+    route_is_live: bool = False
     route_stops: list[dict] = []
 
 
