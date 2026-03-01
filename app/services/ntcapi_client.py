@@ -11,11 +11,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 
 from app.config import settings
+
+if TYPE_CHECKING:
+    from app.models.bus import BusPosition
 
 logger = logging.getLogger(__name__)
 

@@ -8,7 +8,6 @@ regardless of how many clients are connected.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 
 from fastapi import APIRouter, HTTPException

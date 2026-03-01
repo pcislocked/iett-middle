@@ -522,7 +522,6 @@ class TestGaragesList:
 
 class TestTrafficIndex:
     def test_200_returns_traffic_index(self, client: TestClient) -> None:
-        from app.services.traffic import TrafficClient as TC
         mock_tc = MagicMock()
         mock_tc.get_traffic_index = AsyncMock(return_value=TrafficIndex(percent=45, description="Moderate"))
         with (
@@ -722,7 +721,6 @@ class TestStopsExtra:
 
     def test_arrivals_ntcapi_primary_path(self, client: TestClient) -> None:
         """Arrivals served from ntcapi ybs when available (no IETT fallback)."""
-        from app.services.normalizers.arrivals import from_ntcapi_ybs
         raw = [{"route_code": "500T", "destination": "LEVENT", "eta_minutes": 3,
                 "eta_raw": "3 dk", "plate": None, "kapino": "A-001",
                 "lat": None, "lon": None, "speed_kmh": None, "last_seen_ts": None, "amenities": None}]
@@ -760,10 +758,6 @@ class TestFleetDetailFallbacks:
 
     def test_detail_fetches_stops_via_ntcapi_when_cache_miss(self, client: TestClient) -> None:
         bus = _bus("A-001", "500T")
-        rs = RouteStop(
-            route_code="500T", direction="G", sequence=1,
-            stop_code="301341", stop_name="LEVENT", latitude=41.08, longitude=29.01, district=None,
-        )
         processed = {"route_code": "500T", "direction": "G", "sequence": 1,
                      "stop_code": "301341", "stop_name": "LEVENT",
                      "lat": 41.08, "lon": 29.01, "district": None}

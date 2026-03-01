@@ -1,21 +1,18 @@
 """Tests for app.services.traffic — TrafficClient HTTP calls + parsing."""
 from __future__ import annotations
 
+import sys
+from collections.abc import AsyncIterator
+
 import pytest
 from aioresponses import aioresponses
 
 from app.services.iett_client import IettApiError
 from app.services.traffic import TrafficClient
 
-TRAFIK_BASE = "https://trafik.ibb.gov.tr/ajax"
-
-import sys
-from collections.abc import AsyncIterator
-
 
 @pytest.fixture()
 async def tc() -> AsyncIterator[TrafficClient]:
-    import aiohttp
     import aiohttp as _aiohttp
     connector = _aiohttp.TCPConnector(resolver=_aiohttp.ThreadedResolver() if sys.platform == "win32" else None)
     session = _aiohttp.ClientSession(connector=connector)

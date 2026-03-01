@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from app.config import settings
 from app.deps import get_session
 from app.models.garage import Garage
 from app.services.cache import cache_get, cache_set

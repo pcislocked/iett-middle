@@ -4,8 +4,6 @@ Fixture data is derived from real API captures; no network calls are made.
 """
 from __future__ import annotations
 
-import pytest
-
 from app.services.normalizers import arrivals, positions, route_stops, schedule, stops
 
 

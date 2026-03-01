@@ -4,8 +4,6 @@ from __future__ import annotations
 import asyncio
 import time
 
-import pytest
-
 import app.services.cache as cache_mod
 from app.services.cache import cache_get, cache_set, get_cache_stats
 
