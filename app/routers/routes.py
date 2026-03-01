@@ -1,6 +1,7 @@
 """Routes router — /v1/routes"""
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, HTTPException, Query
@@ -102,8 +103,10 @@ async def get_route_stops(hat_kodu: str):
 
     # ── primary: ntcapi mainGetRoute (both directions) ──────────────
     try:
-        raw_g = await ntcapi_client.get_route_stops(hat_kodu, "G", session)
-        raw_d = await ntcapi_client.get_route_stops(hat_kodu, "D", session)
+        raw_g, raw_d = await asyncio.gather(
+            ntcapi_client.get_route_stops(hat_kodu, "G", session),
+            ntcapi_client.get_route_stops(hat_kodu, "D", session),
+        )
         canonical = [
             normalizers.route_stops.from_ntcapi_route_processed(r)
             for r in raw_g + raw_d
@@ -159,15 +162,16 @@ async def get_route_schedule(hat_kodu: str):
         canonical = [normalizers.schedule.from_ntcapi_timetable(r) for r in raw_tt]
         data = [
             {
-                "route_code": c.get("route_code") or "",
+                "route_code": c.get("route_code"),
                 "route_name": c.get("route_name") or c.get("route_code") or "",
                 "route_variant": c.get("route_variant") or "",
                 "direction": c.get("direction") or "",
                 "day_type": c.get("day_type") or "",
                 "service_type": c.get("service_type") or "",
-                "departure_time": c.get("departure_time") or "",
+                "departure_time": c.get("departure_time"),
             }
             for c in canonical
+            if c.get("route_code") and c.get("departure_time")
         ]
     except NtcApiError as exc:
         logger.warning("ntcapi schedule failed for %s, falling back to IETT SOAP: %s", hat_kodu, exc)

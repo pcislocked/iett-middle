@@ -37,8 +37,8 @@ def from_iett_soap_fleet(item: dict[str, Any]) -> CanonicalBusPosition:
     return CanonicalBusPosition(
         kapino=str(item.get("KapiNo") or ""),
         plate=item.get("Plaka") or None,
-        lat=_safe_float(item.get("Enlem")) or 0.0,
-        lon=_safe_float(item.get("Boylam")) or 0.0,
+        lat=_safe_float(item.get("Enlem")),
+        lon=_safe_float(item.get("Boylam")),
         speed_kmh=_safe_int(speed_raw),
         last_seen=str(item.get("Saat") or ""),
         route_code=(
@@ -66,8 +66,8 @@ def from_iett_soap_route_fleet(item: dict[str, Any]) -> CanonicalBusPosition:
     return CanonicalBusPosition(
         kapino=str(item.get("kapino") or ""),
         plate=None,  # not present in route-fleet endpoint
-        lat=_safe_float(item.get("enlem")) or 0.0,
-        lon=_safe_float(item.get("boylam")) or 0.0,
+        lat=_safe_float(item.get("enlem")),
+        lon=_safe_float(item.get("boylam")),
         speed_kmh=None,  # not present in route-fleet endpoint
         last_seen=str(item.get("son_konum_zamani") or ""),
         route_code=item.get("hatkodu") or None,

@@ -54,18 +54,26 @@ async def nearby_stops(
     try:
         raw_stops = await ntcapi_client.get_nearby_stops(lat, lon, radius / 1000, session)
         canonical = [normalizers.stops.from_ntcapi_nearby_processed(r) for r in raw_stops]
-        return [
-            NearbyStop(
-                stop_code=c.get("stop_code") or "",
-                stop_name=c.get("stop_name") or "",
-                latitude=c.get("lat") or 0.0,
-                longitude=c.get("lon") or 0.0,
-                district=c.get("district"),
-                direction=c.get("direction"),
-                distance_m=c.get("distance_m") or 0.0,
+        nearby_results: list[NearbyStop] = []
+        for c in canonical[:30]:
+            try:
+                latitude = float(c["lat"])  # type: ignore[arg-type]
+                longitude = float(c["lon"])  # type: ignore[arg-type]
+            except (KeyError, TypeError, ValueError):
+                logger.warning("Skipping nearby stop with invalid coordinates: %s", c.get("stop_code"))
+                continue
+            nearby_results.append(
+                NearbyStop(
+                    stop_code=c.get("stop_code") or "",
+                    stop_name=c.get("stop_name") or "",
+                    latitude=latitude,
+                    longitude=longitude,
+                    district=c.get("district"),
+                    direction=c.get("direction"),
+                    distance_m=c.get("distance_m") or 0.0,
+                )
             )
-            for c in canonical[:30]
-        ]
+        return nearby_results
     except NtcApiError as exc:
         logger.warning("ntcapi nearby stops failed (lat=%s lon=%s), falling back to index: %s", lat, lon, exc)
 
