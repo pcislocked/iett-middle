@@ -170,17 +170,25 @@ async def get_route_stops(
         "HATYONETIM.HAT.HAT_KODU": hat_kodu,
     }
     raw: list[dict] = await _call_service(session, "mainGetRoute", payload)
-    stops = []
-    seen_codes: set[str] = set()
+
+    # Group all stops by their route variant code (e.g. "14M_G_D0", "14M_G_D1991", …).
+    # ntcapi returns every service-pattern variant for this direction; we want only the
+    # canonical one.  Selection priority:
+    #   1. Variant whose code ends with "_D0"  (base/canonical service pattern)
+    #   2. Variant with the most stops         (covers edge cases where _D0 is missing)
+    from collections import defaultdict  # noqa: PLC0415
+    variants: dict[str, list[dict]] = defaultdict(list)
+    seen_keys: set[str] = set()
     for item in raw:
+        rc = item.get("GUZERGAH_GUZERGAH_KODU") or f"{hat_kodu}_{direction}_D0"
         dcode = str(item.get("DURAK_DURAK_KODU") or "")
-        key = f"{item.get('GUZERGAH_GUZERGAH_KODU')}:{dcode}:{item.get('GUZERGAH_SEGMENT_SIRA')}"
-        if key in seen_codes:
+        key = f"{rc}:{dcode}:{item.get('GUZERGAH_SEGMENT_SIRA')}"
+        if key in seen_keys:
             continue
-        seen_codes.add(key)
+        seen_keys.add(key)
         geoloc = item.get("DURAK_GEOLOC") or {}
-        stops.append({
-            "route_code": item.get("GUZERGAH_GUZERGAH_KODU") or f"{hat_kodu}_{direction}_D0",
+        variants[rc].append({
+            "route_code": rc,
             "stop_code": dcode,
             "stop_name": item.get("DURAK_ADI") or "",
             "sequence": item.get("GUZERGAH_SEGMENT_SIRA") or 0,
@@ -189,7 +197,16 @@ async def get_route_stops(
             "district": item.get("ILCELER_ILCEADI"),
             "direction_letter": direction.upper(),
         })
-    stops.sort(key=lambda s: s["sequence"])
+
+    if not variants:
+        return []
+
+    # Pick canonical variant: prefer _D0, else the one with the most stops
+    canonical_key = next((k for k in variants if k.endswith("_D0")), None)
+    if canonical_key is None:
+        canonical_key = max(variants, key=lambda k: len(variants[k]))
+
+    stops = sorted(variants[canonical_key], key=lambda s: s["sequence"])
     return stops
 
 
