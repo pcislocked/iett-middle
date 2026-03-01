@@ -50,6 +50,8 @@ _fleet: dict[str, dict[str, Any]] = {}
 _trail: dict[str, deque[dict[str, Any]]] = {}
 _fleet_updated_at: datetime | None = None
 _fleet_refresh_task: asyncio.Task | None = None
+# kapino (upper) → last known route_code (survives when bus parks / goes offline)
+_kapino_last_route: dict[str, str] = {}
 
 
 def get_fleet_snapshot() -> list[dict[str, Any]]:
@@ -111,6 +113,11 @@ def get_plate_by_kapino(kapino: str) -> str | None:
     return _fleet.get(kapino, {}).get("plate")
 
 
+def get_last_route_by_kapino(kapino: str) -> str | None:
+    """Return the last known route_code for a kapino (set whenever fleet poll sees a non-null route_code)."""
+    return _kapino_last_route.get(kapino.upper())
+
+
 def update_fleet(buses: list[BusPosition]) -> None:  # noqa: C901
     """Called by the background poller.  Updates fleet dict and trail deques."""
     global _fleet_updated_at  # noqa: PLW0603
@@ -137,6 +144,9 @@ def update_fleet(buses: list[BusPosition]) -> None:  # noqa: C901
         elif k not in _trail:
             _trail[k] = deque(maxlen=max_entries)
         _fleet[k] = b.model_dump()
+        # Persist last known route even when bus later goes offline / parks
+        if b.route_code:
+            _kapino_last_route[k.upper()] = b.route_code
 
     _fleet_updated_at = datetime.now()
 

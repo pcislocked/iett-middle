@@ -31,6 +31,19 @@ class BusPositionWithTrail(BusPosition):
     trail: list[TrailPoint] = []
 
 
+class BusDetail(BusPositionWithTrail):
+    """BusPositionWithTrail with resolved route code and stop list for map rendering.
+
+    ``resolved_route_code`` prefers the live ``route_code``; falls back to the
+    last known route seen for this kapino since server startup (covers parked
+    / nightly-service buses whose route_code returns to None between trips).
+    ``route_stops`` is the ordered stop list for both directions — client draws
+    the direction that matches ``direction_letter``.
+    """
+    resolved_route_code: str | None = None
+    route_stops: list[dict] = []
+
+
 class Arrival(BaseModel):
     route_code: str
     destination: str

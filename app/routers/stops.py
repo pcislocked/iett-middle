@@ -2,8 +2,19 @@
 from __future__ import annotations
 
 import logging
+import math as _math
 
 from fastapi import APIRouter, HTTPException, Query
+
+
+def _haversine_m(user_lat: float, user_lon: float, stop_lat: float, stop_lon: float) -> float:
+    """Haversine distance in metres."""
+    R = 6_371_000.0
+    p1, p2 = _math.radians(user_lat), _math.radians(stop_lat)
+    dp = p2 - p1
+    dl = _math.radians(stop_lon - user_lon)
+    a = _math.sin(dp / 2) ** 2 + _math.cos(p1) * _math.cos(p2) * _math.sin(dl / 2) ** 2
+    return R * 2 * _math.atan2(_math.sqrt(a), _math.sqrt(1 - a))
 
 from app.config import settings
 from app.deps import get_plate_by_kapino, get_session
@@ -70,7 +81,7 @@ async def nearby_stops(
                     longitude=longitude,
                     district=c.get("district"),
                     direction=c.get("direction"),
-                    distance_m=c.get("distance_m") or 0.0,
+                    distance_m=c.get("distance_m") or _haversine_m(lat, lon, latitude, longitude),
                 )
             )
         return nearby_results
