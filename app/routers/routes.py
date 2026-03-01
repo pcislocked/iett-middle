@@ -50,19 +50,15 @@ async def get_route_metadata(hat_kodu: str):
 
 @router.get("/{hat_kodu}/buses", response_model=list[BusPosition])
 async def get_route_buses(hat_kodu: str):
-    """Live GPS positions of all buses on a route."""
-    key = f"routes:buses:{hat_kodu}"
-    cached = await cache_get(key)
-    if cached is not None:
-        return cached
-    client = IettClient(get_session())
-    try:
-        buses = await client.get_route_buses(hat_kodu)
-    except IettApiError as exc:
-        raise HTTPException(502, detail=str(exc)) from exc
-    data = [b.model_dump() for b in buses]
-    await cache_set(key, data, settings.cache_ttl_fleet)
-    return buses
+    """GPS positions of buses on a route — filtered from the in-memory fleet store.
+
+    No upstream IETT call is made here.  ensure_fleet_fresh() triggers a
+    background refresh when the store is ≥30 s stale; this request returns
+    the current snapshot immediately (stale-while-revalidate).
+    """
+    from app.deps import ensure_fleet_fresh, get_buses_by_route  # noqa: PLC0415
+    await ensure_fleet_fresh()
+    return get_buses_by_route(hat_kodu)
 
 
 @router.get("/{hat_kodu}/stops", response_model=list[RouteStop])

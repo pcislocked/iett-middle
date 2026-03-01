@@ -36,3 +36,13 @@ class Arrival(BaseModel):
     eta_raw: str
     plate: str | None = None
     kapino: str | None = None
+    # Live position from ybs response (son_konum = "lon,lat" string)
+    lat: float | None = None
+    lon: float | None = None
+    speed: int | None = None
+    last_seen_ts: str | None = None
+    # Amenity flags (1 = available)
+    usb: int | None = None
+    wifi: int | None = None
+    klima: int | None = None
+    engelli: int | None = None

@@ -5,6 +5,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.9] – 2026-03-01
+
+### Added
+- `app/services/ntcapi_client.py` — full client for `ntcapi.iett.istanbul` private API
+  - OAuth2 `client_credentials` token fetch with in-process cache (refreshes 60 s before expiry)
+  - `get_stop_arrivals()` via `ybs` alias: returns kapino, live lat/lon, speed, amenity flags
+  - `get_bus_location()` via `mainGetBusLocation_basic`: plate + live position by kapino
+  - `get_route_stops()` via `mainGetRoute`: ordered stop list with coordinates
+  - `get_route_metadata()` via `mainGetLine`: route variant metadata
+  - `get_timetable()` via `akyolbilGetTimeTable`: all day types (H/C/P)
+  - `get_nearby_stops()` via `mainGetBusStopNearby`: geo-radius stop search
+  - `NtcApiError` for clean fallback handling
+
+### Changed
+- `Arrival` model gains `lat`, `lon`, `speed`, `last_seen_ts`, `usb`, `wifi`, `klima`, `engelli`
+- `GET /{dcode}/arrivals` uses ntcapi `ybs` as primary source, IETT HTML as automatic fallback
+- ntcapi credentials configurable via `Settings` class / environment variables
+
+---
+
 ## [0.1.4] – 2026-02-28
 
 ### Fixed

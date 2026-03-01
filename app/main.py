@@ -72,7 +72,7 @@ def _make_trace_config() -> aiohttp.TraceConfig:
 async def lifespan(app: FastAPI):  # noqa: ARG001
     import asyncio  # noqa: PLC0415
 
-    from app.services.fleet_poller import poll_fleet_forever  # noqa: PLC0415
+    from app.services.fleet_poller import refresh_fleet_once  # noqa: PLC0415
     from app.services.stop_indexer import index_stops_forever  # noqa: PLC0415
 
     connector = aiohttp.TCPConnector(
@@ -86,18 +86,17 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     ))
     logger.info("HTTP session started")
 
-    poller = asyncio.create_task(poll_fleet_forever())
+    # Kick off an initial fleet snapshot in the background (non-blocking)
+    asyncio.create_task(refresh_fleet_once())
     stop_indexer = asyncio.create_task(index_stops_forever())
 
     yield
 
-    poller.cancel()
     stop_indexer.cancel()
-    for task in (poller, stop_indexer):
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+    try:
+        await stop_indexer
+    except asyncio.CancelledError:
+        pass
     await close_session()
     logger.info("HTTP session closed")
 
@@ -108,7 +107,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
 app = FastAPI(
     title="iett-middle",
     description="Smart caching proxy for IETT Istanbul public transit APIs.",
-    version="0.1.4",
+    version="0.1.9",
     lifespan=lifespan,
 )
 

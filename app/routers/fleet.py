@@ -1,8 +1,10 @@
 """Fleet router — /v1/fleet
 
-Data is served entirely from the in-memory store populated by the background
-poller.  There are no on-demand IETT upstream calls here, which prevents
-rate-limiting and ensures low latency.
+Data is served from the in-memory store.  Fleet data is refreshed on-demand
+(stale-while-revalidate): any request whose data is ≥30 s old triggers a
+background refresh against the IETT all-fleet endpoint; subsequent requests
+return fresh data.  This means the endpoint is only ever called once per 30 s
+regardless of how many clients are connected.
 """
 from __future__ import annotations
 
@@ -11,7 +13,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 
-from app.deps import get_fleet_snapshot, get_fleet_updated_at, get_trail
+from app.deps import ensure_fleet_fresh, get_fleet_snapshot, get_fleet_updated_at, get_trail
 from app.models.bus import BusPositionWithTrail
 
 logger = logging.getLogger(__name__)
@@ -29,9 +31,11 @@ def _snapshot_with_trails() -> list[dict]:
 async def get_fleet():
     """All active Istanbul buses with 5-minute position trails.
 
-    Served from the background-polled in-memory store — no upstream call.
-    Returns 503 for the first ~30 s while the initial poll is completing.
+    Served from the in-memory store.  Triggers a background refresh when data
+    is ≥30 s stale (stale-while-revalidate); returns 503 only before the very
+    first snapshot is available.
     """
+    await ensure_fleet_fresh()
     snapshot = get_fleet_snapshot()
     if not snapshot:
         raise HTTPException(
@@ -44,6 +48,7 @@ async def get_fleet():
 @router.get("/meta", tags=["fleet"])
 async def get_fleet_meta():
     """Lightweight status: bus count + last update timestamp."""
+    await ensure_fleet_fresh()
     updated = get_fleet_updated_at()
     return {
         "bus_count": len(get_fleet_snapshot()),
@@ -55,21 +60,9 @@ async def get_fleet_meta():
 async def refresh_fleet():
     """Trigger an immediate out-of-band fleet re-poll.
 
-    Useful for a manual Force Refresh button in the settings screen.
-    The actual poll runs as a fire-and-forget background task.
+    Currently disabled — use the 30 s stale-while-revalidate cycle instead.
     """
-    async def _do() -> None:
-        from app.deps import get_session, update_fleet  # noqa: PLC0415
-        from app.services.iett_client import IettApiError, IettClient  # noqa: PLC0415
-        try:
-            buses = await IettClient(get_session()).get_all_buses()
-            update_fleet(buses)
-            logger.info("Manual refresh: %d buses", len(buses))
-        except IettApiError as exc:
-            logger.warning("Manual refresh failed: %s", exc)
-
-    asyncio.create_task(_do())
-    return {"status": "refresh triggered"}
+    raise HTTPException(503, detail="Manual refresh is temporarily disabled.")
 
 
 @router.get("/{kapino}", response_model=BusPositionWithTrail)
