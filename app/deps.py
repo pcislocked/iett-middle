@@ -4,6 +4,7 @@ Import from here, never from main.py, to avoid circular imports.
 """
 from __future__ import annotations
 
+import asyncio
 import math
 from collections import deque
 from datetime import datetime
@@ -48,6 +49,7 @@ _fleet: dict[str, dict[str, Any]] = {}
 # kapino → deque of TrailPoint dicts  {lat, lon, ts}
 _trail: dict[str, deque[dict[str, Any]]] = {}
 _fleet_updated_at: datetime | None = None
+_fleet_refresh_task: asyncio.Task | None = None
 
 
 def get_fleet_snapshot() -> list[dict[str, Any]]:
@@ -63,9 +65,37 @@ def get_fleet_updated_at() -> datetime | None:
     return _fleet_updated_at
 
 
+def get_buses_by_route(hat_kodu: str) -> list[dict[str, Any]]:
+    """Return all fleet buses whose route_code matches hat_kodu (case-insensitive)."""
+    upper = hat_kodu.upper()
+    return [b for b in _fleet.values() if (b.get("route_code") or "").upper() == upper]
+
+
 def get_buses_near_stop(dcode: str) -> list[dict[str, Any]]:
     """Return all fleet buses currently with nearest_stop == dcode."""
     return [b for b in _fleet.values() if b.get("nearest_stop") == dcode]
+
+
+async def ensure_fleet_fresh(max_age_seconds: int = 30) -> None:
+    """Trigger a background fleet refresh if data is absent or older than max_age_seconds.
+
+    Returns immediately — caller gets the current (possibly stale) snapshot;
+    the next request after the refresh completes will see fresh data.
+    Concurrent calls are deduplicated: at most one refresh task runs at a time.
+    """
+    global _fleet_refresh_task  # noqa: PLW0603
+
+    if _fleet_updated_at is not None:
+        age = (datetime.now() - _fleet_updated_at).total_seconds()
+        if age < max_age_seconds:
+            return  # fresh enough
+
+    # Debounce: don't start a second refresh while one is already in flight
+    if _fleet_refresh_task is not None and not _fleet_refresh_task.done():
+        return
+
+    from app.services.fleet_poller import refresh_fleet_once  # noqa: PLC0415
+    _fleet_refresh_task = asyncio.create_task(refresh_fleet_once())
 
 
 def get_plate_by_kapino(kapino: str) -> str | None:

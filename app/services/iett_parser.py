@@ -64,6 +64,9 @@ def parse_all_fleet_xml(xml_text: str) -> list[BusPosition]:
                     speed=speed,
                     operator=r.get("Operator"),
                     last_seen=r.get("Saat", ""),
+                    route_code=(
+                        r.get("HatKodu") or r.get("HATKODU") or r.get("hatkodu") or None
+                    ),
                 )
             )
         except (TypeError, ValueError):

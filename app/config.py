@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     trafik_base: str = "https://trafik.ibb.gov.tr"
     osrm_base: str = "https://router.project-osrm.org"
 
-    cache_ttl_fleet: int = 60
+    cache_ttl_fleet: int = 30
     cache_ttl_arrivals: int = 20
     cache_ttl_stops: int = 86400
     cache_ttl_schedule: int = 3600
@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     cache_ttl_traffic: int = 30
     cache_ttl_search: int = 300
 
-    # Background fleet poller
-    fleet_poll_interval: int = 60   # seconds between polls
+    # On-demand fleet refresh — stale threshold (seconds)
+    fleet_poll_interval: int = 30   # max age before a background refresh is triggered
     fleet_trail_minutes: int = 5    # how many minutes of trail to keep per bus
 
     log_level: str = "info"
