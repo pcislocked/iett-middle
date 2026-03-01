@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.2.1] – 2026-03-01
+
+### Fixed
+- `CanonicalBusPosition.lat/lon` typed as `float | None` — normalizers no longer emit bogus `(0.0, 0.0)` for unparseable coords
+- `CanonicalScheduledDeparture.departure_time` typed as `str | None` to match normalizer output
+- Nearby stops router: invalid/missing coordinates are skipped with a warning rather than defaulting to `0.0`
+- Schedule router: rows with missing `route_code` or `departure_time` are filtered out instead of being cached with empty strings
+- `normalizers/positions`: removed `_safe_float(...) or 0.0` fallback (returns `None`)
+- `routers/routes`: direction stop-list fetches now run concurrently via `asyncio.gather`
+- Docstring corrections in `normalizers/__init__` and `normalizers/arrivals` (Copilot review PR #6)
+
+---
+
 ## [0.2.0] – 2026-03-01
 
 ### Added
