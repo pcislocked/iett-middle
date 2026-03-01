@@ -77,21 +77,45 @@ async def get_route_metadata(hat_kodu: str):
 async def get_route_buses(hat_kodu: str):
     """GPS positions of buses on a route.
 
-    Primary: calls IETT GetHatOtoKonum_json SOAP endpoint directly (most accurate).
+    Primary: ntcapi ybs point-passing/{hat_id} — includes stop_sequence per bus.
+    Secondary: IETT GetHatOtoKonum_json SOAP.
     Fallback: filters in-memory fleet store by route_code (stale-while-revalidate).
     """
     from app.deps import ensure_fleet_fresh, get_buses_by_route  # noqa: PLC0415
 
-    # Try the dedicated per-route SOAP endpoint first
+    session = get_session()
+
+    # ── primary: ntcapi ybs point-passing ──────────────────────────────────
     try:
-        client = IettClient(get_session())
+        # HAT_ID is returned by mainGetLine_basic and cached with route metadata.
+        # Check the metadata cache first to avoid an extra round-trip.
+        meta_key = f"routes:meta:{hat_kodu}"
+        meta_cached = await cache_get(meta_key)
+        hat_id: int | None = None
+        if meta_cached and isinstance(meta_cached, list):
+            hat_id = next((m.get("hat_id") for m in meta_cached if isinstance(m, dict) and m.get("hat_id")), None)
+        if hat_id is None:
+            raw_meta = await ntcapi_client.get_route_metadata(hat_kodu, session)
+            hat_id = next((m.get("hat_id") for m in raw_meta if m.get("hat_id")), None)
+            if raw_meta:
+                await cache_set(meta_key, raw_meta, settings.cache_ttl_search)
+        if hat_id is not None:
+            buses = await ntcapi_client.get_route_buses_ybs(hat_id, session)
+            if buses:
+                return buses
+    except (NtcApiError, Exception) as exc:  # noqa: BLE001
+        logger.warning("ybs point-passing failed for %s, falling back to SOAP: %s", hat_kodu, exc)
+
+    # ── secondary: IETT SOAP GetHatOtoKonum ────────────────────────────────
+    try:
+        client = IettClient(session)
         buses = await client.get_route_buses(hat_kodu)
         if buses:
             return buses
     except (IettApiError, Exception) as exc:  # noqa: BLE001
         logger.warning("get_route_buses SOAP failed for %s, falling back to fleet: %s", hat_kodu, exc)
 
-    # Fallback: filter in-memory fleet
+    # ── last resort: in-memory fleet ───────────────────────────────────────
     await ensure_fleet_fresh()
     return get_buses_by_route(hat_kodu)
 

@@ -214,15 +214,17 @@ async def get_route_metadata(
     hat_kodu: str,
     session: aiohttp.ClientSession,
 ) -> list[dict[str, Any]]:
-    """Route variants list via mainGetLine.
+    """Route variants list via mainGetLine_basic.
 
+    Uses mainGetLine_basic (vs the older mainGetLine) so we also get HAT_ID,
+    the numeric internal route identifier required for ybs point-passing calls.
     Returns list of dicts matching RouteMetadata shape.
     """
     payload = {
         "HATYONETIM.GUZERGAH.YON": "119",
         "HATYONETIM.HAT.HAT_KODU": hat_kodu,
     }
-    raw: list[dict] = await _call_service(session, "mainGetLine", payload)
+    raw: list[dict] = await _call_service(session, "mainGetLine_basic", payload)
     results = []
     seen: set[str] = set()
     for item in raw:
@@ -243,8 +245,58 @@ async def get_route_metadata(
             "variant_code": code,
             "direction": 0 if direction_letter == "G" else 1,
             "depar_no": item.get("GUZERGAH_DEPAR_NO") or 0,
+            "hat_id": item.get("HAT_ID"),
         })
     return results
+
+
+async def get_route_buses_ybs(
+    hat_id: int | str,
+    session: aiohttp.ClientSession,
+) -> list[Any]:
+    """Live bus positions for a route via ybs point-passing/{hat_id}.
+
+    Uses the same ybs alias as stop arrivals but with the 'point-passing'
+    path and the ntcapi internal HAT_ID (not the public hat_kodu string).
+    Returns a list of BusPosition-compatible dicts ready for serialisation.
+    """
+    from app.models.bus import BusPosition  # noqa: PLC0415 — avoid circular at module level
+
+    payload = {
+        "data": {
+            "password": settings.ntcapi_ybs_password,
+            "username": settings.ntcapi_ybs_username,
+        },
+        "method": "POST",
+        "path": ["real-time-information", "point-passing", str(hat_id)],
+    }
+    raw: list[dict] = await _call_service(session, "ybs", payload)
+    positions: list[BusPosition] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        try:
+            lat = float(item["ENLEM"])
+            lon = float(item["BOYLAM"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        guzergah = item.get("K_GUZERGAH_GUZERGAHKODU") or ""
+        direction_letter: str | None = None
+        for p in guzergah.split("_"):
+            if p in ("G", "D"):
+                direction_letter = p
+                break
+        seq = item.get("H_GOREV_DURAK_GECIS_SIRANO")
+        positions.append(BusPosition(
+            kapino=item.get("K_ARAC_KAPINUMARASI") or "",
+            latitude=lat,
+            longitude=lon,
+            last_seen=item.get("SISTEMSAATI") or "",
+            route_code=guzergah or None,
+            direction_letter=direction_letter,
+            stop_sequence=int(seq) if seq is not None else None,
+        ))
+    return positions
 
 
 async def get_timetable(
