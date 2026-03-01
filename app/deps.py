@@ -146,7 +146,7 @@ def update_fleet(buses: list[BusPosition]) -> None:  # noqa: C901
         _fleet[k] = b.model_dump()
         # Persist last known route even when bus later goes offline / parks
         if b.route_code:
-            _kapino_last_route[k.upper()] = b.route_code
+            _kapino_last_route[k.upper()] = b.route_code.strip().upper()
 
     _fleet_updated_at = datetime.now()
 
