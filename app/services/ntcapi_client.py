@@ -170,17 +170,25 @@ async def get_route_stops(
         "HATYONETIM.HAT.HAT_KODU": hat_kodu,
     }
     raw: list[dict] = await _call_service(session, "mainGetRoute", payload)
-    stops = []
-    seen_codes: set[str] = set()
+
+    # Group all stops by their route variant code (e.g. "14M_G_D0", "14M_G_D1991", …).
+    # ntcapi returns every service-pattern variant for this direction; we want only the
+    # canonical one.  Selection priority:
+    #   1. Variant whose code ends with "_D0"  (base/canonical service pattern)
+    #   2. Variant with the most stops         (covers edge cases where _D0 is missing)
+    from collections import defaultdict  # noqa: PLC0415
+    variants: dict[str, list[dict]] = defaultdict(list)
+    seen_keys: set[str] = set()
     for item in raw:
+        rc = item.get("GUZERGAH_GUZERGAH_KODU") or f"{hat_kodu}_{direction}_D0"
         dcode = str(item.get("DURAK_DURAK_KODU") or "")
-        key = f"{item.get('GUZERGAH_GUZERGAH_KODU')}:{dcode}:{item.get('GUZERGAH_SEGMENT_SIRA')}"
-        if key in seen_codes:
+        key = f"{rc}:{dcode}:{item.get('GUZERGAH_SEGMENT_SIRA')}"
+        if key in seen_keys:
             continue
-        seen_codes.add(key)
+        seen_keys.add(key)
         geoloc = item.get("DURAK_GEOLOC") or {}
-        stops.append({
-            "route_code": item.get("GUZERGAH_GUZERGAH_KODU") or f"{hat_kodu}_{direction}_D0",
+        variants[rc].append({
+            "route_code": rc,
             "stop_code": dcode,
             "stop_name": item.get("DURAK_ADI") or "",
             "sequence": item.get("GUZERGAH_SEGMENT_SIRA") or 0,
@@ -189,7 +197,16 @@ async def get_route_stops(
             "district": item.get("ILCELER_ILCEADI"),
             "direction_letter": direction.upper(),
         })
-    stops.sort(key=lambda s: s["sequence"])
+
+    if not variants:
+        return []
+
+    # Pick canonical variant: prefer _D0, else the one with the most stops
+    canonical_key = next((k for k in variants if k.endswith("_D0")), None)
+    if canonical_key is None:
+        canonical_key = max(variants, key=lambda k: len(variants[k]))
+
+    stops = sorted(variants[canonical_key], key=lambda s: s["sequence"])
     return stops
 
 
@@ -197,15 +214,17 @@ async def get_route_metadata(
     hat_kodu: str,
     session: aiohttp.ClientSession,
 ) -> list[dict[str, Any]]:
-    """Route variants list via mainGetLine.
+    """Route variants list via mainGetLine_basic.
 
+    Uses mainGetLine_basic (vs the older mainGetLine) so we also get HAT_ID,
+    the numeric internal route identifier required for ybs point-passing calls.
     Returns list of dicts matching RouteMetadata shape.
     """
     payload = {
         "HATYONETIM.GUZERGAH.YON": "119",
         "HATYONETIM.HAT.HAT_KODU": hat_kodu,
     }
-    raw: list[dict] = await _call_service(session, "mainGetLine", payload)
+    raw: list[dict] = await _call_service(session, "mainGetLine_basic", payload)
     results = []
     seen: set[str] = set()
     for item in raw:
@@ -226,8 +245,63 @@ async def get_route_metadata(
             "variant_code": code,
             "direction": 0 if direction_letter == "G" else 1,
             "depar_no": item.get("GUZERGAH_DEPAR_NO") or 0,
+            "hat_id": item.get("HAT_ID"),
         })
     return results
+
+
+async def get_route_buses_ybs(
+    hat_id: int | str,
+    hat_kodu: str,
+    session: aiohttp.ClientSession,
+) -> list[BusPosition]:
+    """Live bus positions for a route via ybs point-passing/{hat_id}.
+
+    Uses the same ybs alias as stop arrivals but with the 'point-passing'
+    path and the ntcapi internal HAT_ID (not the public hat_kodu string).
+    Returns a list of BusPosition objects.
+    """
+    from app.models.bus import BusPosition  # noqa: PLC0415 — avoid circular at module level
+
+    payload = {
+        "data": {
+            "password": settings.ntcapi_ybs_password,
+            "username": settings.ntcapi_ybs_username,
+        },
+        "method": "POST",
+        "path": ["real-time-information", "point-passing", str(hat_id)],
+    }
+    raw: list[dict] = await _call_service(session, "ybs", payload)
+    positions: list[BusPosition] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        try:
+            lat = float(item["ENLEM"])
+            lon = float(item["BOYLAM"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        guzergah = item.get("K_GUZERGAH_GUZERGAHKODU") or ""
+        direction_letter: str | None = None
+        for p in guzergah.split("_"):
+            if p in ("G", "D"):
+                direction_letter = p
+                break
+        seq = item.get("H_GOREV_DURAK_GECIS_SIRANO")
+        try:
+            stop_seq: int | None = int(seq) if seq is not None and str(seq).strip() else None
+        except (ValueError, TypeError):
+            stop_seq = None
+        positions.append(BusPosition(
+            kapino=item.get("K_ARAC_KAPINUMARASI") or "",
+            latitude=lat,
+            longitude=lon,
+            last_seen=item.get("SISTEMSAATI") or "",
+            route_code=hat_kodu or None,
+            direction_letter=direction_letter,
+            stop_sequence=stop_seq,
+        ))
+    return positions
 
 
 async def get_timetable(

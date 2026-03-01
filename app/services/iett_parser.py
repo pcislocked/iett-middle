@@ -83,6 +83,14 @@ def parse_route_fleet_xml(xml_text: str) -> list[BusPosition]:
     result: list[BusPosition] = []
     for r in records:
         try:
+            guzergah = r.get("guzergahkodu") or ""
+            # Extract G/D from e.g. "14M_G_D0" or "14M_D_D0"
+            direction_letter: str | None = None
+            parts = guzergah.split("_")
+            for p in parts:
+                if p in ("G", "D"):
+                    direction_letter = p
+                    break
             result.append(
                 BusPosition(
                     kapino=r.get("kapino", ""),
@@ -92,6 +100,7 @@ def parse_route_fleet_xml(xml_text: str) -> list[BusPosition]:
                     route_code=r.get("hatkodu"),
                     route_name=r.get("hatad"),
                     direction=r.get("yon"),
+                    direction_letter=direction_letter,
                     nearest_stop=r.get("yakinDurakKodu"),
                 )
             )

@@ -29,6 +29,7 @@ class RouteMetadata(BaseModel):
     variant_code: str          # e.g. "14M_G_D1991"
     direction: int             # 0 = outbound, 1 = return (GUZERGAH_YON)
     depar_no: int              # departure number
+    hat_id: int | None = None  # ntcapi internal numeric route ID (e.g. 497)
 
 
 class RouteSearchResult(BaseModel):
