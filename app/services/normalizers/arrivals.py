@@ -51,8 +51,9 @@ def from_ntcapi_ybs(item: dict[str, Any]) -> CanonicalArrival:
 def from_iett_html(item: dict[str, Any]) -> CanonicalArrival:
     """Normalise one Arrival model_dump() from the IETT HTML parser.
 
-    The HTML source never provides live position or amenity data — all
-    positional and amenity fields are set to None.
+    The HTML source never provides live position or amenity data —
+    positional fields are set to None and ``amenities`` is an ``Amenities``
+    instance with all flags set to None.
     """
     return CanonicalArrival(
         route_code=str(item.get("route_code") or ""),

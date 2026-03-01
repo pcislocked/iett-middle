@@ -65,8 +65,8 @@ class CanonicalArrival(TypedDict, total=False):
 class CanonicalBusPosition(TypedDict, total=False):
     kapino: str                # "C-325"
     plate: str | None          # "34 HO 1000"
-    lat: float                 # 41.083
-    lon: float                 # 29.050
+    lat: float | None          # 41.083  — None when coords unparseable
+    lon: float | None          # 29.050  — None when coords unparseable
     speed_kmh: int | None      # km/h, 0 when stationary
     last_seen: str             # timestamp string (format varies per source)
     route_code: str | None     # "14M"
@@ -112,7 +112,7 @@ class CanonicalScheduledDeparture(TypedDict, total=False):
     day_type: str              # "H" | "C" | "P"
     # IETT SOAP uses "I"/"İ" for weekday — normaliser converts to "H"
     service_type: str          # "ÖHO"
-    departure_time: str        # "HH:MM"
+    departure_time: str | None # "HH:MM" — None when source row is malformed
     _source: str               # "ntcapi_timetable" | "iett_soap_schedule"
 
 
