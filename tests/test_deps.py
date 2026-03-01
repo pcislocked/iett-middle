@@ -46,6 +46,7 @@ class TestFleetStore:
         deps._fleet.clear()
         deps._trail.clear()
         deps._fleet_updated_at = None
+        deps._kapino_last_route.clear()
 
     def test_empty_snapshot(self) -> None:
         assert deps.get_fleet_snapshot() == []
@@ -111,6 +112,19 @@ class TestFleetStore:
     def test_get_plate_by_kapino_unknown_returns_none(self) -> None:
         plate = deps.get_plate_by_kapino("NOTEXIST")
         assert plate is None
+
+    def test_last_route_persisted_when_route_code_present(self) -> None:
+        deps.update_fleet([_bus("A-001", 41.0, 29.0, route_code="15F")])
+        assert deps.get_last_route_by_kapino("A-001") == "15F"
+
+    def test_last_route_not_overwritten_when_route_code_null(self) -> None:
+        deps.update_fleet([_bus("A-001", 41.0, 29.0, route_code="15F")])
+        # Simulate bus going offline / parked — route_code becomes None
+        deps.update_fleet([_bus("A-001", 41.1, 29.1, route_code=None)])
+        assert deps.get_last_route_by_kapino("A-001") == "15F"
+
+    def test_get_last_route_unknown_kapino_returns_none(self) -> None:
+        assert deps.get_last_route_by_kapino("NOBODY") is None
 
 
 # ---------------------------------------------------------------------------

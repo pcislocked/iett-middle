@@ -167,6 +167,88 @@ class TestFleetKapino:
         assert resp.status_code == 404
 
 
+class TestFleetDetailRouter:
+    """Tests for GET /v1/fleet/{kapino}/detail"""
+
+    def test_404_when_kapino_not_in_fleet(self, client: TestClient) -> None:
+        with (
+            patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
+            patch("app.routers.fleet.get_fleet_snapshot", return_value=[]),
+        ):
+            resp = client.get("/v1/fleet/GHOST/detail")
+        assert resp.status_code == 404
+
+    def test_200_live_route_sets_route_is_live_true(self, client: TestClient) -> None:
+        bus = _bus("A-001", "500T")
+        with (
+            patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
+            patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
+            patch("app.routers.fleet.get_trail", return_value=[]),
+            patch("app.routers.fleet.get_session", return_value=MagicMock()),
+            patch("app.services.cache.cache_get", AsyncMock(return_value=[])),
+            patch("app.services.cache.cache_set", AsyncMock()),
+        ):
+            resp = client.get("/v1/fleet/A-001/detail")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["route_is_live"] is True
+        assert body["resolved_route_code"] == "500T"
+        assert body["kapino"] == "A-001"
+
+    def test_200_parked_bus_uses_last_known_route(self, client: TestClient) -> None:
+        """Bus with null live route_code falls back to _kapino_last_route."""
+        bus = _bus("A-001", None)  # type: ignore[arg-type]
+        with (
+            patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
+            patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
+            patch("app.routers.fleet.get_trail", return_value=[]),
+            patch("app.routers.fleet.get_last_route_by_kapino", return_value="15F"),
+            patch("app.routers.fleet.get_session", return_value=MagicMock()),
+            patch("app.services.cache.cache_get", AsyncMock(return_value=[])),
+            patch("app.services.cache.cache_set", AsyncMock()),
+        ):
+            resp = client.get("/v1/fleet/A-001/detail")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["route_is_live"] is False
+        assert body["resolved_route_code"] == "15F"
+
+    def test_200_route_stops_returned_from_cache(self, client: TestClient) -> None:
+        """route_stops field is populated from cache when available."""
+        bus = _bus("A-001", "500T")
+        cached_stops = [{"stop_code": "301341", "stop_name": "Levent", "direction": "G"}]
+        with (
+            patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
+            patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
+            patch("app.routers.fleet.get_trail", return_value=[]),
+            patch("app.routers.fleet.get_session", return_value=MagicMock()),
+            patch("app.services.cache.cache_get", AsyncMock(return_value=cached_stops)),
+            patch("app.services.cache.cache_set", AsyncMock()),
+        ):
+            resp = client.get("/v1/fleet/A-001/detail")
+        assert resp.status_code == 200
+        assert resp.json()["route_stops"] == cached_stops
+
+    def test_200_no_route_code_returns_empty_stops(self, client: TestClient) -> None:
+        """Bus with no live or last-known route_code → route_stops is empty, route_is_live False."""
+        bus = _bus("A-001", None)  # type: ignore[arg-type]
+        with (
+            patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
+            patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
+            patch("app.routers.fleet.get_trail", return_value=[]),
+            patch("app.routers.fleet.get_last_route_by_kapino", return_value=None),
+            patch("app.routers.fleet.get_session", return_value=MagicMock()),
+            patch("app.services.cache.cache_get", AsyncMock(return_value=None)),
+            patch("app.services.cache.cache_set", AsyncMock()),
+        ):
+            resp = client.get("/v1/fleet/A-001/detail")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["route_is_live"] is False
+        assert body["resolved_route_code"] is None
+        assert body["route_stops"] == []
+
+
 # ===========================  /v1/stops  ===================================
 
 class TestStopsSearch:
@@ -215,8 +297,47 @@ class TestStopsNearby:
         resp = client.get("/v1/stops/nearby")
         assert resp.status_code == 422
 
+    def test_haversine_used_when_ntcapi_gives_no_distance(self, client: TestClient) -> None:
+        """When ntcapi returns a stop with distance_m=None, haversine computes a positive distance."""
+        normalised = {
+            "stop_code": "301341",
+            "stop_name": "4.LEVENT METRO",
+            "lat": 41.0842,
+            "lon": 29.0073,
+            "district": "Şişli",
+            "direction": None,
+            "distance_m": None,  # ntcapi didn't provide distance
+        }
+        with (
+            patch("app.routers.stops.ntcapi_client.get_nearby_stops", AsyncMock(return_value=[{"raw": "stop"}])),
+            patch("app.services.normalizers.stops.from_ntcapi_nearby_processed", return_value=normalised),
+            patch("app.routers.stops.get_session", return_value=MagicMock()),
+        ):
+            resp = client.get("/v1/stops/nearby?lat=41.0&lon=29.0")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) == 1
+        assert body[0]["distance_m"] > 0, "haversine should compute a positive distance, not 0"
 
-class TestStopArrivals:
+
+class TestHaversine:
+    """Unit tests for the _haversine_m pure function."""
+
+    def test_positive_distance_for_distinct_points(self) -> None:
+        from app.routers.stops import _haversine_m
+        d = _haversine_m(41.0, 29.0, 41.0842, 29.0073)
+        assert d > 0
+
+    def test_zero_distance_for_same_point(self) -> None:
+        from app.routers.stops import _haversine_m
+        d = _haversine_m(41.0, 29.0, 41.0, 29.0)
+        assert d == pytest.approx(0.0, abs=0.01)
+
+    def test_known_distance_roughly_correct(self) -> None:
+        """0.004° north at Istanbul latitude ≈ 445 m."""
+        from app.routers.stops import _haversine_m
+        d = _haversine_m(41.0, 29.0, 41.004, 29.0)
+        assert 400 < d < 500, f"Expected ~445 m, got {d:.1f} m"
     def test_200_with_arrivals(self, client: TestClient) -> None:
         # ntcapi down → fallback to IETT HTML
         mock_client = MagicMock()
