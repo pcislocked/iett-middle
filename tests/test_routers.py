@@ -22,6 +22,10 @@ from app.models.bus import Arrival, BusPosition
 from app.models.garage import Garage
 from app.models.route import Announcement, RouteMetadata, RouteSearchResult, ScheduledDeparture
 from app.models.stop import StopDetail, StopSearchResult
+from app.services.ntcapi_client import NtcApiError
+
+# Convenience: AsyncMock that raises NtcApiError (simulates ntcapi unavailable)
+_NTCAPI_DOWN = AsyncMock(side_effect=NtcApiError("test: ntcapi unavailable"))
 
 
 def _bus(kapino: str = "A-001", route_code: str = "500T") -> dict[str, Any]:
@@ -139,11 +143,11 @@ class TestFleetMeta:
 
 
 class TestFleetRefresh:
-    def test_202_accepted(self, client: TestClient) -> None:
+    def test_503_manual_refresh_disabled(self, client: TestClient) -> None:
+        """Manual fleet refresh is intentionally disabled; endpoint always returns 503."""
         with patch("app.deps.get_session", return_value=MagicMock()):
             resp = client.post("/v1/fleet/refresh")
-        assert resp.status_code == 202
-        assert resp.json()["status"] == "refresh triggered"
+        assert resp.status_code == 503
 
 
 class TestFleetKapino:
@@ -185,13 +189,21 @@ class TestStopsSearch:
 
 class TestStopsNearby:
     def test_503_when_index_not_ready(self, client: TestClient) -> None:
-        with patch("app.deps.get_stop_index_updated_at", return_value=None):
+        # ntcapi fails → fallback to index → index not ready → 503
+        with (
+            patch("app.routers.stops.ntcapi_client.get_nearby_stops", _NTCAPI_DOWN),
+            patch("app.routers.stops.get_session", return_value=MagicMock()),
+            patch("app.deps.get_stop_index_updated_at", return_value=None),
+        ):
             resp = client.get("/v1/stops/nearby?lat=41.0&lon=29.0")
         assert resp.status_code == 503
 
     def test_200_when_index_ready(self, client: TestClient) -> None:
         now = datetime.now(timezone.utc)
+        # ntcapi fails → fallback to in-memory index → returns results
         with (
+            patch("app.routers.stops.ntcapi_client.get_nearby_stops", _NTCAPI_DOWN),
+            patch("app.routers.stops.get_session", return_value=MagicMock()),
             patch("app.deps.get_stop_index_updated_at", return_value=now),
             patch("app.deps.get_nearby_stops", return_value=[_nearby_stop()]),
         ):
@@ -206,9 +218,11 @@ class TestStopsNearby:
 
 class TestStopArrivals:
     def test_200_with_arrivals(self, client: TestClient) -> None:
+        # ntcapi down → fallback to IETT HTML
         mock_client = MagicMock()
         mock_client.get_stop_arrivals = AsyncMock(return_value=[_arrival()])
         with (
+            patch("app.routers.stops.ntcapi_client.get_stop_arrivals", _NTCAPI_DOWN),
             patch("app.routers.stops.cache_get", AsyncMock(return_value=None)),
             patch("app.routers.stops.cache_set", AsyncMock()),
             patch("app.routers.stops.get_session", return_value=MagicMock()),
@@ -219,9 +233,11 @@ class TestStopArrivals:
         assert resp.status_code == 200
 
     def test_empty_list_on_empty_arrivals(self, client: TestClient) -> None:
+        # ntcapi down → fallback to IETT HTML → empty
         mock_client = MagicMock()
         mock_client.get_stop_arrivals = AsyncMock(return_value=[])
         with (
+            patch("app.routers.stops.ntcapi_client.get_stop_arrivals", _NTCAPI_DOWN),
             patch("app.routers.stops.cache_get", AsyncMock(return_value=None)),
             patch("app.routers.stops.cache_set", AsyncMock()),
             patch("app.routers.stops.get_session", return_value=MagicMock()),
@@ -281,9 +297,11 @@ class TestRoutesSearch:
 
 class TestRoutesMeta:
     def test_200_with_metadata(self, client: TestClient) -> None:
+        # ntcapi down → fallback to IETT SOAP
         mock_client = MagicMock()
         mock_client.get_route_metadata = AsyncMock(return_value=[_route_meta()])
         with (
+            patch("app.routers.routes.ntcapi_client.get_route_metadata", _NTCAPI_DOWN),
             patch("app.routers.routes.cache_get", AsyncMock(return_value=None)),
             patch("app.routers.routes.cache_set", AsyncMock()),
             patch("app.routers.routes.get_session", return_value=MagicMock()),
@@ -315,9 +333,11 @@ class TestRoutesSchedule:
             route_variant="500T_D_D0", direction="D",
             day_type="H", service_type="ÖHO", departure_time="05:55",
         )
+        # ntcapi down → fallback to IETT SOAP
         mock_client = MagicMock()
         mock_client.get_route_schedule = AsyncMock(return_value=[dep])
         with (
+            patch("app.routers.routes.ntcapi_client.get_timetable", _NTCAPI_DOWN),
             patch("app.routers.routes.cache_get", AsyncMock(return_value=None)),
             patch("app.routers.routes.cache_set", AsyncMock()),
             patch("app.routers.routes.get_session", return_value=MagicMock()),

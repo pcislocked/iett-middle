@@ -11,7 +11,7 @@ from app.models.bus import Arrival
 from app.models.stop import NearbyStop, StopDetail, StopSearchResult
 from app.services.cache import cache_get, cache_set
 from app.services.iett_client import IettApiError, IettClient
-from app.services import ntcapi_client
+from app.services import normalizers, ntcapi_client
 from app.services.ntcapi_client import NtcApiError
 
 logger = logging.getLogger(__name__)
@@ -44,14 +44,37 @@ async def nearby_stops(
 ):
     """Stops within *radius* metres of (lat, lon), sorted by distance.
 
-    Requires the stop index to be ready (populated at startup).
+    ntcapi ``mainGetBusStopNearby`` is the primary source.  Falls back to
+    the in-memory spatial index populated at startup.
     Returns up to 30 results.
     """
-    from app.deps import get_nearby_stops, get_stop_index_updated_at  # noqa: PLC0415
+    session = get_session()
+
+    # ── primary: ntcapi mainGetBusStopNearby ────────────────────────
+    try:
+        raw_stops = await ntcapi_client.get_nearby_stops(lat, lon, radius / 1000, session)
+        canonical = [normalizers.stops.from_ntcapi_nearby_processed(r) for r in raw_stops]
+        return [
+            NearbyStop(
+                stop_code=c.get("stop_code") or "",
+                stop_name=c.get("stop_name") or "",
+                latitude=c.get("lat") or 0.0,
+                longitude=c.get("lon") or 0.0,
+                district=c.get("district"),
+                direction=c.get("direction"),
+                distance_m=c.get("distance_m") or 0.0,
+            )
+            for c in canonical[:30]
+        ]
+    except NtcApiError as exc:
+        logger.warning("ntcapi nearby stops failed (lat=%s lon=%s), falling back to index: %s", lat, lon, exc)
+
+    # ── fallback: in-memory spatial index ───────────────────────────
+    from app.deps import get_nearby_stops as _get_nearby, get_stop_index_updated_at  # noqa: PLC0415
 
     if get_stop_index_updated_at() is None:
         raise HTTPException(503, detail="Stop index not ready yet — try again in a moment")
-    results = get_nearby_stops(lat, lon, radius)
+    results = _get_nearby(lat, lon, radius)
     return results[:30]
 
 
@@ -75,6 +98,8 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
     """Live ETAs at a stop, sourced from ntcapi ybs (has kapino + live location).
 
     Falls back to the legacy IETT HTML endpoint if ntcapi is unavailable.
+    All sources are normalised to :class:`~app.models.bus.Arrival` via the
+    canonical data layer.
     """
     key = f"stops:arrivals:{dcode}" + (f":via:{via}" if via else "")
     cached = await cache_get(key)
@@ -82,36 +107,42 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
         arrivals_data: list[dict] = cached
     else:
         session = get_session()
-        arrivals: list[Arrival] = []
+        arrivals_data = []
 
         # ── primary: ntcapi ybs (has kapino + live bus location) ──────
         try:
-            arrivals = await ntcapi_client.get_stop_arrivals(dcode, session)
+            raw_items = await ntcapi_client.get_stop_arrivals(dcode, session)
+            canonical = [normalizers.arrivals.from_ntcapi_ybs(r) for r in raw_items]
+            canonical.sort(
+                key=lambda a: a.get("eta_minutes") if a.get("eta_minutes") is not None else 9999
+            )
+            arrivals_data = list(canonical)
         except NtcApiError as exc:
             logger.warning("ntcapi arrivals failed for %s, falling back to HTML: %s", dcode, exc)
-            arrivals = []
 
         # ── fallback: legacy IETT HTML (no kapino, no location) ───────
-        if not arrivals:
+        if not arrivals_data:
             client = IettClient(session)
             try:
                 if via:
-                    arrivals = await client.get_stop_arrivals_via(dcode, via)
+                    iett_arrivals = await client.get_stop_arrivals_via(dcode, via)
                 else:
-                    arrivals = await client.get_stop_arrivals(dcode)
+                    iett_arrivals = await client.get_stop_arrivals(dcode)
             except IettApiError as exc:
                 raise HTTPException(502, detail=str(exc)) from exc
+            arrivals_data = [
+                normalizers.arrivals.from_iett_html(a.model_dump()) for a in iett_arrivals
+            ]
 
         # ── via filter (applied after ntcapi fetch if needed) ─────────
-        if via and arrivals:
+        if via and arrivals_data:
             try:
                 client2 = IettClient(session)
                 routes_via = await client2.get_routes_at_stop(via)
-                arrivals = [a for a in arrivals if a.route_code in routes_via]
+                arrivals_data = [a for a in arrivals_data if a.get("route_code") in routes_via]
             except IettApiError:
                 pass  # best-effort — return unfiltered if via lookup fails
 
-        arrivals_data = [a.model_dump() for a in arrivals]
         await cache_set(key, arrivals_data, settings.cache_ttl_arrivals)
 
     # Enrich with plate from in-memory fleet store (free, O(1) by kapino).
@@ -119,7 +150,7 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
     for a in arrivals_data:
         kapino = a.get("kapino")
         plate = a.get("plate") or (get_plate_by_kapino(kapino) if kapino else None)
-        result.append({**a, "plate": plate})
+        result.append(Arrival(**{k: v for k, v in a.items() if k not in ("_source", "plate")}, plate=plate))
     return result
 
 

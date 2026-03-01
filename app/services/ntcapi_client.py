@@ -16,7 +16,6 @@ from typing import Any
 import aiohttp
 
 from app.config import settings
-from app.models.bus import Arrival
 
 logger = logging.getLogger(__name__)
 
@@ -99,11 +98,12 @@ class NtcApiError(Exception):
 async def get_stop_arrivals(
     dcode: str,
     session: aiohttp.ClientSession,
-) -> list[Arrival]:
+) -> list[dict[str, Any]]:
     """Fetch real-time arrivals at stop *dcode* via the ybs alias.
 
-    Returns a list of :class:`Arrival` instances, sorted by eta_minutes.
-    Each entry includes `kapino` and live lat/lon/speed from `son_konum`.
+    Returns raw list of dicts with ybs field names (hatkodu, dakika, saat,
+    kapino, son_konum, son_hiz, usb, wifi, klima, engelli …).
+    Callers should pass each item through ``normalizers.arrivals.from_ntcapi_ybs``.
     """
     payload = {
         "data": {
@@ -114,32 +114,15 @@ async def get_stop_arrivals(
         "path": ["real-time-information", "stop-arrivals", dcode],
     }
     raw: list[dict] = await _call_service(session, "ybs", payload)
-    arrivals: list[Arrival] = []
+    valid: list[dict] = []
     for item in raw:
-        try:
-            lat, lon = _parse_son_konum(item.get("son_konum"))
-            arrivals.append(
-                Arrival(
-                    route_code=item.get("hatkodu") or "",
-                    destination=item.get("hattip") or item.get("hatadi") or "",
-                    eta_minutes=_safe_int(item.get("dakika")),
-                    eta_raw=item.get("saat") or "",
-                    kapino=item.get("kapino") or None,
-                    plate=None,  # enriched by caller from fleet store
-                    lat=lat,
-                    lon=lon,
-                    speed=_safe_int(item.get("son_hiz")),
-                    last_seen_ts=item.get("son_konum_saati"),
-                    usb=_safe_int(item.get("usb")),
-                    wifi=_safe_int(item.get("wifi")),
-                    klima=_safe_int(item.get("klima")),
-                    engelli=_safe_int(item.get("engelli")),
-                )
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("ntcapi: skipping malformed arrival item: %s — %r", exc, item)
-    arrivals.sort(key=lambda a: a.eta_minutes if a.eta_minutes is not None else 9999)
-    return arrivals
+        if not isinstance(item, dict):
+            continue
+        if not (item.get("hatkodu") or item.get("saat")):
+            logger.warning("ntcapi: skipping arrival item with no route/time: %r", item)
+            continue
+        valid.append(item)
+    return valid
 
 
 async def get_bus_location(

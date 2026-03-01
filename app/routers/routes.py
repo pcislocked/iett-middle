@@ -1,6 +1,8 @@
 """Routes router — /v1/routes"""
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, HTTPException, Query
 
 from app.config import settings
@@ -10,6 +12,10 @@ from app.models.route import Announcement, RouteMetadata, RouteSearchResult, Sch
 from app.models.stop import RouteStop
 from app.services.cache import cache_get, cache_set
 from app.services.iett_client import IettApiError, IettClient
+from app.services import normalizers, ntcapi_client
+from app.services.ntcapi_client import NtcApiError
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -33,19 +39,37 @@ async def search_routes(q: str = Query(..., min_length=1)):
 
 @router.get("/{hat_kodu}", response_model=list[RouteMetadata])
 async def get_route_metadata(hat_kodu: str):
-    """Route variant/direction metadata (names, codes, direction) via GetAllRoute."""
+    """Route variant/direction metadata.
+
+    ntcapi ``mainGetLine`` is the primary source; IETT SOAP ``GetAllRoute``
+    is the fallback.
+    """
     key = f"routes:meta:{hat_kodu}"
     cached = await cache_get(key)
     if cached is not None:
         return cached
-    client = IettClient(get_session())
+
+    session = get_session()
+    data: list[dict] = []
+
+    # ── primary: ntcapi mainGetLine ─────────────────────────────────
     try:
-        meta = await client.get_route_metadata(hat_kodu)
-    except IettApiError as exc:
-        raise HTTPException(502, detail=str(exc)) from exc
-    data = [m.model_dump() for m in meta]
+        raw_meta = await ntcapi_client.get_route_metadata(hat_kodu, session)
+        data = raw_meta  # already in RouteMetadata shape
+    except NtcApiError as exc:
+        logger.warning("ntcapi metadata failed for %s, falling back to IETT SOAP: %s", hat_kodu, exc)
+
+    # ── fallback: IETT SOAP GetAllRoute ────────────────────────────
+    if not data:
+        client = IettClient(session)
+        try:
+            meta = await client.get_route_metadata(hat_kodu)
+        except IettApiError as exc:
+            raise HTTPException(502, detail=str(exc)) from exc
+        data = [m.model_dump() for m in meta]
+
     await cache_set(key, data, settings.cache_ttl_search)
-    return meta
+    return data
 
 
 @router.get("/{hat_kodu}/buses", response_model=list[BusPosition])
@@ -63,19 +87,52 @@ async def get_route_buses(hat_kodu: str):
 
 @router.get("/{hat_kodu}/stops", response_model=list[RouteStop])
 async def get_route_stops(hat_kodu: str):
-    """Ordered stop list for a route with coordinates."""
+    """Ordered stop list for a route with coordinates.
+
+    ntcapi ``mainGetRoute`` is the primary source (fetches both directions);
+    IETT SOAP ``GetHatDuraklari`` is the fallback.
+    """
     key = f"routes:stops:{hat_kodu}"
     cached = await cache_get(key)
     if cached is not None:
         return cached
-    client = IettClient(get_session())
+
+    session = get_session()
+    stops: list[RouteStop] = []
+
+    # ── primary: ntcapi mainGetRoute (both directions) ──────────────
     try:
-        stops = await client.get_route_stops(hat_kodu)
-    except IettApiError as exc:
-        raise HTTPException(502, detail=str(exc)) from exc
+        raw_g = await ntcapi_client.get_route_stops(hat_kodu, "G", session)
+        raw_d = await ntcapi_client.get_route_stops(hat_kodu, "D", session)
+        canonical = [
+            normalizers.route_stops.from_ntcapi_route_processed(r)
+            for r in raw_g + raw_d
+        ]
+        stops = [
+            RouteStop(
+                route_code=c.get("route_code") or hat_kodu,
+                direction=c.get("direction") or "G",
+                sequence=c.get("sequence") or 0,
+                stop_code=c.get("stop_code") or "",
+                stop_name=c.get("stop_name") or "",
+                latitude=c.get("lat"),
+                longitude=c.get("lon"),
+                district=c.get("district"),
+            )
+            for c in canonical
+        ]
+    except NtcApiError as exc:
+        logger.warning("ntcapi stops failed for %s, falling back to IETT SOAP: %s", hat_kodu, exc)
+
+    # ── fallback: IETT SOAP ─────────────────────────────────────────
+    if not stops:
+        client = IettClient(session)
+        try:
+            stops = await client.get_route_stops(hat_kodu)
+        except IettApiError as exc:
+            raise HTTPException(502, detail=str(exc)) from exc
+
     data = [s.model_dump() for s in stops]
-    # Only cache when stop index was ready (all coords present);
-    # coord-less responses are cheap to re-fetch and should not poison the cache.
     if stops and all(s.latitude is not None for s in stops):
         await cache_set(key, data, settings.cache_ttl_stops)
     return stops
@@ -83,19 +140,54 @@ async def get_route_stops(hat_kodu: str):
 
 @router.get("/{hat_kodu}/schedule", response_model=list[ScheduledDeparture])
 async def get_route_schedule(hat_kodu: str):
-    """Planned departure times for a route (all day types)."""
+    """Planned departure times for a route (all day types).
+
+    ntcapi ``akyolbilGetTimeTable`` is the primary source;
+    IETT SOAP is the fallback.
+    """
     key = f"routes:schedule:{hat_kodu}"
     cached = await cache_get(key)
     if cached is not None:
         return cached
-    client = IettClient(get_session())
+
+    session = get_session()
+    data: list[dict] = []
+
+    # ── primary: ntcapi akyolbilGetTimeTable ─────────────────────────
     try:
-        schedule = await client.get_route_schedule(hat_kodu)
-    except IettApiError as exc:
-        raise HTTPException(502, detail=str(exc)) from exc
-    data = [d.model_dump() for d in schedule]
+        raw_tt = await ntcapi_client.get_timetable(hat_kodu, session)
+        canonical = [normalizers.schedule.from_ntcapi_timetable(r) for r in raw_tt]
+        data = [
+            {
+                "route_code": c.get("route_code") or "",
+                "route_name": c.get("route_name") or c.get("route_code") or "",
+                "route_variant": c.get("route_variant") or "",
+                "direction": c.get("direction") or "",
+                "day_type": c.get("day_type") or "",
+                "service_type": c.get("service_type") or "",
+                "departure_time": c.get("departure_time") or "",
+            }
+            for c in canonical
+        ]
+    except NtcApiError as exc:
+        logger.warning("ntcapi schedule failed for %s, falling back to IETT SOAP: %s", hat_kodu, exc)
+
+    # ── fallback: IETT SOAP ─────────────────────────────────────────
+    if not data:
+        client = IettClient(session)
+        try:
+            schedule = await client.get_route_schedule(hat_kodu)
+        except IettApiError as exc:
+            raise HTTPException(502, detail=str(exc)) from exc
+        data = [
+            normalizers.schedule.from_iett_soap_schedule(d.model_dump())
+            for d in schedule
+        ]
+        # Strip internal _source key before caching
+        data = [{k: v for k, v in d.items() if k != "_source"} for d in data]
+
     await cache_set(key, data, settings.cache_ttl_schedule)
-    return schedule
+    return data
 
 
 @router.get("/{hat_kodu}/announcements", response_model=list[Announcement])
