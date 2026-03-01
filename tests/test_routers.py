@@ -216,7 +216,18 @@ class TestFleetDetailRouter:
     def test_200_route_stops_returned_from_cache(self, client: TestClient) -> None:
         """route_stops field is populated from cache when available."""
         bus = _bus("A-001", "500T")
-        cached_stops = [{"stop_code": "301341", "stop_name": "Levent", "direction": "G"}]
+        cached_stops = [
+            {
+                "route_code": "500T",
+                "direction": "G",
+                "sequence": 1,
+                "stop_code": "301341",
+                "stop_name": "Levent",
+                "latitude": 41.08,
+                "longitude": 29.01,
+                "district": None,
+            }
+        ]
         with (
             patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
@@ -338,6 +349,9 @@ class TestHaversine:
         from app.routers.stops import _haversine_m
         d = _haversine_m(41.0, 29.0, 41.004, 29.0)
         assert 400 < d < 500, f"Expected ~445 m, got {d:.1f} m"
+
+
+class TestStopArrivals:
     def test_200_with_arrivals(self, client: TestClient) -> None:
         # ntcapi down → fallback to IETT HTML
         mock_client = MagicMock()

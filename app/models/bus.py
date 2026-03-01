@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from app.models.stop import RouteStop as RouteStop  # re-exported for BusDetail schema
+
 
 class TrailPoint(BaseModel):
     lat: float
@@ -45,7 +47,7 @@ class BusDetail(BusPositionWithTrail):
     """
     resolved_route_code: str | None = None
     route_is_live: bool = False
-    route_stops: list[dict] = []
+    route_stops: list[RouteStop] = []
 
 
 class Arrival(BaseModel):
