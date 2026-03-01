@@ -60,12 +60,9 @@ async def get_fleet_meta():
 async def refresh_fleet():
     """Trigger an immediate out-of-band fleet re-poll.
 
-    Useful for a manual Force Refresh button in the settings screen.
-    The actual poll runs as a fire-and-forget background task.
+    Currently disabled — use the 30 s stale-while-revalidate cycle instead.
     """
-    from app.services.fleet_poller import refresh_fleet_once  # noqa: PLC0415
-    asyncio.create_task(refresh_fleet_once())
-    return {"status": "refresh triggered"}
+    raise HTTPException(503, detail="Manual refresh is temporarily disabled.")
 
 
 @router.get("/{kapino}", response_model=BusPositionWithTrail)
