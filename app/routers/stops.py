@@ -1,6 +1,8 @@
 """Stops router — /v1/stops"""
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, HTTPException, Query
 
 from app.config import settings
@@ -9,6 +11,10 @@ from app.models.bus import Arrival
 from app.models.stop import NearbyStop, StopDetail, StopSearchResult
 from app.services.cache import cache_get, cache_set
 from app.services.iett_client import IettApiError, IettClient
+from app.services import ntcapi_client
+from app.services.ntcapi_client import NtcApiError
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -49,33 +55,70 @@ async def nearby_stops(
     return results[:30]
 
 
+@router.get("/{dcode}/arrivals/raw")
+async def get_arrivals_raw(dcode: str):
+    """Return the raw HTML from IETT GetStationInfo — debug only."""
+    client = IettClient(get_session())
+    try:
+        html = await client._get_text(
+            f"{settings.iett_rest_base}/tr/RouteStation/GetStationInfo",
+            params={"dcode": dcode, "langid": "1"},
+        )
+    except IettApiError as exc:
+        raise HTTPException(502, detail=str(exc)) from exc
+    from fastapi.responses import HTMLResponse  # noqa: PLC0415
+    return HTMLResponse(content=html)
+
+
 @router.get("/{dcode}/arrivals", response_model=list[Arrival])
 async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
-    """Live ETAs at a stop, enriched with plate from fleet store."""
+    """Live ETAs at a stop, sourced from ntcapi ybs (has kapino + live location).
+
+    Falls back to the legacy IETT HTML endpoint if ntcapi is unavailable.
+    """
     key = f"stops:arrivals:{dcode}" + (f":via:{via}" if via else "")
     cached = await cache_get(key)
     if cached is not None:
         arrivals_data: list[dict] = cached
     else:
-        client = IettClient(get_session())
+        session = get_session()
+        arrivals: list[Arrival] = []
+
+        # ── primary: ntcapi ybs (has kapino + live bus location) ──────
         try:
-            if via:
-                arrivals = await client.get_stop_arrivals_via(dcode, via)
-            else:
-                arrivals = await client.get_stop_arrivals(dcode)
-        except IettApiError as exc:
-            raise HTTPException(502, detail=str(exc)) from exc
+            arrivals = await ntcapi_client.get_stop_arrivals(dcode, session)
+        except NtcApiError as exc:
+            logger.warning("ntcapi arrivals failed for %s, falling back to HTML: %s", dcode, exc)
+            arrivals = []
+
+        # ── fallback: legacy IETT HTML (no kapino, no location) ───────
+        if not arrivals:
+            client = IettClient(session)
+            try:
+                if via:
+                    arrivals = await client.get_stop_arrivals_via(dcode, via)
+                else:
+                    arrivals = await client.get_stop_arrivals(dcode)
+            except IettApiError as exc:
+                raise HTTPException(502, detail=str(exc)) from exc
+
+        # ── via filter (applied after ntcapi fetch if needed) ─────────
+        if via and arrivals:
+            try:
+                client2 = IettClient(session)
+                routes_via = await client2.get_routes_at_stop(via)
+                arrivals = [a for a in arrivals if a.route_code in routes_via]
+            except IettApiError:
+                pass  # best-effort — return unfiltered if via lookup fails
+
         arrivals_data = [a.model_dump() for a in arrivals]
         await cache_set(key, arrivals_data, settings.cache_ttl_arrivals)
 
-    # Enrich with plate from in-memory fleet store keyed by kapino (free, no HTTP).
-    # NOTE: the HTML arrivals parser (GetStationInfo) does not populate kapino, so
-    # plate will be None until arrivals are sourced from a JSON/SOAP endpoint that
-    # includes KapiNo.
+    # Enrich with plate from in-memory fleet store (free, O(1) by kapino).
     result = []
     for a in arrivals_data:
         kapino = a.get("kapino")
-        plate = get_plate_by_kapino(kapino) if kapino else None
+        plate = a.get("plate") or (get_plate_by_kapino(kapino) if kapino else None)
         result.append({**a, "plate": plate})
     return result
 

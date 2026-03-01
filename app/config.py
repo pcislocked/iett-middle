@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     fleet_poll_interval: int = 30   # max age before a background refresh is triggered
     fleet_trail_minutes: int = 5    # how many minutes of trail to keep per bus
 
+    # ntcapi.iett.istanbul — private IETT API
+    ntcapi_client_id: str = "pLwqtobYHTBshBWRrEZdSWsngOywQvHa"
+    ntcapi_client_secret: str = "JERLUJgaZSygMTqoCtrhrVnvqeVGGVznktlwuOfHqmQTzjnC"
+    ntcapi_scope: str = "VLCn2qErUdrr1Ehg0yxWObMW9krFb7RC service"
+    ntcapi_ybs_username: str = "netuce"
+    ntcapi_ybs_password: str = "n1!t8c7M1"
+
     log_level: str = "info"
     port: int = 8000
 
