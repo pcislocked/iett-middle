@@ -5,6 +5,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.3.0] – 2026-06-03
+
+### Added
+- `GET /routes/{route_code}/buses` — live bus positions via YBS point-passing API
+  (`ntcapi_client.get_route_buses_ybs`), with fallback handling
+- `direction_letter` field on bus positions (`D` / `G` / `?`)
+- `stop_sequence` field on bus positions from `H_GOREV_DURAK_GECIS_SIRANO`
+
+### Fixed
+- `route_code` on YBS bus positions now returns public code (e.g. `500T`) instead of
+  internal variant string (e.g. `500T_D_D0`)
+- `int(seq)` on malformed `H_GOREV_DURAK_GECIS_SIRANO` values now returns `None`
+  instead of raising `ValueError`
+- Return type annotation on `get_route_buses_ybs` corrected to `list[BusPosition]`
+
+---
+
 ## [0.2.1] – 2026-03-01
 
 ### Fixed
