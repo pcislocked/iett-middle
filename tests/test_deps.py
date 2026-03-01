@@ -191,3 +191,75 @@ class TestStopIndex:
         d = results[0]["distance_m"]
         # R_EARTH * dlat_rad ≈ 6_371_000 * 0.00007854 ≈ 500 m
         assert 400 < d < 600, f"Expected ~500m, got {d:.1f}m"
+
+
+# ---------------------------------------------------------------------------
+# HTTP session management
+# ---------------------------------------------------------------------------
+
+class TestSessionManagement:
+    def setup_method(self) -> None:
+        deps._session = None  # type: ignore[assignment]
+
+    def teardown_method(self) -> None:
+        deps._session = None  # type: ignore[assignment]
+
+    def test_get_session_raises_when_not_set(self) -> None:
+        with pytest.raises(RuntimeError, match="not initialised"):
+            deps.get_session()
+
+    def test_set_and_get_session(self) -> None:
+        import aiohttp
+        mock_session = object.__new__(aiohttp.ClientSession)
+        deps.set_session(mock_session)  # type: ignore[arg-type]
+        assert deps.get_session() is mock_session
+
+
+# ---------------------------------------------------------------------------
+# get_buses_by_route — prefix-tolerant route matching
+# ---------------------------------------------------------------------------
+
+class TestGetBusesByRoute:
+    def setup_method(self) -> None:
+        deps._fleet.clear()
+        deps._trail.clear()
+        deps._fleet_updated_at = None
+
+    def test_exact_match_returns_bus(self) -> None:
+        deps.update_fleet([_bus("A-001", 41.0, 29.0, route_code="500T")])
+        result = deps.get_buses_by_route("500T")
+        assert len(result) == 1
+        assert result[0]["kapino"] == "A-001"
+
+    def test_case_insensitive_match(self) -> None:
+        deps.update_fleet([_bus("A-001", 41.0, 29.0, route_code="500T")])
+        result = deps.get_buses_by_route("500t")
+        assert len(result) == 1
+
+    def test_variant_suffix_underscore_matches(self) -> None:
+        deps.update_fleet([_bus("A-001", 41.0, 29.0, route_code="14M_D")])
+        result = deps.get_buses_by_route("14M")
+        assert len(result) == 1
+
+    def test_variant_suffix_space_matches(self) -> None:
+        deps.update_fleet([_bus("A-001", 41.0, 29.0, route_code="14M G")])
+        result = deps.get_buses_by_route("14M")
+        assert len(result) == 1
+
+    def test_no_match_returns_empty(self) -> None:
+        deps.update_fleet([_bus("A-001", 41.0, 29.0, route_code="500T")])
+        result = deps.get_buses_by_route("15F")
+        assert result == []
+
+    def test_bus_with_null_route_code_excluded(self) -> None:
+        deps.update_fleet([_bus("A-001", 41.0, 29.0, route_code=None)])  # type: ignore[arg-type]
+        result = deps.get_buses_by_route("500T")
+        assert result == []
+
+    def test_multiple_buses_same_route(self) -> None:
+        deps.update_fleet([
+            _bus("A-001", 41.0, 29.0, route_code="500T"),
+            _bus("B-002", 41.1, 29.1, route_code="500T"),
+        ])
+        result = deps.get_buses_by_route("500T")
+        assert len(result) == 2
