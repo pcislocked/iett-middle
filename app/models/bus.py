@@ -4,6 +4,7 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from app.models.stop import RouteStop as RouteStop  # re-exported for BusDetail schema
+from app.models.canonical import Amenities
 
 
 class TrailPoint(BaseModel):
@@ -63,4 +64,4 @@ class Arrival(BaseModel):
     speed_kmh: int | None = None
     last_seen_ts: str | None = None
     # Nested amenity flags — None means data unavailable for this source
-    amenities: dict | None = None
+    amenities: Amenities | None = None
