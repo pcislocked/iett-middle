@@ -5,6 +5,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.3.1] – 2026-03-02
+
+### Added
+- `GET /v1/fleet/{kapino}/detail` — resolves route code (live or last-known
+  fallback), returns `route_is_live` flag and ordered `route_stops` list for
+  route polyline rendering without a second round-trip
+- `BusDetail.route_stops` typed as `list[RouteStop]` for proper OpenAPI schema
+  (was `list[dict]`)
+
+### Fixed
+- `route_code` normalization (`.strip().upper()`) in `_kapino_last_route` and
+  live fleet lookup to prevent cache misses from whitespace or case differences
+- Cache guard now checks both `latitude` and `longitude` not `None` before
+  writing to the route-stops cache
+- Exception handling narrowed: `NtcApiError|IettApiError` separated from
+  unexpected `Exception` with `logger.exception` on unexpected errors
+- IETT SOAP fallback deduplicated into a single path via `needs_fallback` flag
+  to avoid divergence between the two exception branches
+- Nearby stops router: `distance_m` uses `is not None` check instead of
+  truthiness to correctly preserve a computed distance of `0.0`
+- `TestStopArrivals` class nesting corrected in `tests/test_routers.py`
+
+---
+
 ## [0.3.0] – 2026-06-03
 
 ### Added
