@@ -81,8 +81,6 @@ async def get_bus_detail(kapino: str):
     ``route_stops`` is fetched from cache or ntcapi so the client can draw a
     route polyline without a second round-trip.
     """
-    import asyncio  # noqa: PLC0415
-
     from app.config import settings  # noqa: PLC0415
     from app.models.stop import RouteStop  # noqa: PLC0415
     from app.services import normalizers, ntcapi_client  # noqa: PLC0415
@@ -99,7 +97,8 @@ async def get_bus_detail(kapino: str):
     bus = {**match, "trail": get_trail(match["kapino"])}
 
     # Resolve route: prefer live field, fall back to last known
-    live_route_code: str | None = match.get("route_code")
+    _raw_live: str | None = match.get("route_code")
+    live_route_code: str | None = _raw_live.strip().upper() if _raw_live else None
     route_code: str | None = live_route_code or get_last_route_by_kapino(kapino)
     route_is_live: bool = bool(live_route_code)
 
@@ -134,16 +133,24 @@ async def get_bus_detail(kapino: str):
                     for c in canonical
                 ]
                 route_stops_data = [s.model_dump() for s in stops]
-                if stops and all(s.latitude is not None for s in stops):
+                if stops and all(
+                    s.latitude is not None and s.longitude is not None for s in stops
+                ):
                     await cache_set(cache_key, route_stops_data, settings.cache_ttl_stops)
-            except (NtcApiError, IettApiError, Exception):  # noqa: BLE001
-                # Route stops unavailable — return bus position only, no polyline
+            except (NtcApiError, IettApiError):
+                needs_fallback = True
+            except Exception:  # noqa: BLE001
+                logger.exception("Unexpected error fetching ntcapi route stops for route %r", route_code)
+                needs_fallback = True
+            else:
+                needs_fallback = False
+            if needs_fallback:
                 try:
                     client = IettClient(session)
                     stops = await client.get_route_stops(route_code)
                     route_stops_data = [s.model_dump() for s in stops]
                 except Exception:  # noqa: BLE001
-                    pass
+                    logger.exception("IETT fallback for route stops failed for route %r", route_code)
 
     return {**bus, "resolved_route_code": route_code, "route_is_live": route_is_live, "route_stops": route_stops_data}
 

@@ -81,7 +81,7 @@ async def nearby_stops(
                     longitude=longitude,
                     district=c.get("district"),
                     direction=c.get("direction"),
-                    distance_m=c.get("distance_m") or _haversine_m(lat, lon, latitude, longitude),
+                    distance_m=c.get("distance_m") if c.get("distance_m") is not None else _haversine_m(lat, lon, latitude, longitude),
                 )
             )
         return nearby_results
