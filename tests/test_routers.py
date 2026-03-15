@@ -818,3 +818,116 @@ class TestFleetDetailFallbacks:
         assert len(body["route_stops"]) == 1
         assert body["route_stops"][0]["stop_code"] == "301341"
 
+    def test_detail_returns_empty_stops_when_all_sources_fail(self, client: TestClient) -> None:
+        """Both ntcapi and IETT SOAP fail → 200 with empty route_stops list."""
+        from app.services.ntcapi_client import NtcApiError as NE
+        from app.services.iett_client import IettApiError
+        bus = _bus("A-001", "500T")
+        mock_iett = MagicMock()
+        mock_iett.get_route_stops = AsyncMock(side_effect=IettApiError("iett down"))
+        with (
+            patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
+            patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
+            patch("app.routers.fleet.get_trail", return_value=[]),
+            patch("app.routers.fleet.get_session", return_value=MagicMock()),
+            patch("app.services.cache.cache_get", AsyncMock(return_value=None)),
+            patch("app.services.cache.cache_set", AsyncMock()),
+            patch("app.services.ntcapi_client.get_route_stops", AsyncMock(side_effect=NE("down"))),
+            patch("app.services.iett_client.IettClient", return_value=mock_iett),
+        ):
+            resp = client.get("/v1/fleet/A-001/detail")
+        assert resp.status_code == 200
+        assert resp.json()["route_stops"] == []
+
+
+# ===========================  via-filter + raw arrivals  ====================
+
+class TestStopsViaFilter:
+    """Cover the via-filter logic in /v1/stops/{dcode}/arrivals.
+
+    The ntcapi primary path is used for arrivals so the only IettClient
+    instantiation is the via-stop route-code lookup (client2).
+    """
+
+    # Two normalised arrival dicts — one per route — returned by ntcapi mock
+    _ARRIVALS_RAW = [{"raw": "a"}, {"raw": "b"}]
+    _CANONICAL_500T = {"route_code": "500T", "destination": "LEVENT", "eta_minutes": 3,
+                       "eta_raw": "3 dk", "plate": None, "kapino": None,
+                       "lat": None, "lon": None, "speed_kmh": None, "last_seen_ts": None, "amenities": None}
+    _CANONICAL_15F  = {"route_code": "15F", "destination": "BAKIRKOY", "eta_minutes": 8,
+                       "eta_raw": "8 dk", "plate": None, "kapino": None,
+                       "lat": None, "lon": None, "speed_kmh": None, "last_seen_ts": None, "amenities": None}
+
+    def test_via_filter_narrows_arrivals_to_routes_at_via_stop(self, client: TestClient) -> None:
+        """?via= supplied and via-stop lookup succeeds → only matching routes returned."""
+        mock_via = MagicMock()
+        mock_via.get_routes_at_stop = AsyncMock(return_value=["500T"])
+        with (
+            patch("app.routers.stops.ntcapi_client.get_stop_arrivals",
+                  AsyncMock(return_value=self._ARRIVALS_RAW)),
+            patch("app.services.normalizers.arrivals.from_ntcapi_ybs",
+                  side_effect=[self._CANONICAL_500T, self._CANONICAL_15F]),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None)),
+            patch("app.routers.stops.cache_set", AsyncMock()),
+            patch("app.routers.stops.get_session", return_value=MagicMock()),
+            patch("app.routers.stops.IettClient", return_value=mock_via),
+            patch("app.routers.stops.get_plate_by_kapino", return_value=None),
+        ):
+            resp = client.get("/v1/stops/220602/arrivals?via=301341")
+        assert resp.status_code == 200
+        route_codes = [a["route_code"] for a in resp.json()]
+        assert "500T" in route_codes
+        assert "15F" not in route_codes
+
+    def test_via_filter_failure_returns_unfiltered_and_logs_warning(
+        self, client: TestClient, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """IettApiError on via-stop lookup → arrivals returned unfiltered; warning logged."""
+        import logging
+        from app.services.iett_client import IettApiError
+        mock_via = MagicMock()
+        mock_via.get_routes_at_stop = AsyncMock(side_effect=IettApiError("via down"))
+        with (
+            patch("app.routers.stops.ntcapi_client.get_stop_arrivals",
+                  AsyncMock(return_value=self._ARRIVALS_RAW)),
+            patch("app.services.normalizers.arrivals.from_ntcapi_ybs",
+                  side_effect=[self._CANONICAL_500T, self._CANONICAL_15F]),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None)),
+            patch("app.routers.stops.cache_set", AsyncMock()),
+            patch("app.routers.stops.get_session", return_value=MagicMock()),
+            patch("app.routers.stops.IettClient", return_value=mock_via),
+            patch("app.routers.stops.get_plate_by_kapino", return_value=None),
+            caplog.at_level(logging.WARNING, logger="app.routers.stops"),
+        ):
+            resp = client.get("/v1/stops/220602/arrivals?via=301341")
+        assert resp.status_code == 200
+        route_codes = {a["route_code"] for a in resp.json()}
+        assert route_codes == {"500T", "15F"}
+        assert any("via-filter" in r.message for r in caplog.records)
+
+
+class TestStopsArrivalsRaw:
+    """Cover the /v1/stops/{dcode}/arrivals/raw debug endpoint."""
+
+    def test_200_returns_html_content(self, client: TestClient) -> None:
+        mock_client = MagicMock()
+        mock_client._get_text = AsyncMock(return_value="<html>arrivals</html>")
+        with (
+            patch("app.routers.stops.get_session", return_value=MagicMock()),
+            patch("app.routers.stops.IettClient", return_value=mock_client),
+        ):
+            resp = client.get("/v1/stops/220602/arrivals/raw")
+        assert resp.status_code == 200
+        assert "arrivals" in resp.text
+
+    def test_502_when_iett_api_fails(self, client: TestClient) -> None:
+        from app.services.iett_client import IettApiError
+        mock_client = MagicMock()
+        mock_client._get_text = AsyncMock(side_effect=IettApiError("timeout"))
+        with (
+            patch("app.routers.stops.get_session", return_value=MagicMock()),
+            patch("app.routers.stops.IettClient", return_value=mock_client),
+        ):
+            resp = client.get("/v1/stops/220602/arrivals/raw")
+        assert resp.status_code == 502
+

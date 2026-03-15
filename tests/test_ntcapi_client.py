@@ -4,7 +4,7 @@ from __future__ import annotations
 import sys
 import time
 from collections.abc import AsyncIterator
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import aiohttp
 import pytest

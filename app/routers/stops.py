@@ -159,8 +159,11 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
                 client2 = IettClient(session)
                 routes_via = await client2.get_routes_at_stop(via)
                 arrivals_data = [a for a in arrivals_data if a.get("route_code") in routes_via]
-            except IettApiError:
-                pass  # best-effort — return unfiltered if via lookup fails
+            except IettApiError as exc:
+                logger.warning(
+                    "via-filter lookup failed for stop %s via %s — returning unfiltered arrivals: %s",
+                    dcode, via, exc,
+                )
 
         await cache_set(key, arrivals_data, settings.cache_ttl_arrivals)
 
