@@ -5,6 +5,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.3.6] – 2026-04-07
+
+### Added
+- Test coverage for fleet detail all-sources-fail fallback (`route_stops: []`)
+- Test coverage for arrivals `via` filtering (success and IETT lookup failure paths)
+- Test coverage for `/v1/stops/{dcode}/arrivals/raw` success and upstream-failure responses
+
+### Changed
+- `Arrival.amenities` now typed as `Amenities | None` instead of bare `dict | None`
+
+### Fixed
+- Added missing `asyncio` import in `fleet` router module
+- Simplified route-bus fallback exception handling (removed redundant tuple members)
+- `stops` router now logs a warning when `via` route lookup fails, while still returning unfiltered arrivals
+- Removed unused `AsyncMock` import in `tests/test_ntcapi_client.py`
+
+---
+
 ## [0.3.1] – 2026-03-02
 
 ### Added
