@@ -85,10 +85,10 @@ async def refresh_fleet():
     from app.config import settings  # noqa: PLC0415
 
     cooldown = max(0, settings.fleet_manual_refresh_cooldown)
-    now = time.monotonic()
     global _manual_refresh_last_triggered  # noqa: PLW0603
 
     with _manual_refresh_lock:
+        now = time.monotonic()
         elapsed = now - _manual_refresh_last_triggered
         if _manual_refresh_last_triggered > 0 and cooldown > 0 and elapsed < cooldown:
             retry_after = max(1, int(cooldown - elapsed + 0.999))

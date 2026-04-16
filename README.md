@@ -39,7 +39,7 @@ Health    → http://localhost:8000/health
 
 Copy `.env.example` to `.env` and edit as needed:
 
-| Variable | Default | Description |
+| Variable | Example (.env.example) | Description |
 |---|---|---|
 | `IETT_SOAP_BASE` | `https://api.ibb.gov.tr/iett` | IETT SOAP base URL |
 | `IETT_REST_BASE` | `https://iett.istanbul` | IETT REST base URL |
