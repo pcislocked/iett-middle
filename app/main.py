@@ -72,7 +72,8 @@ def _make_trace_config() -> aiohttp.TraceConfig:
 async def lifespan(app: FastAPI):  # noqa: ARG001
     import asyncio  # noqa: PLC0415
 
-    from app.services.fleet_poller import refresh_fleet_once  # noqa: PLC0415
+    from app.config import settings  # noqa: PLC0415
+    from app.services.fleet_poller import refresh_fleet_forever  # noqa: PLC0415
     from app.services.stop_indexer import index_stops_forever  # noqa: PLC0415
 
     connector = aiohttp.TCPConnector(
@@ -86,11 +87,17 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     ))
     logger.info("HTTP session started")
 
-    # Kick off an initial fleet snapshot in the background (non-blocking)
-    asyncio.create_task(refresh_fleet_once())
+    # Keep fleet refreshed in the background with a hard upper bound on staleness.
+    fleet_refresher = asyncio.create_task(refresh_fleet_forever(settings.fleet_cache_max_age))
     stop_indexer = asyncio.create_task(index_stops_forever())
 
     yield
+
+    fleet_refresher.cancel()
+    try:
+        await fleet_refresher
+    except asyncio.CancelledError:
+        pass
 
     stop_indexer.cancel()
     try:
