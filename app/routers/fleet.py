@@ -41,8 +41,14 @@ async def get_fleet():
     Served from the in-memory store.  Triggers a background refresh when data
     is ≥30 s stale (stale-while-revalidate); returns 503 only before the very
     first snapshot is available.
+    
+    Additionally, fleet is forcibly refreshed at least every 15 minutes to prevent
+    stale FILO data (some IBB SOAP responses can be 6+ hours old).
     """
-    await ensure_fleet_fresh()
+    from app.config import settings  # noqa: PLC0415
+    
+    # Use max age from settings to force periodic refresh (default 15min)
+    await ensure_fleet_fresh(max_age_seconds=settings.fleet_cache_max_age)
     snapshot = get_fleet_snapshot()
     if not snapshot:
         raise HTTPException(
@@ -55,7 +61,9 @@ async def get_fleet():
 @router.get("/meta", tags=["fleet"])
 async def get_fleet_meta():
     """Lightweight status: bus count + last update timestamp."""
-    await ensure_fleet_fresh()
+    from app.config import settings  # noqa: PLC0415
+    
+    await ensure_fleet_fresh(max_age_seconds=settings.fleet_cache_max_age)
     updated = get_fleet_updated_at()
     return {
         "bus_count": len(get_fleet_snapshot()),
@@ -89,7 +97,7 @@ async def get_bus_detail(kapino: str):
     from app.services.iett_client import IettApiError, IettClient  # noqa: PLC0415
     from app.services.ntcapi_client import NtcApiError  # noqa: PLC0415
 
-    await ensure_fleet_fresh()
+    await ensure_fleet_fresh(max_age_seconds=settings.fleet_cache_max_age)
     snapshot = get_fleet_snapshot()
     match = next((b for b in snapshot if b["kapino"].upper() == kapino.upper()), None)
     if match is None:
@@ -159,6 +167,9 @@ async def get_bus_detail(kapino: str):
 @router.get("/{kapino}", response_model=BusPositionWithTrail)
 async def get_bus(kapino: str):
     """Single bus live position + trail by door number (e.g. C-325)."""
+    from app.config import settings  # noqa: PLC0415
+    
+    await ensure_fleet_fresh(max_age_seconds=settings.fleet_cache_max_age)
     snapshot = get_fleet_snapshot()
     match = next((b for b in snapshot if b["kapino"].upper() == kapino.upper()), None)
     if match is None:

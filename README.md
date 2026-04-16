@@ -47,6 +47,7 @@ Copy `.env.example` to `.env` and edit as needed:
 | `OSRM_BASE` | `https://router.project-osrm.org` | OSRM routing server |
 | `CACHE_TTL_FLEET` | `15` | Fleet cache TTL (seconds) |
 | `CACHE_TTL_ARRIVALS` | `20` | Arrivals cache TTL |
+| `FLEET_CACHE_MAX_AGE` | `900` | Force fleet cache refresh every 15 min (prevents 6h+ stale FILO data) |
 | `PORT` | `8000` | Listen port |
 
 ## API endpoints

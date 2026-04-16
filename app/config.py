@@ -20,6 +20,7 @@ class Settings(BaseSettings):
 
     # On-demand fleet refresh — stale threshold (seconds)
     fleet_poll_interval: int = 30   # max age before a background refresh is triggered
+    fleet_cache_max_age: int = 900  # force refresh every 15 min to prevent 6h+ stale FILO data
     fleet_trail_minutes: int = 5    # how many minutes of trail to keep per bus
 
     # ntcapi.iett.istanbul — private IETT API
