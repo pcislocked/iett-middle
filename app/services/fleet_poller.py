@@ -1,9 +1,11 @@
-"""Fleet refresh helpers — on-demand polling replaces the old always-on background loop."""
+"""Fleet refresh helpers for one-shot and periodic fleet updates."""
 from __future__ import annotations
 
+import asyncio
 import logging
 
 logger = logging.getLogger(__name__)
+MAX_PERIODIC_REFRESH_INTERVAL_SECONDS = 900
 
 
 async def refresh_fleet_once() -> None:
@@ -25,3 +27,30 @@ async def refresh_fleet_once() -> None:
         logger.warning("Fleet refresh failed: %s", exc)
     except Exception:  # noqa: BLE001
         logger.exception("Unexpected fleet refresh error")
+
+
+async def refresh_fleet_forever(interval_seconds: int) -> None:
+    """Trigger fleet refresh forever with a fixed maximum interval.
+
+    Uses deps.ensure_fleet_fresh(max_age_seconds=0) so refresh task creation
+    remains deduplicated with request-triggered refreshes.
+    """
+    from app.deps import ensure_fleet_fresh  # noqa: PLC0415
+
+    interval_seconds = max(1, min(MAX_PERIODIC_REFRESH_INTERVAL_SECONDS, int(interval_seconds)))
+    logger.info("Fleet periodic refresher started (interval=%ss)", interval_seconds)
+
+    while True:
+        try:
+            await ensure_fleet_fresh(max_age_seconds=0)
+        except asyncio.CancelledError:
+            logger.info("Fleet periodic refresher cancelled")
+            raise
+        except Exception:  # noqa: BLE001
+            logger.exception("Unexpected error scheduling periodic fleet refresh")
+
+        try:
+            await asyncio.sleep(interval_seconds)
+        except asyncio.CancelledError:
+            logger.info("Fleet periodic refresher cancelled during sleep")
+            raise

@@ -108,6 +108,26 @@ async def ensure_fleet_fresh(max_age_seconds: int = 30) -> None:
     _fleet_refresh_task = asyncio.create_task(refresh_fleet_once())
 
 
+async def cancel_fleet_refresh_task() -> None:
+    """Cancel and await the in-flight refresh task, if one exists."""
+    global _fleet_refresh_task  # noqa: PLW0603
+
+    task = _fleet_refresh_task
+    if task is None:
+        return
+    if task.done():
+        _fleet_refresh_task = None
+        return
+
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    finally:
+        _fleet_refresh_task = None
+
+
 def get_plate_by_kapino(kapino: str) -> str | None:
     """Look up the plate for a given kapino from the in-memory fleet store."""
     return _fleet.get(kapino, {}).get("plate")

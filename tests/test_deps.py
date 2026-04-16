@@ -1,6 +1,8 @@
 """Tests for shared in-memory stores and helper functions in app.deps."""
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 import app.deps as deps
@@ -213,6 +215,24 @@ class TestSessionManagement:
         mock_session = object.__new__(aiohttp.ClientSession)
         deps.set_session(mock_session)  # type: ignore[arg-type]
         assert deps.get_session() is mock_session
+
+
+class TestFleetRefreshTaskLifecycle:
+    def setup_method(self) -> None:
+        deps._fleet_refresh_task = None
+
+    async def test_cancel_fleet_refresh_task_noop_when_none(self) -> None:
+        await deps.cancel_fleet_refresh_task()
+        assert deps._fleet_refresh_task is None
+
+    async def test_cancel_fleet_refresh_task_cancels_and_clears(self) -> None:
+        async def sleeper() -> None:
+            await asyncio.sleep(60)
+
+        deps._fleet_refresh_task = asyncio.create_task(sleeper())
+        await deps.cancel_fleet_refresh_task()
+
+        assert deps._fleet_refresh_task is None
 
 
 # ---------------------------------------------------------------------------
