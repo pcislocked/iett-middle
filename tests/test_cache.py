@@ -4,8 +4,17 @@ from __future__ import annotations
 import asyncio
 import time
 
+import pytest
+
 import app.services.cache as cache_mod
-from app.services.cache import cache_get, cache_set, get_cache_stats
+from app.services.cache import (
+    cache_clear,
+    cache_delete,
+    cache_get,
+    cache_invalidate_namespace,
+    cache_set,
+    get_cache_stats,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -79,6 +88,10 @@ class TestCacheGetSet:
         # result is None: correct — storing None is unsupported as a meaningful cached value
         assert result is None
 
+    def test_negative_ttl_raises_value_error(self) -> None:
+        with pytest.raises(ValueError, match="ttl must be >= 0"):
+            asyncio.run(cache_set("ns:bad", "x", ttl=-1))
+
 
 # ---------------------------------------------------------------------------
 # Hit / miss tracking
@@ -132,3 +145,43 @@ class TestCacheStats:
         asyncio.run(cache_get("routes:meta:500T"))
         stats = get_cache_stats()
         assert stats["hits"].get("routes", 0) >= 1
+
+
+# ---------------------------------------------------------------------------
+# Invalidation helpers
+# ---------------------------------------------------------------------------
+
+class TestCacheInvalidation:
+    def setup_method(self) -> None:
+        _clear()
+
+    def test_cache_delete_existing_key(self) -> None:
+        asyncio.run(cache_set("ns:key", "v", ttl=60))
+        removed = asyncio.run(cache_delete("ns:key"))
+        assert removed is True
+        assert asyncio.run(cache_get("ns:key")) is None
+
+    def test_cache_delete_missing_key(self) -> None:
+        removed = asyncio.run(cache_delete("ns:missing"))
+        assert removed is False
+
+    def test_cache_invalidate_namespace_removes_only_matching_namespace(self) -> None:
+        asyncio.run(cache_set("fleet:a", 1, ttl=60))
+        asyncio.run(cache_set("fleet:b", 2, ttl=60))
+        asyncio.run(cache_set("routes:a", 3, ttl=60))
+
+        removed = asyncio.run(cache_invalidate_namespace("fleet"))
+        assert removed == 2
+        assert asyncio.run(cache_get("fleet:a")) is None
+        assert asyncio.run(cache_get("fleet:b")) is None
+        assert asyncio.run(cache_get("routes:a")) == 3
+
+    def test_cache_clear_removes_everything(self) -> None:
+        asyncio.run(cache_set("a:1", 1, ttl=60))
+        asyncio.run(cache_set("b:1", 2, ttl=60))
+        removed = asyncio.run(cache_clear())
+
+        assert removed == 2
+        stats = get_cache_stats()
+        assert stats["total_keys"] == 0
+        assert stats["active_keys"] == 0
