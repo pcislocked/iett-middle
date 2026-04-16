@@ -30,7 +30,7 @@ async def refresh_fleet_once() -> None:
 
 
 async def refresh_fleet_forever(interval_seconds: int) -> None:
-    """Trigger fleet refresh forever with a fixed minimum cadence.
+    """Trigger fleet refresh forever with a fixed maximum interval.
 
     Uses deps.ensure_fleet_fresh(max_age_seconds=0) so refresh task creation
     remains deduplicated with request-triggered refreshes.
