@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.3.9] - 2026-04-16
+
+### Changed
+- Manual fleet refresh now enforces a cooldown guard and returns explicit cooldown metadata for callers.
+- Fleet refresh lock handling was tightened to avoid overlapping refresh work when refresh requests arrive close together.
+- Periodic fleet refresh is clamped to a minimum 15-minute max-age window to avoid stale FILO snapshots.
+- Docker runtime uses a single uvicorn worker so in-memory refresh/cooldown state remains process-consistent.
+
+### Added
+- Regression tests for fleet poller scheduling and refresh task cancellation paths.
+- Regression tests for manual fleet refresh cooldown behavior.
+
+---
+
 ## [0.3.8] – 2026-04-07
 
 ### Added
