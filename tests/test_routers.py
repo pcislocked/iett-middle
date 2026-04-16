@@ -144,11 +144,36 @@ class TestFleetMeta:
 
 
 class TestFleetRefresh:
-    def test_503_manual_refresh_disabled(self, client: TestClient) -> None:
-        """Manual fleet refresh is intentionally disabled; endpoint always returns 503."""
-        with patch("app.deps.get_session", return_value=MagicMock()):
+    def test_202_manual_refresh_queued(self, client: TestClient) -> None:
+        """Manual fleet refresh queues an immediate background refresh."""
+        with (
+            patch("app.config.settings.fleet_manual_refresh_cooldown", 0),
+            patch("app.routers.fleet._manual_refresh_last_triggered", 0.0),
+            patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()) as mocked_refresh,
+        ):
             resp = client.post("/v1/fleet/refresh")
-        assert resp.status_code == 503
+        assert resp.status_code == 202
+        assert resp.json() == {"status": "queued"}
+        mocked_refresh.assert_awaited_once_with(max_age_seconds=0)
+
+    def test_202_manual_refresh_cooldown(self, client: TestClient) -> None:
+        """Second refresh within cooldown returns status=cooldown and retry hint."""
+        with (
+            patch("app.config.settings.fleet_manual_refresh_cooldown", 600),
+            patch("app.routers.fleet._manual_refresh_last_triggered", 0.0),
+            patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()) as mocked_refresh,
+        ):
+            first = client.post("/v1/fleet/refresh")
+            second = client.post("/v1/fleet/refresh")
+
+        assert first.status_code == 202
+        assert first.json() == {"status": "queued"}
+        assert second.status_code == 202
+        body = second.json()
+        assert body["status"] == "cooldown"
+        assert isinstance(body["retry_after_seconds"], int)
+        assert body["retry_after_seconds"] > 0
+        mocked_refresh.assert_awaited_once_with(max_age_seconds=0)
 
 
 class TestFleetKapino:

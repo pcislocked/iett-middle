@@ -10,6 +10,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
+import threading
+import time
+from typing import Any, Literal, TypedDict, cast
 
 from fastapi import APIRouter, HTTPException
 
@@ -25,17 +29,36 @@ from app.models.bus import BusDetail, BusPositionWithTrail
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+_manual_refresh_last_triggered: float = 0.0
+_manual_refresh_lock = threading.Lock()
 
 
-def _snapshot_with_trails() -> list[dict]:
+class FleetMetaResponse(TypedDict):
+    bus_count: int
+    updated_at: str | None
+
+
+class FleetRefreshQueuedResponse(TypedDict):
+    status: Literal["queued"]
+
+
+class FleetRefreshCooldownResponse(TypedDict):
+    status: Literal["cooldown"]
+    retry_after_seconds: int
+
+
+FleetRefreshResponse = FleetRefreshQueuedResponse | FleetRefreshCooldownResponse
+
+
+def _snapshot_with_trails() -> list[dict[str, Any]]:
     return [
-        {**b, "trail": get_trail(b["kapino"])}
+        {**b, "trail": get_trail(cast(str, b["kapino"]))}
         for b in get_fleet_snapshot()
     ]
 
 
 @router.get("", response_model=list[BusPositionWithTrail])
-async def get_fleet():
+async def get_fleet() -> list[dict[str, Any]]:
     """All active Istanbul buses with 5-minute position trails.
 
     Served from the in-memory store.  Triggers a background refresh when data
@@ -59,7 +82,7 @@ async def get_fleet():
 
 
 @router.get("/meta", tags=["fleet"])
-async def get_fleet_meta():
+async def get_fleet_meta() -> FleetMetaResponse:
     """Lightweight status: bus count + last update timestamp."""
     from app.config import settings  # noqa: PLC0415
     
@@ -72,16 +95,31 @@ async def get_fleet_meta():
 
 
 @router.post("/refresh", status_code=202)
-async def refresh_fleet():
-    """Trigger an immediate out-of-band fleet re-poll.
+async def refresh_fleet() -> FleetRefreshResponse:
+    """Queue an immediate out-of-band fleet re-poll.
 
-    Currently disabled — use the 30 s stale-while-revalidate cycle instead.
+    Keeps stale-while-revalidate semantics while allowing operators/clients to
+    request an immediate refresh cycle when needed.
     """
-    raise HTTPException(503, detail="Manual refresh is temporarily disabled.")
+    from app.config import settings  # noqa: PLC0415
+
+    cooldown = max(0, settings.fleet_manual_refresh_cooldown)
+    global _manual_refresh_last_triggered  # noqa: PLW0603
+
+    with _manual_refresh_lock:
+        now = time.monotonic()
+        elapsed = now - _manual_refresh_last_triggered
+        if _manual_refresh_last_triggered > 0 and cooldown > 0 and elapsed < cooldown:
+            retry_after = max(1, math.ceil(cooldown - elapsed))
+            return {"status": "cooldown", "retry_after_seconds": retry_after}
+        _manual_refresh_last_triggered = now
+
+    await ensure_fleet_fresh(max_age_seconds=0)
+    return {"status": "queued"}
 
 
 @router.get("/{kapino}/detail", response_model=BusDetail)
-async def get_bus_detail(kapino: str):
+async def get_bus_detail(kapino: str) -> dict[str, Any]:
     """Single bus with resolved route code + ordered stop list in one call.
 
     ``resolved_route_code`` uses the live ``route_code`` when available; falls
@@ -103,7 +141,7 @@ async def get_bus_detail(kapino: str):
     if match is None:
         raise HTTPException(404, detail=f"Bus {kapino!r} not found in active fleet")
 
-    bus = {**match, "trail": get_trail(match["kapino"])}
+    bus: dict[str, Any] = {**match, "trail": get_trail(cast(str, match["kapino"]))}
 
     # Resolve route: prefer live field, fall back to last known
     _raw_live: str | None = match.get("route_code")
@@ -111,12 +149,12 @@ async def get_bus_detail(kapino: str):
     route_code: str | None = live_route_code or get_last_route_by_kapino(kapino)
     route_is_live: bool = bool(live_route_code)
 
-    route_stops_data: list[dict] = []
+    route_stops_data: list[dict[str, Any]] = []
     if route_code:
         cache_key = f"routes:stops:{route_code}"
         cached = await cache_get(cache_key)
         if cached is not None:
-            route_stops_data = cached
+            route_stops_data = cast(list[dict[str, Any]], cached)
         else:
             session = get_session()
             try:
@@ -165,7 +203,7 @@ async def get_bus_detail(kapino: str):
 
 
 @router.get("/{kapino}", response_model=BusPositionWithTrail)
-async def get_bus(kapino: str):
+async def get_bus(kapino: str) -> dict[str, Any]:
     """Single bus live position + trail by door number (e.g. C-325)."""
     from app.config import settings  # noqa: PLC0415
     
@@ -174,4 +212,4 @@ async def get_bus(kapino: str):
     match = next((b for b in snapshot if b["kapino"].upper() == kapino.upper()), None)
     if match is None:
         raise HTTPException(404, detail=f"Bus {kapino!r} not found in active fleet")
-    return {**match, "trail": get_trail(match["kapino"])}
+    return {**match, "trail": get_trail(cast(str, match["kapino"]))}
