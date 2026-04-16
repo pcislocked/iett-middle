@@ -48,6 +48,7 @@ Copy `.env.example` to `.env` and edit as needed:
 | `CACHE_TTL_FLEET` | `15` | Fleet cache TTL (seconds) |
 | `CACHE_TTL_ARRIVALS` | `20` | Arrivals cache TTL |
 | `FLEET_CACHE_MAX_AGE` | `900` | Force fleet cache refresh every 15 min (prevents 6h+ stale FILO data) |
+| `FLEET_MANUAL_REFRESH_COOLDOWN` | `10` | Minimum seconds between accepted `POST /v1/fleet/refresh` calls |
 | `PORT` | `8000` | Listen port |
 
 ## API endpoints

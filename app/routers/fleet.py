@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
+import time
 
 from fastapi import APIRouter, HTTPException
 
@@ -25,6 +27,8 @@ from app.models.bus import BusDetail, BusPositionWithTrail
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+_manual_refresh_last_triggered: float = 0.0
+_manual_refresh_lock = threading.Lock()
 
 
 def _snapshot_with_trails() -> list[dict]:
@@ -73,11 +77,26 @@ async def get_fleet_meta():
 
 @router.post("/refresh", status_code=202)
 async def refresh_fleet():
-    """Trigger an immediate out-of-band fleet re-poll.
+    """Queue an immediate out-of-band fleet re-poll.
 
-    Currently disabled — use the 30 s stale-while-revalidate cycle instead.
+    Keeps stale-while-revalidate semantics while allowing operators/clients to
+    request an immediate refresh cycle when needed.
     """
-    raise HTTPException(503, detail="Manual refresh is temporarily disabled.")
+    from app.config import settings  # noqa: PLC0415
+
+    cooldown = max(0, settings.fleet_manual_refresh_cooldown)
+    now = time.monotonic()
+    global _manual_refresh_last_triggered  # noqa: PLW0603
+
+    with _manual_refresh_lock:
+        elapsed = now - _manual_refresh_last_triggered
+        if _manual_refresh_last_triggered > 0 and cooldown > 0 and elapsed < cooldown:
+            retry_after = max(1, int(cooldown - elapsed + 0.999))
+            return {"status": "cooldown", "retry_after_seconds": retry_after}
+        _manual_refresh_last_triggered = now
+
+    await ensure_fleet_fresh(max_age_seconds=0)
+    return {"status": "queued"}
 
 
 @router.get("/{kapino}/detail", response_model=BusDetail)
