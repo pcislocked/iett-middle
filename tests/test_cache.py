@@ -161,6 +161,15 @@ class TestCacheInvalidation:
         assert removed is True
         assert asyncio.run(cache_get("ns:key")) is None
 
+    def test_cache_delete_expired_key_returns_false(self) -> None:
+        asyncio.run(cache_set("ns:exp", "v", ttl=60))
+        value, _ = cache_mod._store["ns:exp"]
+        cache_mod._store["ns:exp"] = (value, time.monotonic() - 1)
+
+        removed = asyncio.run(cache_delete("ns:exp"))
+        assert removed is False
+        assert "ns:exp" not in cache_mod._store
+
     def test_cache_delete_missing_key(self) -> None:
         removed = asyncio.run(cache_delete("ns:missing"))
         assert removed is False
@@ -176,12 +185,38 @@ class TestCacheInvalidation:
         assert asyncio.run(cache_get("fleet:b")) is None
         assert asyncio.run(cache_get("routes:a")) == 3
 
+    def test_cache_invalidate_namespace_removed_count_excludes_expired(self) -> None:
+        asyncio.run(cache_set("fleet:live", 1, ttl=60))
+        asyncio.run(cache_set("fleet:expired", 2, ttl=60))
+        value, _ = cache_mod._store["fleet:expired"]
+        cache_mod._store["fleet:expired"] = (value, time.monotonic() - 1)
+
+        removed = asyncio.run(cache_invalidate_namespace("fleet"))
+        assert removed == 1
+
+    def test_cache_invalidate_namespace_clears_namespace_stats(self) -> None:
+        asyncio.run(cache_set("fleet:a", 1, ttl=60))
+        asyncio.run(cache_get("fleet:a"))
+        asyncio.run(cache_get("fleet:missing"))
+        asyncio.run(cache_set("routes:a", 2, ttl=60))
+        asyncio.run(cache_get("routes:a"))
+
+        asyncio.run(cache_invalidate_namespace("fleet"))
+        stats = get_cache_stats()
+        assert "fleet" not in stats["hits"]
+        assert "fleet" not in stats["misses"]
+        assert stats["hits"].get("routes", 0) >= 1
+
     def test_cache_clear_removes_everything(self) -> None:
         asyncio.run(cache_set("a:1", 1, ttl=60))
         asyncio.run(cache_set("b:1", 2, ttl=60))
+        asyncio.run(cache_get("a:1"))
+        asyncio.run(cache_get("b:missing"))
         removed = asyncio.run(cache_clear())
 
         assert removed == 2
         stats = get_cache_stats()
         assert stats["total_keys"] == 0
         assert stats["active_keys"] == 0
+        assert stats["hits"] == {}
+        assert stats["misses"] == {}
