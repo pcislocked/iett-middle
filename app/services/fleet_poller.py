@@ -5,6 +5,7 @@ import asyncio
 import logging
 
 logger = logging.getLogger(__name__)
+MAX_PERIODIC_REFRESH_INTERVAL_SECONDS = 900
 
 
 async def refresh_fleet_once() -> None:
@@ -36,7 +37,7 @@ async def refresh_fleet_forever(interval_seconds: int) -> None:
     """
     from app.deps import ensure_fleet_fresh  # noqa: PLC0415
 
-    interval_seconds = max(1, int(interval_seconds))
+    interval_seconds = max(1, min(MAX_PERIODIC_REFRESH_INTERVAL_SECONDS, int(interval_seconds)))
     logger.info("Fleet periodic refresher started (interval=%ss)", interval_seconds)
 
     while True:

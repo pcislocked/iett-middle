@@ -10,7 +10,7 @@ import aiohttp
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.deps import close_session, set_session
+from app.deps import cancel_fleet_refresh_task, close_session, set_session
 from app.routers import fleet, garages, routes, stops, traffic
 
 logger = logging.getLogger(__name__)
@@ -87,8 +87,10 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     ))
     logger.info("HTTP session started")
 
-    # Keep fleet refreshed in the background with a hard upper bound on staleness.
-    fleet_refresher = asyncio.create_task(refresh_fleet_forever(settings.fleet_cache_max_age))
+    # Keep fleet refreshed in the background. The cadence is derived from the
+    # maximum tolerated staleness so the coupling stays explicit.
+    fleet_refresh_interval = settings.fleet_cache_max_age
+    fleet_refresher = asyncio.create_task(refresh_fleet_forever(fleet_refresh_interval))
     stop_indexer = asyncio.create_task(index_stops_forever())
 
     yield
@@ -104,6 +106,8 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
         await stop_indexer
     except asyncio.CancelledError:
         pass
+
+    await cancel_fleet_refresh_task()
     await close_session()
     logger.info("HTTP session closed")
 
