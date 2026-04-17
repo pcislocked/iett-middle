@@ -1,10 +1,12 @@
 """ARAC router — /v1/arac (user-session-backed endpoints)."""
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Path
+from fastapi.concurrency import run_in_threadpool
 
 from app.deps import get_session
 from app.models.arac import (
@@ -23,6 +25,8 @@ from app.services.arac_captcha_solver import collect_captcha_candidates_from_bas
 from app.services.arac_client import AracApiError, AracClient
 
 router = APIRouter()
+
+_OCR_SOLVER_TIMEOUT_SECONDS = 8.0
 
 
 def _status_from_arac_error(exc: AracApiError, fallback: int = 502) -> int:
@@ -232,10 +236,16 @@ async def auto_solve_arac_session(payload: AracAutoSolveRequest) -> AracAutoSolv
         captcha_image = challenge["captchaImage"]
 
     try:
-        candidates = collect_captcha_candidates_from_base64(
-            captcha_image,
-            max_candidates=payload.maxCandidates,
+        candidates = await asyncio.wait_for(
+            run_in_threadpool(
+                collect_captcha_candidates_from_base64,
+                captcha_image,
+                max_candidates=payload.maxCandidates,
+            ),
+            timeout=_OCR_SOLVER_TIMEOUT_SECONDS,
         )
+    except TimeoutError as exc:
+        raise HTTPException(503, detail="Captcha auto-solve timed out") from exc
     except AracApiError as exc:
         raise HTTPException(_status_from_arac_error(exc, fallback=503), detail=str(exc)) from exc
 

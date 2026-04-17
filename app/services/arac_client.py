@@ -182,18 +182,21 @@ class AracClient:
                 "cryptography package is required for encrypted ARAC endpoints"
             ) from exc
 
-        der = base64.b64decode(pubkey_b64)
-        public_key = load_der_public_key(der)
-        aes_key = AESGCM.generate_key(bit_length=256)
-        encrypted = public_key.encrypt(
-            aes_key,
-            padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                algorithm=hashes.SHA256(),
-                label=None,
-            ),
-        )
-        return aes_key, base64.b64encode(encrypted).decode("utf-8")
+        try:
+            der = base64.b64decode(pubkey_b64)
+            public_key = load_der_public_key(der)
+            aes_key = AESGCM.generate_key(bit_length=256)
+            encrypted = public_key.encrypt(
+                aes_key,
+                padding.OAEP(
+                    mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                    algorithm=hashes.SHA256(),
+                    label=None,
+                ),
+            )
+            return aes_key, base64.b64encode(encrypted).decode("utf-8")
+        except Exception as exc:  # noqa: BLE001
+            raise AracApiError(f"Failed to prepare ARAC encryption bundle: {exc}") from exc
 
     @staticmethod
     def _decrypt_if_needed(aes_key: bytes, payload: Any) -> Any:

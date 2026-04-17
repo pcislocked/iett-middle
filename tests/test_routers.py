@@ -1162,6 +1162,20 @@ class TestAracSession:
             )
         assert resp.status_code == 503
 
+    def test_auto_solve_returns_503_when_solver_times_out(self, client: TestClient) -> None:
+        mock_arac = MagicMock()
+        with (
+            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+            patch("app.routers.arac.run_in_threadpool", new=AsyncMock(side_effect=TimeoutError)),
+        ):
+            resp = client.post(
+                "/v1/arac/session/auto-solve",
+                json={"captchaId": "cid-5", "captchaImageBase64": "Q0ND"},
+            )
+        assert resp.status_code == 503
+        assert "timed out" in resp.json()["detail"]
+
     def test_auto_solve_fetches_new_captcha_when_missing_input(self, client: TestClient) -> None:
         mock_arac = MagicMock()
         mock_arac.get_captcha = AsyncMock(return_value={"captchaId": "cid-6", "captchaImage": "DDD"})

@@ -210,6 +210,11 @@ class TestCryptoHelpers:
             with pytest.raises(AracApiError, match="cryptography package"):
                 AracClient._prepare_encryption_bundle("AA==")
 
+    def test_prepare_encryption_bundle_invalid_key_raises_arac_error(self) -> None:
+        pytest.importorskip("cryptography")
+        with pytest.raises(AracApiError, match="Failed to prepare ARAC encryption bundle"):
+            AracClient._prepare_encryption_bundle("AA==")
+
     def test_decrypt_if_needed_passthroughs(self) -> None:
         assert AracClient._decrypt_if_needed(b"k", "text") == "text"
         payload = {"foo": "bar"}
