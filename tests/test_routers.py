@@ -1294,13 +1294,35 @@ class TestAracMissions:
             return_value=[
                 {
                     "taskId": 1,
+                    "archiveId": 0,
+                    "taskStartTime": 1776407723000,
+                    "taskEndTime": 1776410640136,
+                    "taskComingTime": 1776407400000,
                     "lineCode": "14R",
                     "lineName": "RASATHANE - KADIKOY",
                     "routeCode": "14R_G_D0",
                     "routeId": 886,
                     "routeDirection": 0,
+                    "serviceNo": -507,
+                    "driverRegisterNo": "809100",
+                    "unreadMessage": False,
                     "taskStatus": 28,
                     "taskStatusCode": "T",
+                    "busDoorNumber": "C-1753",
+                    "driverId": 54732,
+                    "vehicleId": 4016,
+                    "lineId": 496,
+                    "justificationId": 130,
+                    "lastLocationTime": 1776451582000,
+                    "updatedBy": "TASK TIME TUNING",
+                    "updatedStartTime": 1776407700000,
+                    "updatedTime": 1776411607000,
+                    "taskTypeId": 22,
+                    "createdBy": 2,
+                    "stopId": 0,
+                    "stopCode": "",
+                    "stopName": "",
+                    "hasPlanSent": True,
                     "approximateStartTime": 1776407700000,
                     "approximateEndTime": 1776410640136,
                     "gprsActive": False,
@@ -1334,6 +1356,11 @@ class TestAracMissions:
         assert body["summary"]["active_count"] == 1
         assert body["missions"][0]["line_code"] == "14R"
         assert body["missions"][0]["approximate_start_time"] is not None
+        assert body["missions"][0]["driver_register_no"] == "809100"
+        assert body["missions"][0]["service_no"] == -507
+        assert body["missions"][0]["task_start_time"] is not None
+        assert body["missions"][0]["updated_by"] == "TASK TIME TUNING"
+        assert body["missions"][0]["has_plan_sent"] is True
 
     def test_missions_error_passthrough(self, client: TestClient) -> None:
         from app.services.arac_client import AracApiError
@@ -1353,13 +1380,43 @@ class TestAracMissions:
             return_value=[
                 {
                     "taskId": "bad-int",
+                    "archiveId": "8.0",
+                    "taskStartTime": "bad-ms",
+                    "taskEndTime": 0,
+                    "taskComingTime": None,
                     "lineCode": 123,
                     "lineName": None,
                     "routeCode": "",
                     "routeId": None,
                     "routeDirection": "x",
+                    "serviceNo": "-507",
+                    "driverRegisterNo": 809100,
+                    "unreadMessage": "yes",
                     "taskStatus": "x",
                     "taskStatusCode": None,
+                    "oldLineName": 0,
+                    "superiorName": 0,
+                    "busDoorNumber": 123,
+                    "driverId": "x",
+                    "vehicleId": "x",
+                    "lineId": "9",
+                    "justificationId": "bad",
+                    "lastLocationTime": "0",
+                    "updatedBy": 0,
+                    "updatedStartTime": "1776407700000",
+                    "updatedTime": "bad-ms",
+                    "lastPointOrderNumber": "4",
+                    "taskTypeId": "x",
+                    "createdBy": "2",
+                    "lastStopPassedCode": 0,
+                    "lastStopPassedName": 0,
+                    "stopId": "0",
+                    "stopCode": 0,
+                    "stopName": 0,
+                    "sendingTime": "1234",
+                    "sendingTimeOld": "bad-ms",
+                    "hasPlanSent": "no",
+                    "deliveryReportTime": "bad-ms",
                     "approximateStartTime": -1,
                     "approximateEndTime": 999999999999999999999,
                     "gprsActive": "unknown",
@@ -1377,6 +1434,23 @@ class TestAracMissions:
         mission = body["missions"][0]
         assert mission["task_id"] is None
         assert mission["line_code"] == "123"
+        assert mission["archive_id"] == 8
+        assert mission["task_start_time"] is None
+        assert mission["task_end_time"] is None
+        assert mission["service_no"] == -507
+        assert mission["driver_register_no"] == "809100"
+        assert mission["unread_message"] is True
+        assert mission["line_id"] == 9
+        assert mission["updated_by"] == "0"
+        assert mission["updated_start_time"] is not None
+        assert mission["last_point_order_number"] == 4
+        assert mission["created_by"] == 2
+        assert mission["stop_id"] == 0
+        assert mission["stop_code"] == "0"
+        assert mission["sending_time"] is not None
+        assert mission["sending_time_old"] is None
+        assert mission["has_plan_sent"] is False
+        assert mission["delivery_report_time"] is None
         assert mission["approximate_start_time"] is None
         assert mission["approximate_end_time"] is None
         assert mission["gprs_active"] is None

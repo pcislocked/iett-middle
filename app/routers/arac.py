@@ -73,6 +73,78 @@ def _ms_to_iso(value: int | None) -> str | None:
         return None
 
 
+def _normalize_mission_item(raw: dict[str, Any]) -> AracMissionItem:
+    task_start_ms = _as_int(raw.get("taskStartTime"))
+    task_end_ms = _as_int(raw.get("taskEndTime"))
+    task_coming_ms = _as_int(raw.get("taskComingTime"))
+    approx_start_ms = _as_int(raw.get("approximateStartTime"))
+    approx_end_ms = _as_int(raw.get("approximateEndTime"))
+    last_location_ms = _as_int(raw.get("lastLocationTime"))
+    updated_time_ms = _as_int(raw.get("updatedTime"))
+    updated_start_ms = _as_int(raw.get("updatedStartTime"))
+    sending_time_ms = _as_int(raw.get("sendingTime"))
+    sending_time_old_ms = _as_int(raw.get("sendingTimeOld"))
+    delivery_report_time_ms = _as_int(raw.get("deliveryReportTime"))
+
+    return AracMissionItem(
+        task_id=_as_int(raw.get("taskId")),
+        archive_id=_as_int(raw.get("archiveId")),
+        task_start_time_ms=task_start_ms,
+        task_end_time_ms=task_end_ms,
+        task_coming_time_ms=task_coming_ms,
+        line_code=_as_str(raw.get("lineCode")),
+        line_name=_as_str(raw.get("lineName")),
+        route_code=_as_str(raw.get("routeCode")),
+        route_id=_as_int(raw.get("routeId")),
+        route_direction=_as_int(raw.get("routeDirection")),
+        service_no=_as_int(raw.get("serviceNo")),
+        driver_register_no=_as_str(raw.get("driverRegisterNo")),
+        unread_message=_as_bool(raw.get("unreadMessage")),
+        task_status=_as_int(raw.get("taskStatus")),
+        task_status_code=_as_str(raw.get("taskStatusCode")),
+        old_line_name=_as_str(raw.get("oldLineName")),
+        superior_name=_as_str(raw.get("superiorName")),
+        bus_door_number=_as_str(raw.get("busDoorNumber")),
+        driver_id=_as_int(raw.get("driverId")),
+        vehicle_id=_as_int(raw.get("vehicleId")),
+        line_id=_as_int(raw.get("lineId")),
+        justification_id=_as_int(raw.get("justificationId")),
+        last_location_time_ms=last_location_ms,
+        updated_by=_as_str(raw.get("updatedBy")),
+        intervention_code=_as_str(raw.get("interventionCode")),
+        note=_as_str(raw.get("note")),
+        updated_time_ms=updated_time_ms,
+        updated_start_time_ms=updated_start_ms,
+        approximate_start_time_ms=approx_start_ms,
+        approximate_end_time_ms=approx_end_ms,
+        task_start_time=_ms_to_iso(task_start_ms),
+        task_end_time=_ms_to_iso(task_end_ms),
+        task_coming_time=_ms_to_iso(task_coming_ms),
+        last_location_time=_ms_to_iso(last_location_ms),
+        updated_time=_ms_to_iso(updated_time_ms),
+        updated_start_time=_ms_to_iso(updated_start_ms),
+        approximate_start_time=_ms_to_iso(approx_start_ms),
+        approximate_end_time=_ms_to_iso(approx_end_ms),
+        is_active=_as_bool(raw.get("isActive")),
+        last_point_order_number=_as_int(raw.get("lastPointOrderNumber")),
+        task_type_id=_as_int(raw.get("taskTypeId")),
+        created_by=_as_int(raw.get("createdBy")),
+        last_stop_passed_code=_as_str(raw.get("lastStopPassedCode")),
+        last_stop_passed_name=_as_str(raw.get("lastStopPassedName")),
+        stop_id=_as_int(raw.get("stopId")),
+        stop_code=_as_str(raw.get("stopCode")),
+        stop_name=_as_str(raw.get("stopName")),
+        sending_time_ms=sending_time_ms,
+        sending_time=_ms_to_iso(sending_time_ms),
+        sending_time_old_ms=sending_time_old_ms,
+        sending_time_old=_ms_to_iso(sending_time_old_ms),
+        has_plan_sent=_as_bool(raw.get("hasPlanSent")),
+        delivery_report_time_ms=delivery_report_time_ms,
+        delivery_report_time=_ms_to_iso(delivery_report_time_ms),
+        gprs_active=_as_bool(raw.get("gprsActive")),
+    )
+
+
 def _summarize_missions(missions: list[AracMissionItem]) -> AracMissionSummary:
     line_codes = sorted({m.line_code for m in missions if m.line_code})
     route_codes = sorted({m.route_code for m in missions if m.route_code})
@@ -265,28 +337,7 @@ async def get_arac_missions(
     except AracApiError as exc:
         raise HTTPException(_status_from_arac_error(exc), detail=str(exc)) from exc
 
-    missions: list[AracMissionItem] = []
-    for raw in raw_missions:
-        approx_start_ms = _as_int(raw.get("approximateStartTime"))
-        approx_end_ms = _as_int(raw.get("approximateEndTime"))
-        missions.append(
-            AracMissionItem(
-                task_id=_as_int(raw.get("taskId")),
-                line_code=_as_str(raw.get("lineCode")),
-                line_name=_as_str(raw.get("lineName")),
-                route_code=_as_str(raw.get("routeCode")),
-                route_id=_as_int(raw.get("routeId")),
-                route_direction=_as_int(raw.get("routeDirection")),
-                task_status=_as_int(raw.get("taskStatus")),
-                task_status_code=_as_str(raw.get("taskStatusCode")),
-                approximate_start_time_ms=approx_start_ms,
-                approximate_end_time_ms=approx_end_ms,
-                approximate_start_time=_ms_to_iso(approx_start_ms),
-                approximate_end_time=_ms_to_iso(approx_end_ms),
-                gprs_active=_as_bool(raw.get("gprsActive")),
-                is_active=_as_bool(raw.get("isActive")),
-            )
-        )
+    missions = [_normalize_mission_item(raw) for raw in raw_missions]
 
     return AracMissionsResponse(
         kapino=kapino,
