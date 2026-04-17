@@ -7,6 +7,7 @@ class Settings(BaseSettings):
 
     iett_soap_base: str = "https://api.ibb.gov.tr/iett"
     iett_rest_base: str = "https://iett.istanbul"
+    arac_base: str = "https://arac.iett.gov.tr/api"
     trafik_base: str = "https://trafik.ibb.gov.tr"
     osrm_base: str = "https://router.project-osrm.org"
 

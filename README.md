@@ -1,10 +1,10 @@
 # iett-middle
 
-[![Tests](https://img.shields.io/badge/tests-123%20passed-brightgreen)](#running-tests)
-[![Coverage](https://img.shields.io/badge/coverage-73%25-yellow)](#running-tests)
+[![Tests](https://img.shields.io/badge/tests-369%20passed-brightgreen)](#running-tests)
+[![Coverage](https://img.shields.io/badge/coverage-report%20in%20CI-informational)](#running-tests)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
-[![Version](https://img.shields.io/badge/version-0.3.9-orange)](https://github.com/pcislocked/iett-middle/releases/tag/v0.3.9)
+[![Version](https://img.shields.io/badge/version-0.4.0--draft-orange)](./CHANGELOG.md)
 
 Smart caching proxy for Istanbul IETT public transit APIs.
 
@@ -43,6 +43,7 @@ Copy `.env.example` to `.env` and edit as needed:
 |---|---|---|
 | `IETT_SOAP_BASE` | `https://api.ibb.gov.tr/iett` | IETT SOAP base URL |
 | `IETT_REST_BASE` | `https://iett.istanbul` | IETT REST base URL |
+| `ARAC_BASE` | `https://arac.iett.gov.tr/api` | ARAC encrypted API base URL |
 | `TRAFIK_BASE` | `https://trafik.ibb.gov.tr` | IBB traffic API base |
 | `OSRM_BASE` | `https://router.project-osrm.org` | OSRM routing server |
 | `CACHE_TTL_FLEET` | `15` | Fleet cache TTL (seconds) |
@@ -56,6 +57,16 @@ Copy `.env.example` to `.env` and edit as needed:
 ```
 GET /v1/fleet                                 all active buses (~7k records, cached 15s)
 GET /v1/fleet/{kapino}                        single bus by door number
+
+POST /v1/arac/session/captcha                 fetch captcha challenge image
+POST /v1/arac/session/getpicture              alias for captcha challenge fetch
+POST /v1/arac/session/create                  create ARAC session from captcha answer
+POST /v1/arac/session/response                alias for captcha answer submit
+POST /v1/arac/session/auto-solve              OCR candidate solve (+ optional session create)
+GET /v1/arac/fleet                            ARAC fleet snapshot (requires session headers)
+GET /v1/arac/fleet/{kapino}                   ARAC single bus profile (requires session headers)
+GET /v1/arac/fleet/{kapino}/missions          ARAC mission timeline (requires session headers)
+GET /v1/arac/routes/{routeId}/stops           ARAC route stops (requires session headers)
 
 GET /v1/stops/search?q={name}                 stop search
 GET /v1/stops/{dcode}/arrivals                live ETAs at a stop (cached 20s)
@@ -73,6 +84,9 @@ GET /v1/traffic/segments                      per-road segment speeds (cached 30
 GET /health                                   uptime + cache stats
 GET /docs                                     Swagger UI
 ```
+
+Note: middle does not persist ARAC sessionId/sessionKey. Clients keep their own
+session credentials and pass them on each ARAC data request.
 
 ## Running tests
 

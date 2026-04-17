@@ -94,6 +94,38 @@ def _garage() -> Garage:
     return Garage(code="IKT", name="IKITELLI GARAJ", latitude=41.062, longitude=28.798)
 
 
+def _arac_bus(kapino: str = "C-1753") -> dict[str, Any]:
+    return {
+        "kapino": kapino,
+        "plate": "34 HO 1753",
+        "latitude": 41.01,
+        "longitude": 29.02,
+        "speed": 12,
+        "operator": "Istanbul Halk Ulasim",
+        "last_seen": "18-04-2026 00:16:56",
+        "route_code": "14R",
+        "direction": None,
+        "direction_letter": "G",
+        "nearest_stop": None,
+        "stop_sequence": None,
+        "operator_id": 5,
+        "operator_name": "Istanbul Halk Ulasim",
+        "vehicle_brand": "MERCEDES CONECTO",
+        "model_year": 2015,
+        "vehicle_type": "Solo -12m",
+        "seating_capacity": 27,
+        "full_capacity": 96,
+        "accessible": True,
+        "has_usb": True,
+        "has_wifi": False,
+        "has_bicycle_rack": False,
+        "is_air_conditioned": None,
+        "garage_code": None,
+        "garage_name": None,
+        "vehicle_software_version": 2,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Shared client fixture
 # ---------------------------------------------------------------------------
@@ -955,4 +987,496 @@ class TestStopsArrivalsRaw:
         ):
             resp = client.get("/v1/stops/220602/arrivals/raw")
         assert resp.status_code == 502
+
+
+# ===========================  /v1/arac  ====================================
+
+class TestAracSession:
+    def test_captcha_returns_challenge(self, client: TestClient) -> None:
+        mock_arac = MagicMock()
+        mock_arac.get_captcha = AsyncMock(return_value={"captchaId": "cid-1", "captchaImage": "AAA"})
+        with (
+            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+        ):
+            resp = client.post("/v1/arac/session/captcha")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["captchaId"] == "cid-1"
+        assert body["captchaImageBase64"] == "AAA"
+
+    def test_captcha_returns_502_on_client_error_without_status(self, client: TestClient) -> None:
+        from app.services.arac_client import AracApiError
+
+        mock_arac = MagicMock()
+        mock_arac.get_captcha = AsyncMock(side_effect=AracApiError("upstream down"))
+        with (
+            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+        ):
+            resp = client.post("/v1/arac/session/captcha")
+        assert resp.status_code == 502
+
+    def test_create_returns_session_keys(self, client: TestClient) -> None:
+        mock_arac = MagicMock()
+        mock_arac.create_session = AsyncMock(return_value={"sessionId": "sid-1", "sessionKey": "skey-1"})
+        with (
+            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+        ):
+            resp = client.post(
+                "/v1/arac/session/create",
+                json={"captchaId": "cid-1", "captchaAnswer": "ABCD"},
+            )
+        assert resp.status_code == 200
+        assert resp.json()["sessionId"] == "sid-1"
+
+    def test_create_returns_400_for_wrong_captcha(self, client: TestClient) -> None:
+        from app.services.arac_client import AracApiError
+
+        mock_arac = MagicMock()
+        mock_arac.create_session = AsyncMock(side_effect=AracApiError("Wrong CAPTCHA", status_code=400))
+        with (
+            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+        ):
+            resp = client.post(
+                "/v1/arac/session/create",
+                json={"captchaId": "cid-1", "captchaAnswer": "WRNG"},
+            )
+        assert resp.status_code == 400
+
+    def test_getpicture_alias_returns_challenge(self, client: TestClient) -> None:
+        mock_arac = MagicMock()
+        mock_arac.get_captcha = AsyncMock(return_value={"captchaId": "cid-2", "captchaImage": "BBB"})
+        with (
+            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+        ):
+            resp = client.post("/v1/arac/session/getpicture")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["captchaId"] == "cid-2"
+        assert body["captchaImageBase64"] == "BBB"
+
+    def test_response_alias_creates_session(self, client: TestClient) -> None:
+        mock_arac = MagicMock()
+        mock_arac.create_session = AsyncMock(return_value={"sessionId": "sid-2", "sessionKey": "skey-2"})
+        with (
+            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+        ):
+            resp = client.post(
+                "/v1/arac/session/response",
+                json={"captchaId": "cid-2", "captchaAnswer": "EFGH"},
+            )
+        assert resp.status_code == 200
+        assert resp.json()["sessionId"] == "sid-2"
+
+    def test_auto_solve_success_after_retry(self, client: TestClient) -> None:
+        from app.services.arac_client import AracApiError
+
+        mock_arac = MagicMock()
+        mock_arac.create_session = AsyncMock(
+            side_effect=[
+                AracApiError("Wrong CAPTCHA", status_code=400),
+                {"sessionId": "sid-3", "sessionKey": "skey-3"},
+            ]
+        )
+        with (
+            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+            patch("app.routers.arac.collect_captcha_candidates_from_base64", return_value=["AAAA", "ABCD"]),
+        ):
+            resp = client.post(
+                "/v1/arac/session/auto-solve",
+                json={
+                    "captchaId": "cid-3",
+                    "captchaImageBase64": "QkJC",
+                    "maxCandidates": 8,
+                    "createSession": True,
+                },
+            )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["solved"] is True
+        assert body["selectedCandidate"] == "ABCD"
+        assert body["sessionId"] == "sid-3"
+        assert body["candidatesTried"] == ["AAAA", "ABCD"]
+
+    def test_auto_solve_guess_only_mode(self, client: TestClient) -> None:
+        mock_arac = MagicMock()
+        mock_arac.create_session = AsyncMock()
+        with (
+            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+            patch("app.routers.arac.collect_captcha_candidates_from_base64", return_value=["ZZZZ"]),
+        ):
+            resp = client.post(
+                "/v1/arac/session/auto-solve",
+                json={
+                    "captchaId": "cid-4",
+                    "captchaImageBase64": "Q0ND",
+                    "createSession": False,
+                },
+            )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["solved"] is False
+        assert body["selectedCandidate"] == "ZZZZ"
+        assert body["sessionId"] is None
+
+    def test_auto_solve_defaults_to_guess_only_mode(self, client: TestClient) -> None:
+        mock_arac = MagicMock()
+        mock_arac.create_session = AsyncMock()
+        with (
+            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+            patch("app.routers.arac.collect_captcha_candidates_from_base64", return_value=["TTTT"]),
+        ):
+            resp = client.post(
+                "/v1/arac/session/auto-solve",
+                json={"captchaId": "cid-def", "captchaImageBase64": "Q0ND"},
+            )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["solved"] is False
+        assert body["selectedCandidate"] == "TTTT"
+        assert body["sessionId"] is None
+
+    def test_auto_solve_returns_503_when_solver_unavailable(self, client: TestClient) -> None:
+        from app.services.arac_client import AracApiError
+
+        mock_arac = MagicMock()
+        with (
+            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+            patch(
+                "app.routers.arac.collect_captcha_candidates_from_base64",
+                side_effect=AracApiError("Auto-solve requires easyocr", status_code=503),
+            ),
+        ):
+            resp = client.post(
+                "/v1/arac/session/auto-solve",
+                json={"captchaId": "cid-5", "captchaImageBase64": "Q0ND"},
+            )
+        assert resp.status_code == 503
+
+    def test_auto_solve_fetches_new_captcha_when_missing_input(self, client: TestClient) -> None:
+        mock_arac = MagicMock()
+        mock_arac.get_captcha = AsyncMock(return_value={"captchaId": "cid-6", "captchaImage": "DDD"})
+        with (
+            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+            patch("app.routers.arac.collect_captcha_candidates_from_base64", return_value=[]),
+        ):
+            resp = client.post("/v1/arac/session/auto-solve", json={})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["captchaId"] == "cid-6"
+        assert body["solved"] is False
+
+    def test_auto_solve_uses_error_status_when_fetching_challenge_fails(self, client: TestClient) -> None:
+        from app.services.arac_client import AracApiError
+
+        mock_arac = MagicMock()
+        mock_arac.get_captcha = AsyncMock(side_effect=AracApiError("captcha unavailable", status_code=503))
+        with (
+            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+        ):
+            resp = client.post("/v1/arac/session/auto-solve", json={})
+        assert resp.status_code == 503
+
+    def test_auto_solve_breaks_on_server_error(self, client: TestClient) -> None:
+        from app.services.arac_client import AracApiError
+
+        mock_arac = MagicMock()
+        mock_arac.create_session = AsyncMock(
+            side_effect=AracApiError("server failure", status_code=500)
+        )
+        with (
+            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+            patch("app.routers.arac.collect_captcha_candidates_from_base64", return_value=["AAAA", "BBBB"]),
+        ):
+            resp = client.post(
+                "/v1/arac/session/auto-solve",
+                json={
+                    "captchaId": "cid-7",
+                    "captchaImageBase64": "QQ==",
+                    "createSession": True,
+                },
+            )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["solved"] is False
+        assert body["candidatesTried"] == ["AAAA"]
+        assert "server failure" in (body["error"] or "")
+
+
+class TestAracFleet:
+    _HEADERS = {"X-Arac-Session-Id": "sid-1", "X-Arac-Session-Key": "skey-1"}
+
+    def test_401_when_session_headers_missing(self, client: TestClient) -> None:
+        resp = client.get("/v1/arac/fleet")
+        assert resp.status_code == 401
+
+    def test_200_returns_fleet(self, client: TestClient) -> None:
+        mock_arac = MagicMock()
+        mock_arac.get_fleet = AsyncMock(return_value=[BusPosition(**_arac_bus())])
+        with (
+            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+        ):
+            resp = client.get("/v1/arac/fleet", headers=self._HEADERS)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) == 1
+        assert body[0]["kapino"] == "C-1753"
+        assert body[0]["vehicle_brand"] == "MERCEDES CONECTO"
+
+    def test_accepts_legacy_session_headers(self, client: TestClient) -> None:
+        mock_arac = MagicMock()
+        mock_arac.get_fleet = AsyncMock(return_value=[BusPosition(**_arac_bus())])
+        with (
+            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+        ):
+            resp = client.get(
+                "/v1/arac/fleet",
+                headers={"X-Session-Id": "sid-legacy", "X-Session-Key": "key-legacy"},
+            )
+        assert resp.status_code == 200
+
+    def test_fleet_error_passthrough(self, client: TestClient) -> None:
+        from app.services.arac_client import AracApiError
+
+        mock_arac = MagicMock()
+        mock_arac.get_fleet = AsyncMock(side_effect=AracApiError("upstream", status_code=503))
+        with (
+            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+        ):
+            resp = client.get("/v1/arac/fleet", headers=self._HEADERS)
+        assert resp.status_code == 503
+
+    def test_200_returns_single_vehicle(self, client: TestClient) -> None:
+        mock_arac = MagicMock()
+        mock_arac.get_vehicle = AsyncMock(return_value=BusPosition(**_arac_bus("A-001")))
+        with (
+            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+        ):
+            resp = client.get("/v1/arac/fleet/A-001", headers=self._HEADERS)
+        assert resp.status_code == 200
+        assert resp.json()["kapino"] == "A-001"
+
+    def test_single_vehicle_error_passthrough(self, client: TestClient) -> None:
+        from app.services.arac_client import AracApiError
+
+        mock_arac = MagicMock()
+        mock_arac.get_vehicle = AsyncMock(side_effect=AracApiError("not found", status_code=404))
+        with (
+            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+        ):
+            resp = client.get("/v1/arac/fleet/A-999", headers=self._HEADERS)
+        assert resp.status_code == 404
+
+
+class TestAracMissions:
+    _HEADERS = {"X-Arac-Session-Id": "sid-1", "X-Arac-Session-Key": "skey-1"}
+
+    def test_returns_summary_and_missions(self, client: TestClient) -> None:
+        mock_arac = MagicMock()
+        mock_arac.get_missions = AsyncMock(
+            return_value=[
+                {
+                    "taskId": 1,
+                    "lineCode": "14R",
+                    "lineName": "RASATHANE - KADIKOY",
+                    "routeCode": "14R_G_D0",
+                    "routeId": 886,
+                    "routeDirection": 0,
+                    "taskStatus": 28,
+                    "taskStatusCode": "T",
+                    "approximateStartTime": 1776407700000,
+                    "approximateEndTime": 1776410640136,
+                    "gprsActive": False,
+                    "isActive": False,
+                },
+                {
+                    "taskId": 2,
+                    "lineCode": "14R",
+                    "lineName": "RASATHANE - KADIKOY",
+                    "routeCode": "14R_D_D0",
+                    "routeId": 881,
+                    "routeDirection": 1,
+                    "taskStatus": 12,
+                    "taskStatusCode": "A",
+                    "approximateStartTime": 1776412200000,
+                    "approximateEndTime": 1776415178669,
+                    "gprsActive": True,
+                    "isActive": True,
+                },
+            ]
+        )
+        with (
+            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+        ):
+            resp = client.get("/v1/arac/fleet/C-1753/missions", headers=self._HEADERS)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["kapino"] == "C-1753"
+        assert body["summary"]["mission_count"] == 2
+        assert body["summary"]["active_count"] == 1
+        assert body["missions"][0]["line_code"] == "14R"
+        assert body["missions"][0]["approximate_start_time"] is not None
+
+    def test_missions_error_passthrough(self, client: TestClient) -> None:
+        from app.services.arac_client import AracApiError
+
+        mock_arac = MagicMock()
+        mock_arac.get_missions = AsyncMock(side_effect=AracApiError("bad session", status_code=401))
+        with (
+            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+        ):
+            resp = client.get("/v1/arac/fleet/C-1753/missions", headers=self._HEADERS)
+        assert resp.status_code == 401
+
+    def test_missions_handles_malformed_fields(self, client: TestClient) -> None:
+        mock_arac = MagicMock()
+        mock_arac.get_missions = AsyncMock(
+            return_value=[
+                {
+                    "taskId": "bad-int",
+                    "lineCode": 123,
+                    "lineName": None,
+                    "routeCode": "",
+                    "routeId": None,
+                    "routeDirection": "x",
+                    "taskStatus": "x",
+                    "taskStatusCode": None,
+                    "approximateStartTime": -1,
+                    "approximateEndTime": 999999999999999999999,
+                    "gprsActive": "unknown",
+                    "isActive": "true",
+                }
+            ]
+        )
+        with (
+            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+        ):
+            resp = client.get("/v1/arac/fleet/C-1753/missions", headers=self._HEADERS)
+        assert resp.status_code == 200
+        body = resp.json()
+        mission = body["missions"][0]
+        assert mission["task_id"] is None
+        assert mission["line_code"] == "123"
+        assert mission["approximate_start_time"] is None
+        assert mission["approximate_end_time"] is None
+        assert mission["gprs_active"] is None
+        assert mission["is_active"] is True
+
+
+class TestAracRouteStops:
+    _HEADERS = {"X-Arac-Session-Id": "sid-1", "X-Arac-Session-Key": "skey-1"}
+
+    def test_returns_route_stops(self, client: TestClient) -> None:
+        mock_arac = MagicMock()
+        mock_arac.get_route_stops = AsyncMock(
+            return_value=[
+                {
+                    "stop_order": 1,
+                    "stop_id": 510948,
+                    "stop_name": "KADIKOY",
+                    "latitude": 40.9924,
+                    "longitude": 29.0238,
+                }
+            ]
+        )
+        with (
+            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+        ):
+            resp = client.get("/v1/arac/routes/16/stops", headers=self._HEADERS)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) == 1
+        assert body[0]["stop_order"] == 1
+        assert body[0]["stop_name"] == "KADIKOY"
+
+    def test_route_stops_error_passthrough(self, client: TestClient) -> None:
+        from app.services.arac_client import AracApiError
+
+        mock_arac = MagicMock()
+        mock_arac.get_route_stops = AsyncMock(side_effect=AracApiError("route unavailable", status_code=502))
+        with (
+            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+        ):
+            resp = client.get("/v1/arac/routes/16/stops", headers=self._HEADERS)
+        assert resp.status_code == 502
+
+
+class TestAracRouterHelpers:
+    def test_status_from_arac_error_bounds(self) -> None:
+        from app.routers.arac import _status_from_arac_error
+        from app.services.arac_client import AracApiError
+
+        assert _status_from_arac_error(AracApiError("x", status_code=401)) == 401
+        assert _status_from_arac_error(AracApiError("x", status_code=700), fallback=503) == 503
+
+    def test_coercion_helpers(self) -> None:
+        from app.routers.arac import _as_bool, _as_int, _as_str
+
+        assert _as_int("7") == 7
+        assert _as_int("bad") is None
+        assert _as_bool(None) is None
+        assert _as_bool(1) is True
+        assert _as_bool("yes") is True
+        assert _as_bool("no") is False
+        assert _as_bool("unknown") is None
+        assert _as_bool({}) is None
+        assert _as_str(None) is None
+        assert _as_str("  ") is None
+        assert _as_str(123) == "123"
+
+    def test_ms_to_iso_guard_paths(self) -> None:
+        from app.routers.arac import _ms_to_iso
+
+        assert _ms_to_iso(None) is None
+        assert _ms_to_iso(-1) is None
+        assert _ms_to_iso(9999999999999999999999999) is None
+
+    def test_require_session_headers_helper(self) -> None:
+        from fastapi import HTTPException
+        from app.routers.arac import _require_arac_session_headers
+
+        assert _require_arac_session_headers(
+            x_arac_session_id="sid",
+            x_arac_session_key="key",
+            x_session_id=None,
+            x_session_key=None,
+        ) == ("sid", "key")
+
+        assert _require_arac_session_headers(
+            x_arac_session_id=None,
+            x_arac_session_key=None,
+            x_session_id="sid2",
+            x_session_key="key2",
+        ) == ("sid2", "key2")
+
+        with pytest.raises(HTTPException) as exc_info:
+            _require_arac_session_headers(
+                x_arac_session_id=None,
+                x_arac_session_key=None,
+                x_session_id=None,
+                x_session_key=None,
+            )
+        assert exc_info.value.status_code == 401
 

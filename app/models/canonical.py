@@ -72,6 +72,22 @@ class CanonicalBusPosition(TypedDict, total=False):
     route_code: str | None     # "14M"
     direction: str | None      # "G" (outbound) | "D" (return)
     nearest_stop_code: str | None
+    # Optional ARAC vehicle-profile enrichments (all nullable for compatibility).
+    operator_id: int | None
+    operator_name: str | None
+    vehicle_brand: str | None
+    model_year: int | None
+    vehicle_type: str | None
+    seating_capacity: int | None
+    full_capacity: int | None
+    accessible: bool | None
+    has_usb: bool | None
+    has_wifi: bool | None
+    has_bicycle_rack: bool | None
+    is_air_conditioned: bool | None
+    garage_code: str | None
+    garage_name: str | None
+    vehicle_software_version: int | None
     # NOTE: iett_soap_fleet uses CAPITALISED keys (KapiNo, Plaka, Enlem, Boylam)
     #       iett_soap_route_fleet uses lowercase (kapino, enlem, boylam)
     #       Both normalise to this canonical shape.
