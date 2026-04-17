@@ -1480,3 +1480,30 @@ class TestAracRouterHelpers:
             )
         assert exc_info.value.status_code == 401
 
+    def test_invalid_kapino_pattern_rejected(self, client: TestClient) -> None:
+        """Path params with invalid chars are rejected with 422."""
+        _HEADERS = {"X-Arac-Session-Id": "s", "X-Arac-Session-Key": "k"}
+        # Characters outside the allowed set must be rejected
+        resp = client.get("/v1/arac/fleet/!bad-kapino/missions", headers=_HEADERS)
+        assert resp.status_code == 422
+        # Over-length kapino must be rejected
+        resp2 = client.get(f"/v1/arac/fleet/{'A' * 41}/missions", headers=_HEADERS)
+        assert resp2.status_code == 422
+        # Non-numeric route_id must be rejected
+        resp3 = client.get("/v1/arac/routes/abc/stops", headers=_HEADERS)
+        assert resp3.status_code == 422
+        # Over-length route_id must be rejected
+        resp4 = client.get(f"/v1/arac/routes/{'1' * 11}/stops", headers=_HEADERS)
+        assert resp4.status_code == 422
+
+    def test_oversized_captcha_image_rejected(self, client: TestClient) -> None:
+        """captchaImageBase64 over 65,536 chars must be rejected with 422."""
+        resp = client.post(
+            "/v1/arac/session/auto-solve",
+            json={
+                "captchaId": "cid",
+                "captchaImageBase64": "A" * 65537,
+            },
+        )
+        assert resp.status_code == 422
+

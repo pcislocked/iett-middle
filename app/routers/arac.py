@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Path
 
 from app.deps import get_session
 from app.models.arac import (
@@ -242,7 +242,7 @@ async def get_arac_fleet(
 
 @router.get("/fleet/{kapino}", response_model=BusPosition)
 async def get_arac_bus(
-    kapino: str,
+    kapino: str = Path(..., pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,39}$"),
     credentials: tuple[str, str] = Depends(_require_arac_session_headers),
 ) -> BusPosition:
     session_id, session_key = credentials
@@ -255,7 +255,7 @@ async def get_arac_bus(
 
 @router.get("/fleet/{kapino}/missions", response_model=AracMissionsResponse)
 async def get_arac_missions(
-    kapino: str,
+    kapino: str = Path(..., pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,39}$"),
     credentials: tuple[str, str] = Depends(_require_arac_session_headers),
 ) -> AracMissionsResponse:
     session_id, session_key = credentials
@@ -297,7 +297,7 @@ async def get_arac_missions(
 
 @router.get("/routes/{route_id}/stops", response_model=list[AracRouteStop])
 async def get_arac_route_stops(
-    route_id: str,
+    route_id: str = Path(..., pattern=r"^\d{1,10}$"),
     credentials: tuple[str, str] = Depends(_require_arac_session_headers),
 ) -> list[AracRouteStop]:
     session_id, session_key = credentials
