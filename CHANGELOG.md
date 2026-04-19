@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.3.12] - 2026-04-19
+
+### Changed
+- GHCR Docker publish remains multi-arch (`linux/amd64` and `linux/arm64`).
+- OCR-enabled image install path now uses the PyTorch CPU index for `torch` and `torchvision` across both architectures.
+
+### Fixed
+- Prevented CUDA/NVIDIA runtime package pull-ins in OCR-enabled GHCR images, reducing image bloat risk while preserving ARM support.
+
+### Release Notes
+- Released as `v0.3.12`.
+
+---
+
 ## [0.3.11] - 2026-04-19
 
 ### Changed
