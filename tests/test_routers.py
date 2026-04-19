@@ -1567,6 +1567,11 @@ class TestAracRouterHelpers:
                 x_session_key=None,
             )
         assert exc_info.value.status_code == 401
+        detail = str(exc_info.value.detail)
+        assert "X-Arac-Session-Id" in detail
+        assert "X-Arac-Session-Key" in detail
+        assert "X-Session-Id" in detail
+        assert "X-Session-Key" in detail
 
     def test_invalid_kapino_pattern_rejected(self, client: TestClient) -> None:
         """Path params with invalid chars are rejected with 422."""

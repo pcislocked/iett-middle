@@ -172,7 +172,10 @@ def _require_arac_session_headers(
     if not session_id or not session_key:
         raise HTTPException(
             401,
-            detail="Missing ARAC session headers: X-Arac-Session-Id and X-Arac-Session-Key",
+            detail=(
+                "Missing ARAC session headers. Provide X-Arac-Session-Id and "
+                "X-Arac-Session-Key (or legacy X-Session-Id and X-Session-Key)."
+            ),
         )
     return session_id, session_key
 

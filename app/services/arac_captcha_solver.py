@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import itertools
+import threading
 from typing import Any
 
 from app.services.arac_client import AracApiError
@@ -10,6 +11,7 @@ from app.services.arac_client import AracApiError
 
 ALLOW_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 _OCR_READER: Any | None = None
+_OCR_READER_LOCK = threading.Lock()
 
 AMBIGUITY_MAP: dict[str, list[str]] = {
     "0": ["0", "O", "Q", "D"],
@@ -45,7 +47,9 @@ def _load_ocr_dependencies() -> tuple[Any, Any, Any]:
 def _get_reader(easyocr_module: Any) -> Any:
     global _OCR_READER  # noqa: PLW0603
     if _OCR_READER is None:
-        _OCR_READER = easyocr_module.Reader(["en"], gpu=False)
+        with _OCR_READER_LOCK:
+            if _OCR_READER is None:
+                _OCR_READER = easyocr_module.Reader(["en"], gpu=False)
     return _OCR_READER
 
 
