@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.3.15] - 2026-04-20
+
+### Fixed
+- ARAC captcha bootstrap now sends browser-like fetch headers (`Sec-Fetch-*`, `sec-ch-ua*`, and browser UA) to match upstream client expectations and avoid HTML 403 responses on `/api/session/captcha`.
+
+### Tests
+- Added ARAC header regression checks ensuring browser-like captcha bootstrap headers remain present in the client default header set.
+
+### Release Notes
+- Released as `v0.3.15`.
+
+---
+
 ## [0.3.14] - 2026-04-19
 
 ### Fixed
