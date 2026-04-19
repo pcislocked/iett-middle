@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     ntcapi_ybs_password: str = "n1!t8c7M1"
 
     log_level: str = "info"
+    enable_outgoing_trace: bool = False
     port: int = 8000
 
 

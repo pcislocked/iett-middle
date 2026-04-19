@@ -5,6 +5,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.3.11] - 2026-04-19
+
+### Changed
+- Docker build now uses a multi-stage layout so compiler/dev packages stay in the builder image, reducing final runtime image size.
+- ARAC OCR dependencies were split into `requirements-ocr.txt` and made Docker-optional via `INSTALL_OCR` build arg.
+- Outgoing aiohttp trace hooks are now opt-in via `ENABLE_OUTGOING_TRACE=false` by default to reduce request-path logging overhead.
+
+### Fixed
+- amd64/no-GPU Docker builds no longer need CUDA/NVIDIA wheel downloads when OCR is disabled (`INSTALL_OCR=0`) and use CPU-only torch wheels when OCR is enabled.
+
+### Release Notes
+- Released as `v0.3.11`.
+
+---
+
 ## [0.3.10] - 2026-04-19
 
 ### Added

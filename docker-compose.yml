@@ -1,6 +1,9 @@
 services:
   middle:
-    build: .
+    build:
+      context: .
+      args:
+        INSTALL_OCR: ${INSTALL_OCR:-1}
     image: iett-middle:latest
     restart: unless-stopped
     env_file: .env

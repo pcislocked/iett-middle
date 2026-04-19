@@ -11,7 +11,6 @@ import asyncio
 import json
 import re
 import sys
-import textwrap
 from datetime import datetime
 
 if sys.platform == "win32":
@@ -145,7 +144,9 @@ async def probe_all():
         soup2 = BeautifulSoup(html2, "html.parser")
         arr2 = []
         for item in soup2.select("div.line-item div.content:not(.content-header)"):
-            span = item.select_one("span"); b = item.select_one("b"); p = item.select_one("p")
+            span = item.select_one("span")
+            b = item.select_one("b")
+            p = item.select_one("p")
             if span and b and p:
                 m = re.search(r"(\d+)\s*dk", b.text)
                 arr2.append({"route": span.text.strip(), "eta_min": int(m.group(1)) if m else None})
@@ -157,7 +158,9 @@ async def probe_all():
         soup3 = BeautifulSoup(html3, "html.parser")
         arr3 = []
         for item in soup3.select("div.line-item div.content:not(.content-header)"):
-            span = item.select_one("span"); b = item.select_one("b"); p = item.select_one("p")
+            span = item.select_one("span")
+            b = item.select_one("b")
+            p = item.select_one("p")
             if span and b and p:
                 m = re.search(r"(\d+)\s*dk", b.text)
                 arr3.append({"route": span.text.strip(), "eta_min": int(m.group(1)) if m else None})

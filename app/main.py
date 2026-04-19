@@ -80,9 +80,10 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
         resolver=aiohttp.ThreadedResolver() if sys.platform == "win32" else None,
         limit=50,
     )
+    trace_configs = [_make_trace_config()] if settings.enable_outgoing_trace else []
     set_session(aiohttp.ClientSession(
         connector=connector,
-        trace_configs=[_make_trace_config()],
+        trace_configs=trace_configs,
         headers={"User-Agent": "iett-middle/1.0 (+https://github.com/pcislocked)"},
     ))
     logger.info("HTTP session started")
@@ -118,7 +119,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
 app = FastAPI(
     title="iett-middle",
     description="Smart caching proxy for IETT Istanbul public transit APIs.",
-    version="0.3.10",
+    version="0.3.11",
     lifespan=lifespan,
 )
 
