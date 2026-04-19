@@ -20,6 +20,7 @@ from app.services.arac_client import (
     _clip,
     _direction_letter_from_route_code,
     _extract_error_message,
+    _is_html_text,
     _to_bool,
     _to_float,
     _to_int,
@@ -103,7 +104,13 @@ class TestHelperFns:
         assert _extract_error_message({"message": "x"}) == "x"
         assert _extract_error_message({"error": "y"}) == "y"
         assert _extract_error_message({"detail": "z"}) == "z"
+        assert _extract_error_message({"detail": "<html><body>405 Not Allowed</body></html>"}) is None
         assert _extract_error_message({"oops": 1}) is None
+
+    def test_is_html_text(self) -> None:
+        assert _is_html_text("<html><body>oops</body></html>") is True
+        assert _is_html_text("<!doctype html><html>") is True
+        assert _is_html_text("Wrong CAPTCHA") is False
 
     def test_direction_letter_from_route_code(self) -> None:
         assert _direction_letter_from_route_code("14R_G_D0") == "G"
@@ -164,6 +171,33 @@ class TestRequestJson:
             m.post(_base_url("/session/create"), status=500, payload={"oops": 1})  # type: ignore[reportUnknownMemberType]
             with pytest.raises(AracApiError, match="failed with status 500"):
                 await client._request_json("POST", "/session/create", json_body={})
+
+    async def test_http_error_html_detail_is_sanitized(self, session: aiohttp.ClientSession) -> None:
+        client = AracClient(session)
+        with aioresponses() as m:
+            m.post(  # type: ignore[reportUnknownMemberType]
+                _base_url("/session/captcha"),
+                status=405,
+                payload={"detail": "<html><body>405 Not Allowed</body></html>"},
+            )
+            with pytest.raises(AracApiError, match="status 405") as exc_info:
+                await client._request_json("POST", "/session/captcha", raw_data="")
+        assert "<html" not in str(exc_info.value).lower()
+
+    async def test_http_error_text_html_405_raw_payload_is_sanitized(self, session: aiohttp.ClientSession) -> None:
+        client = AracClient(session)
+        with aioresponses() as m:
+            m.post(  # type: ignore[reportUnknownMemberType]
+                _base_url("/session/captcha"),
+                status=405,
+                body="<html><head><title>405</title></head><body>Not Allowed</body></html>",
+                headers={"Content-Type": "text/html"},
+            )
+            with pytest.raises(AracApiError, match="HTML error page") as exc_info:
+                await client._request_json("POST", "/session/captcha", raw_data="")
+        message = str(exc_info.value)
+        assert "status 405" in message
+        assert "<html" not in message.lower()
 
     async def test_network_exception_is_wrapped(self, session: aiohttp.ClientSession) -> None:
         client = AracClient(session)
@@ -265,6 +299,102 @@ class TestClientMethods:
         with patch.object(client, "_request_json", AsyncMock(return_value={"captchaId": "cid", "captchaImage": "img"})):
             payload = await client.get_captcha()
         assert payload == {"captchaId": "cid", "captchaImage": "img"}
+
+    async def test_get_captcha_falls_back_to_getpicture_on_405(self, session: aiohttp.ClientSession) -> None:
+        client = AracClient(session)
+        request_mock = AsyncMock(
+            side_effect=[
+                AracApiError("ARAC POST /session/captcha failed with status 405", status_code=405),
+                {"captchaId": "cid-2", "captchaImage": "BBB"},
+            ]
+        )
+        with patch.object(client, "_request_json", request_mock):
+            payload = await client.get_captcha()
+
+        assert payload == {"captchaId": "cid-2", "captchaImage": "BBB"}
+        assert request_mock.await_args_list[0].args[:2] == ("POST", "/session/captcha")
+        assert request_mock.await_args_list[1].args[:2] == ("POST", "/session/getpicture")
+
+    async def test_get_captcha_tries_get_after_both_post_attempts_fail(self, session: aiohttp.ClientSession) -> None:
+        client = AracClient(session)
+        request_mock = AsyncMock(
+            side_effect=[
+                AracApiError("ARAC POST /session/captcha failed with status 405", status_code=405),
+                AracApiError("ARAC POST /session/getpicture failed with status 404", status_code=404),
+                {"captchaId": "cid-3", "captchaImage": "CCC"},
+            ]
+        )
+        with patch.object(client, "_request_json", request_mock):
+            payload = await client.get_captcha()
+
+        assert payload == {"captchaId": "cid-3", "captchaImage": "CCC"}
+        assert request_mock.await_args_list[0].args[:2] == ("POST", "/session/captcha")
+        assert request_mock.await_args_list[1].args[:2] == ("POST", "/session/getpicture")
+        assert request_mock.await_args_list[2].args[:2] == ("GET", "/session/captcha")
+
+    async def test_get_captcha_stops_on_non_retryable_error(self, session: aiohttp.ClientSession) -> None:
+        client = AracClient(session)
+        request_mock = AsyncMock(
+            side_effect=[AracApiError("Wrong CAPTCHA", status_code=400)]
+        )
+        with patch.object(client, "_request_json", request_mock):
+            with pytest.raises(AracApiError, match="Wrong CAPTCHA"):
+                await client.get_captcha()
+
+        assert request_mock.await_count == 1
+        assert request_mock.await_args_list[0].args[:2] == ("POST", "/session/captcha")
+
+    async def test_get_captcha_stops_after_retryable_then_non_retryable_error(self, session: aiohttp.ClientSession) -> None:
+        client = AracClient(session)
+        request_mock = AsyncMock(
+            side_effect=[
+                AracApiError("ARAC POST /session/captcha failed with status 405", status_code=405),
+                AracApiError("Wrong CAPTCHA", status_code=400),
+            ]
+        )
+        with patch.object(client, "_request_json", request_mock):
+            with pytest.raises(AracApiError, match="Wrong CAPTCHA"):
+                await client.get_captcha()
+
+        assert request_mock.await_count == 2
+        assert request_mock.await_args_list[0].args[:2] == ("POST", "/session/captcha")
+        assert request_mock.await_args_list[1].args[:2] == ("POST", "/session/getpicture")
+
+    async def test_get_captcha_exhausts_all_attempts_and_raises_last_error(self, session: aiohttp.ClientSession) -> None:
+        client = AracClient(session)
+        request_mock = AsyncMock(
+            side_effect=[
+                AracApiError("ARAC POST /session/captcha failed with status 405", status_code=405),
+                AracApiError("ARAC POST /session/getpicture failed with status 405", status_code=405),
+                AracApiError("ARAC GET /session/captcha failed with status 405", status_code=405),
+                AracApiError("ARAC GET /session/getpicture failed with status 405", status_code=405),
+            ]
+        )
+        with patch.object(client, "_request_json", request_mock):
+            with pytest.raises(AracApiError, match="GET /session/getpicture"):
+                await client.get_captcha()
+
+        assert request_mock.await_count == 4
+        assert request_mock.await_args_list[0].args[:2] == ("POST", "/session/captcha")
+        assert request_mock.await_args_list[1].args[:2] == ("POST", "/session/getpicture")
+        assert request_mock.await_args_list[2].args[:2] == ("GET", "/session/captcha")
+        assert request_mock.await_args_list[3].args[:2] == ("GET", "/session/getpicture")
+
+    async def test_get_captcha_continues_when_payload_missing_then_accepts_later_attempt(self, session: aiohttp.ClientSession) -> None:
+        client = AracClient(session)
+        request_mock = AsyncMock(
+            side_effect=[
+                {"captchaId": "cid-only"},
+                {"captchaId": "cid-final", "captchaImage": "IMG"},
+            ]
+        )
+        with patch.object(client, "_request_json", request_mock):
+            payload = await client.get_captcha()
+
+        assert payload == {"captchaId": "cid-final", "captchaImage": "IMG"}
+        assert request_mock.await_count == 2
+        assert request_mock.await_args_list[0].args[:2] == ("POST", "/session/captcha")
+        assert request_mock.await_args_list[1].args[:2] == ("POST", "/session/getpicture")
 
     async def test_get_captcha_invalid_payloads(self, session: aiohttp.ClientSession) -> None:
         client = AracClient(session)
@@ -406,3 +536,21 @@ class TestClientMethods:
         with patch.object(client, "_fetch_encrypted_task", AsyncMock(return_value={"x": 1})):
             with pytest.raises(AracApiError, match="route-stops payload is not a list"):
                 await client.get_route_stops("16", session_id="sid", session_key="skey")
+
+
+class TestCaptchaRetryPolicy:
+    @pytest.mark.parametrize(
+        ("error", "expected"),
+        [
+            (AracApiError("no status"), True),
+            (AracApiError("upstream 500", status_code=500), True),
+            (AracApiError("method not allowed", status_code=405), True),
+            (AracApiError("unsupported media", status_code=415), True),
+            (AracApiError("returned non-JSON content", status_code=200), True),
+            (AracApiError("returned malformed JSON", status_code=200), True),
+            (AracApiError("HTML error page", status_code=400), True),
+            (AracApiError("Wrong CAPTCHA", status_code=400), False),
+        ],
+    )
+    def test_should_retry_captcha_fetch_matrix(self, error: AracApiError, expected: bool) -> None:
+        assert AracClient._should_retry_captcha_fetch(error) is expected
