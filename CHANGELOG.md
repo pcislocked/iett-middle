@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.3.14] - 2026-04-19
+
+### Fixed
+- ARAC captcha bootstrap now retries across `/session/captcha` and `/session/getpicture` with POST/GET fallback ordering, reducing upstream 405 breakage.
+- ARAC upstream HTML error pages are sanitized before surfacing as API errors.
+
+### Tests
+- Expanded ARAC captcha fallback branch coverage (retry policy matrix, non-retry stop path, full fallback exhaustion, and payload-shape continuation checks).
+
+### Release Notes
+- Released as `v0.3.14`.
+
+---
+
 ## [0.3.13] - 2026-04-19
 
 ### Changed
