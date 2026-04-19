@@ -84,10 +84,12 @@ class TestHelperFns:
         assert _to_int("7") == 7
         assert _to_int(5.1) == 5
         assert _to_int("bad") is None
+        assert _to_int(10**400) is None
 
     def test_to_float(self) -> None:
         assert _to_float("7.5") == pytest.approx(7.5)
         assert _to_float("bad") is None
+        assert _to_float(10**400) is None
 
     def test_to_bool(self) -> None:
         assert _to_bool(True) is True

@@ -66,7 +66,7 @@ POST /v1/arac/session/auto-solve              OCR candidate solve (+ optional se
 GET /v1/arac/fleet                            ARAC fleet snapshot (requires session headers)
 GET /v1/arac/fleet/{kapino}                   ARAC single bus profile (requires session headers)
 GET /v1/arac/fleet/{kapino}/missions          ARAC mission timeline (requires session headers)
-GET /v1/arac/routes/{routeId}/stops           ARAC route stops (requires session headers)
+GET /v1/arac/routes/{route_id}/stops          ARAC route stops (requires session headers)
 
 GET /v1/stops/search?q={name}                 stop search
 GET /v1/stops/{dcode}/arrivals                live ETAs at a stop (cached 20s)
