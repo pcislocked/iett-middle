@@ -102,6 +102,9 @@ pytest
 
 Point at a remote Docker host or run locally:
 
+- GHCR published image targets linux/amd64 and linux/arm64.
+- OCR path uses CPU-only PyTorch wheels (no CUDA/NVIDIA runtime packages).
+
 ```bash
 # From repo root (contains docker-compose.yml)
 docker compose build middle

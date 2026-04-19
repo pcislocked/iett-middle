@@ -2,7 +2,6 @@
 FROM python:3.12-slim AS builder
 
 ARG INSTALL_OCR=1
-ARG TARGETARCH
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
@@ -21,12 +20,10 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 RUN pip install --no-cache-dir -r requirements.txt \
     && if [ "$INSTALL_OCR" = "1" ]; then \
-        if [ "$TARGETARCH" = "amd64" ]; then \
-            pip install --no-cache-dir \
-              --index-url https://download.pytorch.org/whl/cpu \
-              --extra-index-url https://pypi.org/simple \
-              torch torchvision; \
-        fi; \
+                # Install CPU-only torch wheels to avoid CUDA/NVIDIA dependencies.
+                pip install --no-cache-dir \
+                    --index-url https://download.pytorch.org/whl/cpu \
+                    torch torchvision; \
         pip install --no-cache-dir -r requirements-ocr.txt; \
     fi
 
