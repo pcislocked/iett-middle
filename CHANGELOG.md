@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [0.4.0] - 2026-04-18 (draft)
+## [0.3.10] - 2026-04-19
 
 ### Added
 - ARAC user-session router and endpoints under `/v1/arac`:
@@ -32,7 +32,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 - `BusPosition` now includes optional ARAC profile fields (`operator_id`, `operator_name`, `vehicle_brand`, `model_year`, `vehicle_type`, `seating_capacity`, `full_capacity`, `accessible`, `has_usb`, `has_wifi`, `has_bicycle_rack`, `is_air_conditioned`, `garage_code`, `garage_name`, `vehicle_software_version`).
-- `app/main.py` now registers the ARAC router and exposes v0.4 API surface in OpenAPI.
+- `app/main.py` now registers the ARAC router and exposes the ARAC API surface in OpenAPI.
 - Auto-solve default mode is now guess-only (`createSession=false` by default), aligned with user-first captcha flow.
 - README endpoint catalog and config docs updated for ARAC routes and no-storage session handling.
 
@@ -49,10 +49,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Tests
 - Full middle test suite now includes ARAC endpoint, service, and auto-captcha coverage expansions.
-- Current full suite status: `369 passed`.
+- Current full suite status: `373 passed`.
 
 ### Release Notes
-- This entry is prepared as a draft release candidate and is not yet tagged/published.
+- Released as `v0.3.10`.
 
 ---
 
