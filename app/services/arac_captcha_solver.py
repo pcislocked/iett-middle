@@ -31,6 +31,25 @@ AMBIGUITY_MAP: dict[str, list[str]] = {
 }
 
 
+def _configure_torch_threads() -> None:
+    from app.config import settings  # noqa: PLC0415
+
+    threads = max(1, int(settings.arac_auto_solve_torch_threads))
+    try:
+        import torch  # type: ignore[import-not-found]
+    except Exception:  # noqa: BLE001
+        # OCR can still run without torch thread tuning in constrained/test setups.
+        return
+
+    try:
+        torch.set_num_threads(threads)
+        if hasattr(torch, "set_num_interop_threads"):
+            torch.set_num_interop_threads(threads)
+    except RuntimeError:
+        # PyTorch only allows setting these once in-process.
+        pass
+
+
 def _load_ocr_dependencies() -> tuple[Any, Any, Any]:
     try:
         import cv2  # type: ignore[import-not-found]
@@ -41,6 +60,7 @@ def _load_ocr_dependencies() -> tuple[Any, Any, Any]:
             "Auto-solve requires easyocr, opencv-python-headless, and numpy",
             status_code=503,
         ) from exc
+    _configure_torch_threads()
     return cv2, easyocr, np
 
 

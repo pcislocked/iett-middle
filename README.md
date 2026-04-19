@@ -4,7 +4,7 @@
 [![Coverage](https://img.shields.io/badge/coverage-report%20in%20CI-informational)](#running-tests)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
-[![Version](https://img.shields.io/badge/version-0.3.15-orange)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.16-orange)](./CHANGELOG.md)
 
 Smart caching proxy for Istanbul IETT public transit APIs.
 
@@ -52,6 +52,10 @@ Copy `.env.example` to `.env` and edit as needed:
 | `CACHE_TTL_ARRIVALS` | `20` | Arrivals cache TTL |
 | `FLEET_CACHE_MAX_AGE` | `900` | Force fleet cache refresh every 15 min (prevents 6h+ stale FILO data) |
 | `FLEET_MANUAL_REFRESH_COOLDOWN` | `10` | Minimum seconds between accepted `POST /v1/fleet/refresh` calls |
+| `ARAC_AUTO_SOLVE_ENABLED` | `true` | Enables `POST /v1/arac/session/auto-solve` (set `false` to force manual captcha only) |
+| `ARAC_AUTO_SOLVE_MAX_CONCURRENCY` | `1` | Max concurrent OCR solves; protects API responsiveness under load |
+| `ARAC_AUTO_SOLVE_QUEUE_WAIT_SECONDS` | `0.15` | Max wait for an OCR slot before returning 429 busy |
+| `ARAC_AUTO_SOLVE_TORCH_THREADS` | `1` | CPU thread cap used by OCR runtime to reduce spikes |
 | `ENABLE_OUTGOING_TRACE` | `false` | Enable verbose per-request outgoing aiohttp trace logs |
 | `PORT` | `8000` | Listen port |
 
