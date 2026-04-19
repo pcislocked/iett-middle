@@ -14,11 +14,20 @@ from app.utils.coerce import _as_text, _to_bool, _to_float, _to_int
 
 
 _BASE_HEADERS = {
-    "User-Agent": "iett-middle/1.0 (+https://github.com/pcislocked)",
+    # ARAC captcha endpoints may reject non-browser-like requests with HTML 403 pages.
+    # Mirror the public web client's fetch profile to keep captcha bootstrap stable.
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
     "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
     "Content-Type": "application/json",
     "Origin": "https://arac.iett.gov.tr",
     "Referer": "https://arac.iett.gov.tr/",
+    "Sec-Fetch-Site": "same-origin",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Dest": "empty",
+    "sec-ch-ua": '"Chromium";v="135", "Not-A.Brand";v="8"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"Windows"',
 }
 
 
