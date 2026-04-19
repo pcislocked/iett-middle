@@ -43,12 +43,29 @@ def _clip(text: str, limit: int = 500) -> str:
     return text[:limit] + "...<truncated>"
 
 
+def _is_html_text(value: str) -> bool:
+    sample = value.strip().lower()
+    if not sample:
+        return False
+    head = sample[:400]
+    return (
+        "<html" in head
+        or "<!doctype html" in head
+        or "<body" in head
+        or "<head" in head
+        or "<center" in head
+    )
+
+
 def _extract_error_message(payload: Any) -> str | None:
     if isinstance(payload, dict):
         for key in ("message", "error", "detail"):
             value = payload.get(key)
             if isinstance(value, str) and value.strip():
-                return value.strip()
+                text = value.strip()
+                if _is_html_text(text):
+                    continue
+                return text
     return None
 
 
@@ -122,13 +139,35 @@ class AracClient:
                         )
 
                 if status_code >= 400:
-                    detail = _extract_error_message(payload) or f"ARAC {method} {path} failed with status {status_code}"
+                    detail = _extract_error_message(payload)
+                    if not detail and isinstance(payload, dict):
+                        raw_text = payload.get("_raw")
+                        if isinstance(raw_text, str) and _is_html_text(raw_text):
+                            detail = f"ARAC {method} {path} failed with status {status_code} (HTML error page)"
+                    if not detail:
+                        detail = f"ARAC {method} {path} failed with status {status_code}"
                     raise AracApiError(detail, status_code=status_code, payload=payload)
                 return payload
         except AracApiError:
             raise
         except Exception as exc:  # noqa: BLE001
             raise AracApiError(f"ARAC {method} {path} failed: {exc}") from exc
+
+    @staticmethod
+    def _should_retry_captcha_fetch(exc: AracApiError) -> bool:
+        code = exc.status_code
+        if code is None:
+            return True
+        if code >= 500:
+            return True
+        if code in {404, 405, 415}:
+            return True
+        lowered = str(exc).lower()
+        if "non-json content" in lowered or "malformed json" in lowered:
+            return True
+        if "html error page" in lowered:
+            return True
+        return False
 
     @staticmethod
     def _prepare_encryption_bundle(pubkey_b64: str) -> tuple[bytes, str]:
@@ -248,15 +287,39 @@ class AracClient:
             return None
 
     async def get_captcha(self) -> dict[str, str]:
-        payload = await self._request_json("POST", "/session/captcha", raw_data="")
-        if not isinstance(payload, dict):
-            raise AracApiError("ARAC captcha response is not an object")
+        attempts: tuple[tuple[str, str, str | bytes | None], ...] = (
+            ("POST", "/session/captcha", ""),
+            ("POST", "/session/getpicture", ""),
+            ("GET", "/session/captcha", None),
+            ("GET", "/session/getpicture", None),
+        )
 
-        captcha_id = _as_text(payload.get("captchaId"))
-        captcha_image = _as_text(payload.get("captchaImage"))
-        if not captcha_id or not captcha_image:
-            raise AracApiError("ARAC captcha response missing captchaId or captchaImage")
-        return {"captchaId": captcha_id, "captchaImage": captcha_image}
+        last_error: AracApiError | None = None
+        for method, path, raw_data in attempts:
+            try:
+                payload = await self._request_json(method, path, raw_data=raw_data)
+            except AracApiError as exc:
+                last_error = exc
+                if not self._should_retry_captcha_fetch(exc):
+                    break
+                continue
+
+            if not isinstance(payload, dict):
+                last_error = AracApiError(f"ARAC captcha response from {path} is not an object")
+                continue
+
+            captcha_id = _as_text(payload.get("captchaId"))
+            captcha_image = _as_text(payload.get("captchaImage"))
+            if captcha_id and captcha_image:
+                return {"captchaId": captcha_id, "captchaImage": captcha_image}
+
+            last_error = AracApiError(
+                f"ARAC captcha response from {path} missing captchaId or captchaImage"
+            )
+
+        if last_error is not None:
+            raise last_error
+        raise AracApiError("ARAC captcha challenge could not be fetched")
 
     async def create_session(self, captcha_id: str, captcha_answer: str) -> dict[str, str]:
         payload = await self._request_json(

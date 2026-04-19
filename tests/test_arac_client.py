@@ -20,6 +20,7 @@ from app.services.arac_client import (
     _clip,
     _direction_letter_from_route_code,
     _extract_error_message,
+    _is_html_text,
     _to_bool,
     _to_float,
     _to_int,
@@ -103,7 +104,13 @@ class TestHelperFns:
         assert _extract_error_message({"message": "x"}) == "x"
         assert _extract_error_message({"error": "y"}) == "y"
         assert _extract_error_message({"detail": "z"}) == "z"
+        assert _extract_error_message({"detail": "<html><body>405 Not Allowed</body></html>"}) is None
         assert _extract_error_message({"oops": 1}) is None
+
+    def test_is_html_text(self) -> None:
+        assert _is_html_text("<html><body>oops</body></html>") is True
+        assert _is_html_text("<!doctype html><html>") is True
+        assert _is_html_text("Wrong CAPTCHA") is False
 
     def test_direction_letter_from_route_code(self) -> None:
         assert _direction_letter_from_route_code("14R_G_D0") == "G"
@@ -164,6 +171,18 @@ class TestRequestJson:
             m.post(_base_url("/session/create"), status=500, payload={"oops": 1})  # type: ignore[reportUnknownMemberType]
             with pytest.raises(AracApiError, match="failed with status 500"):
                 await client._request_json("POST", "/session/create", json_body={})
+
+    async def test_http_error_html_detail_is_sanitized(self, session: aiohttp.ClientSession) -> None:
+        client = AracClient(session)
+        with aioresponses() as m:
+            m.post(  # type: ignore[reportUnknownMemberType]
+                _base_url("/session/captcha"),
+                status=405,
+                payload={"detail": "<html><body>405 Not Allowed</body></html>"},
+            )
+            with pytest.raises(AracApiError, match="status 405") as exc_info:
+                await client._request_json("POST", "/session/captcha", raw_data="")
+        assert "<html" not in str(exc_info.value).lower()
 
     async def test_network_exception_is_wrapped(self, session: aiohttp.ClientSession) -> None:
         client = AracClient(session)
@@ -265,6 +284,21 @@ class TestClientMethods:
         with patch.object(client, "_request_json", AsyncMock(return_value={"captchaId": "cid", "captchaImage": "img"})):
             payload = await client.get_captcha()
         assert payload == {"captchaId": "cid", "captchaImage": "img"}
+
+    async def test_get_captcha_falls_back_to_getpicture_on_405(self, session: aiohttp.ClientSession) -> None:
+        client = AracClient(session)
+        request_mock = AsyncMock(
+            side_effect=[
+                AracApiError("ARAC POST /session/captcha failed with status 405", status_code=405),
+                {"captchaId": "cid-2", "captchaImage": "BBB"},
+            ]
+        )
+        with patch.object(client, "_request_json", request_mock):
+            payload = await client.get_captcha()
+
+        assert payload == {"captchaId": "cid-2", "captchaImage": "BBB"}
+        assert request_mock.await_args_list[0].args[:2] == ("POST", "/session/captcha")
+        assert request_mock.await_args_list[1].args[:2] == ("POST", "/session/getpicture")
 
     async def test_get_captcha_invalid_payloads(self, session: aiohttp.ClientSession) -> None:
         client = AracClient(session)
