@@ -126,6 +126,17 @@ class TestRequestJson:
         assert headers["X-Session-Id"] == "sid"
         assert headers["X-Session-Key"] == "skey"
 
+    def test_headers_include_browser_fetch_hints(self, session: aiohttp.ClientSession) -> None:
+        client = AracClient(session)
+        headers = client._headers()
+        assert "Mozilla/5.0" in headers["User-Agent"]
+        assert headers["Origin"] == "https://arac.iett.gov.tr"
+        assert headers["Referer"] == "https://arac.iett.gov.tr/"
+        assert headers["Sec-Fetch-Site"] == "same-origin"
+        assert headers["Sec-Fetch-Mode"] == "cors"
+        assert headers["Sec-Fetch-Dest"] == "empty"
+        assert headers["sec-ch-ua-mobile"] == "?0"
+
     async def test_success_json(self, session: aiohttp.ClientSession) -> None:
         client = AracClient(session)
         with aioresponses() as m:
