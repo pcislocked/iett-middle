@@ -9,17 +9,96 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}   # pcislocked/iett-middle
 
+concurrency:
+  group: docker-${{ github.sha }}
+  cancel-in-progress: true
+
 jobs:
-  build-and-push:
+  build-amd64:
+    if: >
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.ref == 'refs/heads/master' && !startsWith(github.event.head_commit.message, 'release: v'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build amd64 image by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=middle-amd64
+          cache-to: type=gha,mode=min,scope=middle-amd64
+
+  build-arm64:
+    if: >
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.ref == 'refs/heads/master' && !startsWith(github.event.head_commit.message, 'release: v'))
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build arm64 image by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/arm64
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=middle-arm64
+          cache-to: type=gha,mode=min,scope=middle-arm64
+
+  merge-manifest:
+    if: >
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.ref == 'refs/heads/master' && !startsWith(github.event.head_commit.message, 'release: v'))
+    runs-on: ubuntu-latest
+    needs:
+      - build-amd64
+      - build-arm64
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -36,19 +115,35 @@ jobs:
             type=semver,pattern={{version}}
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Create and push multi-arch manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          image_ref="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          amd64_ref="${image_ref}@${{ needs.build-amd64.outputs.digest }}"
+          arm64_ref="${image_ref}@${{ needs.build-arm64.outputs.digest }}"
+
+          while IFS= read -r tag; do
+            if [ -z "$tag" ]; then
+              continue
+            fi
+            docker buildx imagetools create \
+              --tag "$tag" \
+              "$amd64_ref" \
+              "$arm64_ref"
+          done <<< "${{ steps.meta.outputs.tags }}"
+
+      - name: Verify published manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r tag; do
+            if [ -z "$tag" ]; then
+              continue
+            fi
+            docker buildx imagetools inspect "$tag"
+          done <<< "${{ steps.meta.outputs.tags }}"
