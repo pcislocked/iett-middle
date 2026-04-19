@@ -27,6 +27,22 @@ class BusPosition(BaseModel):
     direction_letter: str | None = None   # "G" or "D", derived from guzergahkodu
     nearest_stop: str | None = None
     stop_sequence: int | None = None      # current stop index along the route
+    # Optional ARAC enrichments. Kept nullable for backward compatibility.
+    operator_id: int | None = None
+    operator_name: str | None = None
+    vehicle_brand: str | None = None
+    model_year: int | None = None
+    vehicle_type: str | None = None
+    seating_capacity: int | None = None
+    full_capacity: int | None = None
+    accessible: bool | None = None
+    has_usb: bool | None = None
+    has_wifi: bool | None = None
+    has_bicycle_rack: bool | None = None
+    is_air_conditioned: bool | None = None
+    garage_code: str | None = None
+    garage_name: str | None = None
+    vehicle_software_version: int | None = None
 
 
 class BusPositionWithTrail(BusPosition):

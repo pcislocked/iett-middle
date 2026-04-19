@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.deps import cancel_fleet_refresh_task, close_session, set_session
-from app.routers import fleet, garages, routes, stops, traffic
+from app.routers import arac, fleet, garages, routes, stops, traffic
 
 logger = logging.getLogger(__name__)
 _outgoing = logging.getLogger("iett.outgoing")
@@ -118,7 +118,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
 app = FastAPI(
     title="iett-middle",
     description="Smart caching proxy for IETT Istanbul public transit APIs.",
-    version="0.3.9",
+    version="0.3.10",
     lifespan=lifespan,
 )
 
@@ -132,6 +132,7 @@ app.add_middleware(
 app.include_router(stops.router, prefix="/v1/stops", tags=["stops"])
 app.include_router(routes.router, prefix="/v1/routes", tags=["routes"])
 app.include_router(fleet.router, prefix="/v1/fleet", tags=["fleet"])
+app.include_router(arac.router, prefix="/v1/arac", tags=["arac"])
 app.include_router(garages.router, prefix="/v1/garages", tags=["garages"])
 app.include_router(traffic.router, prefix="/v1/traffic", tags=["traffic"])
 

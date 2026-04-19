@@ -5,6 +5,57 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.3.10] - 2026-04-19
+
+### Added
+- ARAC user-session router and endpoints under `/v1/arac`:
+  - `POST /v1/arac/session/captcha`
+  - `POST /v1/arac/session/getpicture` (alias)
+  - `POST /v1/arac/session/create`
+  - `POST /v1/arac/session/response` (alias)
+  - `POST /v1/arac/session/auto-solve`
+  - `GET /v1/arac/fleet`
+  - `GET /v1/arac/fleet/{kapino}`
+  - `GET /v1/arac/fleet/{kapino}/missions`
+  - `GET /v1/arac/routes/{route_id}/stops`
+- New ARAC client service (`app/services/arac_client.py`) with:
+  - captcha/session bootstrap
+  - encrypted task key exchange (`/task/crypto/pubkey`)
+  - RSA OAEP + AES-GCM decryption flow for task endpoints
+  - normalization for fleet, missions, and route-stops payloads
+- New ARAC captcha solver service (`app/services/arac_captcha_solver.py`) using bounded OCR candidate strategy (masked/original/threshold plus ambiguity expansion).
+- New ARAC Pydantic models (`app/models/arac.py`) for session, missions, route-stops, and auto-solve contract payloads.
+- Canonical ARAC enrichment fields added to `CanonicalBusPosition` for schema parity with integration docs.
+- Dedicated ARAC service test modules:
+  - `tests/test_arac_client.py`
+  - `tests/test_arac_captcha_solver.py`
+
+### Changed
+- `BusPosition` now includes optional ARAC profile fields (`operator_id`, `operator_name`, `vehicle_brand`, `model_year`, `vehicle_type`, `seating_capacity`, `full_capacity`, `accessible`, `has_usb`, `has_wifi`, `has_bicycle_rack`, `is_air_conditioned`, `garage_code`, `garage_name`, `vehicle_software_version`).
+- `app/main.py` now registers the ARAC router and exposes the ARAC API surface in OpenAPI.
+- Auto-solve default mode is now guess-only (`createSession=false` by default), aligned with user-first captcha flow.
+- README endpoint catalog and config docs updated for ARAC routes and no-storage session handling.
+
+### Security
+- ARAC session credentials are request-scoped and client-owned.
+- No persistence layer was added for ARAC `sessionId` / `sessionKey`.
+
+### Dependencies
+- Added encrypted/auth-flow dependencies for ARAC automation:
+  - `cryptography>=42.0`
+  - `numpy>=1.26`
+  - `opencv-python-headless>=4.10`
+  - `easyocr>=1.7`
+
+### Tests
+- Full middle test suite now includes ARAC endpoint, service, and auto-captcha coverage expansions.
+- Current full suite status: `373 passed`.
+
+### Release Notes
+- Released as `v0.3.10`.
+
+---
+
 ## [0.3.9] - 2026-04-16
 
 ### Changed
