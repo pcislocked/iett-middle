@@ -44,10 +44,11 @@ def _clip(text: str, limit: int = 500) -> str:
 
 
 def _is_html_text(value: str) -> bool:
-    sample = value.strip().lower()
-    if not sample:
+    # Keep this bounded for large upstream payloads.
+    preview = value[:1200].lstrip()
+    if not preview:
         return False
-    head = sample[:400]
+    head = preview[:400].lower()
     return (
         "<html" in head
         or "<!doctype html" in head
