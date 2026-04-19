@@ -4,7 +4,7 @@
 [![Coverage](https://img.shields.io/badge/coverage-report%20in%20CI-informational)](#running-tests)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
-[![Version](https://img.shields.io/badge/version-0.3.10-orange)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.11-orange)](./CHANGELOG.md)
 
 Smart caching proxy for Istanbul IETT public transit APIs.
 
@@ -28,6 +28,8 @@ python -m venv .venv
 
 pip install -r requirements.txt
 pip install -r requirements-dev.txt
+# Optional OCR dependencies for /v1/arac/session/auto-solve
+pip install -r requirements-ocr.txt
 
 uvicorn app.main:app --reload --port 8000
 ```
@@ -50,6 +52,7 @@ Copy `.env.example` to `.env` and edit as needed:
 | `CACHE_TTL_ARRIVALS` | `20` | Arrivals cache TTL |
 | `FLEET_CACHE_MAX_AGE` | `900` | Force fleet cache refresh every 15 min (prevents 6h+ stale FILO data) |
 | `FLEET_MANUAL_REFRESH_COOLDOWN` | `10` | Minimum seconds between accepted `POST /v1/fleet/refresh` calls |
+| `ENABLE_OUTGOING_TRACE` | `false` | Enable verbose per-request outgoing aiohttp trace logs |
 | `PORT` | `8000` | Listen port |
 
 ## API endpoints
@@ -106,6 +109,16 @@ docker compose up -d middle
 
 # Logs
 docker compose logs -f middle
+```
+
+`INSTALL_OCR` build arg controls optional ARAC OCR stack install:
+
+```bash
+# Keep full behavior (default): installs OCR dependencies.
+INSTALL_OCR=1 docker compose build middle
+
+# Slim image: skips OCR dependencies (auto-solve endpoint returns 503).
+INSTALL_OCR=0 docker compose build middle
 ```
 
 ## Known quirks

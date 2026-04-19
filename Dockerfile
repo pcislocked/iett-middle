@@ -1,16 +1,49 @@
 # iett-middle/Dockerfile
-FROM python:3.12-slim AS base
+FROM python:3.12-slim AS builder
 
-# aiohttp C extensions + lxml + bs4 build deps
+ARG INSTALL_OCR=1
+ARG TARGETARCH
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# Build dependencies for aiohttp/lxml wheels.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         gcc libxml2-dev libxslt-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt requirements-ocr.txt ./
 
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+RUN pip install --no-cache-dir -r requirements.txt \
+    && if [ "$INSTALL_OCR" = "1" ]; then \
+        if [ "$TARGETARCH" = "amd64" ]; then \
+            pip install --no-cache-dir \
+              --index-url https://download.pytorch.org/whl/cpu \
+              --extra-index-url https://pypi.org/simple \
+              torch torchvision; \
+        fi; \
+        pip install --no-cache-dir -r requirements-ocr.txt; \
+    fi
+
+FROM python:3.12-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:$PATH"
+
+# Runtime shared libs used by lxml wheels.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libxml2 libxslt1.1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY --from=builder /opt/venv /opt/venv
 COPY . .
 
 RUN adduser --disabled-password --gecos "" appuser \
