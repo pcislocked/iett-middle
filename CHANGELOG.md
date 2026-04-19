@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.3.13] - 2026-04-19
+
+### Changed
+- Version bump for GHCR publish so server-side pull testing can target an explicit tag.
+
+### Release Notes
+- Released as `v0.3.13`.
+
+---
+
 ## [0.3.12] - 2026-04-19
 
 ### Changed
