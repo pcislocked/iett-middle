@@ -23,6 +23,7 @@ from app.models.arac import (
 from app.models.bus import BusPosition
 from app.services.arac_captcha_solver import collect_captcha_candidates_from_base64
 from app.services.arac_client import AracApiError, AracClient
+from app.utils.coerce import _as_text as _as_str, _to_bool as _as_bool, _to_int as _as_int
 
 router = APIRouter()
 
@@ -34,38 +35,6 @@ def _status_from_arac_error(exc: AracApiError, fallback: int = 502) -> int:
     if 400 <= code <= 599:
         return code
     return fallback
-
-
-def _as_int(value: Any) -> int | None:
-    try:
-        if value is None:
-            return None
-        return int(float(value))
-    except (TypeError, ValueError):
-        return None
-
-
-def _as_bool(value: Any) -> bool | None:
-    if isinstance(value, bool):
-        return value
-    if value is None:
-        return None
-    if isinstance(value, (int, float)):
-        return bool(value)
-    if isinstance(value, str):
-        lowered = value.strip().lower()
-        if lowered in {"true", "1", "yes", "y"}:
-            return True
-        if lowered in {"false", "0", "no", "n"}:
-            return False
-    return None
-
-
-def _as_str(value: Any) -> str | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text or None
 
 
 def _ms_to_iso(value: int | None) -> str | None:

@@ -10,6 +10,7 @@ import aiohttp
 from app.config import settings
 from app.models.arac import AracRouteStop
 from app.models.bus import BusPosition
+from app.utils.coerce import _as_text, _to_bool, _to_float, _to_int
 
 
 _BASE_HEADERS = {
@@ -40,47 +41,6 @@ def _clip(text: str, limit: int = 500) -> str:
     if len(text) <= limit:
         return text
     return text[:limit] + "...<truncated>"
-
-
-def _as_text(value: Any) -> str | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text or None
-
-
-def _to_int(value: Any) -> int | None:
-    try:
-        if value is None:
-            return None
-        return int(float(value))
-    except (TypeError, ValueError):
-        return None
-
-
-def _to_float(value: Any) -> float | None:
-    try:
-        if value is None:
-            return None
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _to_bool(value: Any) -> bool | None:
-    if isinstance(value, bool):
-        return value
-    if value is None:
-        return None
-    if isinstance(value, (int, float)):
-        return bool(value)
-    if isinstance(value, str):
-        lowered = value.strip().lower()
-        if lowered in {"true", "1", "yes", "y"}:
-            return True
-        if lowered in {"false", "0", "no", "n"}:
-            return False
-    return None
 
 
 def _extract_error_message(payload: Any) -> str | None:
