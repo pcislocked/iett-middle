@@ -5,6 +5,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.3.16] - 2026-04-20
+
+### Fixed
+- Fleet freshness timestamps now use timezone-aware UTC end-to-end, preventing false multi-hour age drift in clients.
+- `POST /v1/arac/session/auto-solve` now supports bounded concurrency and fast queue timeout backpressure to protect API responsiveness under OCR load.
+- OCR runtime now applies a best-effort torch CPU thread cap to reduce peak CPU spikes during solve operations.
+
+### Tests
+- Added ARAC auto-solve router tests for disabled mode (`503`) and busy queue rejection (`429`).
+
+### Release Notes
+- Released as `v0.3.16`.
+
+---
+
 ## [0.3.15] - 2026-04-20
 
 ### Fixed

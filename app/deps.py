@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import math
 from collections import deque
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
@@ -96,7 +96,7 @@ async def ensure_fleet_fresh(max_age_seconds: int = 30) -> None:
     global _fleet_refresh_task  # noqa: PLW0603
 
     if _fleet_updated_at is not None:
-        age = (datetime.now() - _fleet_updated_at).total_seconds()
+        age = (datetime.now(UTC) - _fleet_updated_at).total_seconds()
         if age < max_age_seconds:
             return  # fresh enough
 
@@ -168,7 +168,7 @@ def update_fleet(buses: list[BusPosition]) -> None:  # noqa: C901
         if b.route_code:
             _kapino_last_route[k.upper()] = b.route_code.strip().upper()
 
-    _fleet_updated_at = datetime.now()
+    _fleet_updated_at = datetime.now(UTC)
 
 
 # ---------------------------------------------------------------------------
@@ -187,7 +187,7 @@ def update_stop_index(stops: list[NearbyStop]) -> None:  # type: ignore[name-def
     global _stop_index, _stop_by_code, _stop_index_updated_at  # noqa: PLW0603
     _stop_index = [s.model_dump() for s in stops]
     _stop_by_code = {s["stop_code"]: s for s in _stop_index}
-    _stop_index_updated_at = datetime.now()
+    _stop_index_updated_at = datetime.now(UTC)
 
 
 def get_stop_index_updated_at() -> datetime | None:

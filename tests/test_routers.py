@@ -4,6 +4,7 @@ All external I/O is patched (IettClient methods, deps store functions).
 """
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -1161,6 +1162,30 @@ class TestAracSession:
                 json={"captchaId": "cid-5", "captchaImageBase64": "Q0ND"},
             )
         assert resp.status_code == 503
+
+    def test_auto_solve_returns_503_when_disabled(self, client: TestClient) -> None:
+        with patch("app.config.settings.arac_auto_solve_enabled", False):
+            resp = client.post(
+                "/v1/arac/session/auto-solve",
+                json={"captchaId": "cid-5", "captchaImageBase64": "Q0ND"},
+            )
+        assert resp.status_code == 503
+        assert "disabled" in resp.json()["detail"]
+
+    def test_auto_solve_returns_429_when_busy(self, client: TestClient) -> None:
+        mock_arac = MagicMock()
+        with (
+            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+            patch("app.config.settings.arac_auto_solve_queue_wait_seconds", 0.01),
+            patch("app.routers.arac._get_auto_solve_gate", return_value=asyncio.Semaphore(0)),
+        ):
+            resp = client.post(
+                "/v1/arac/session/auto-solve",
+                json={"captchaId": "cid-5", "captchaImageBase64": "Q0ND"},
+            )
+        assert resp.status_code == 429
+        assert "busy" in resp.json()["detail"]
 
     def test_auto_solve_returns_503_when_solver_times_out(self, client: TestClient) -> None:
         mock_arac = MagicMock()
