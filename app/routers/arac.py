@@ -1,19 +1,13 @@
 """ARAC router — /v1/arac (user-session-backed endpoints)."""
 from __future__ import annotations
 
-import asyncio
-import threading
 from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Path
-from fastapi.concurrency import run_in_threadpool
 
-from app.config import settings
 from app.deps import get_session
 from app.models.arac import (
-    AracAutoSolveRequest,
-    AracAutoSolveResponse,
     AracCaptchaResponse,
     AracMissionItem,
     AracMissionsResponse,
@@ -23,24 +17,10 @@ from app.models.arac import (
     AracSessionCreateResponse,
 )
 from app.models.bus import BusPosition
-from app.services.arac_captcha_solver import collect_captcha_candidates_from_base64
 from app.services.arac_client import AracApiError, AracClient
 from app.utils.coerce import _as_text as _as_str, _to_bool as _as_bool, _to_int as _as_int
 
 router = APIRouter()
-_AUTO_SOLVE_GATE: asyncio.Semaphore | None = None
-_AUTO_SOLVE_GATE_SIZE = 0
-_AUTO_SOLVE_GATE_LOCK = threading.Lock()
-
-
-def _get_auto_solve_gate() -> asyncio.Semaphore:
-    slots = max(1, int(settings.arac_auto_solve_max_concurrency))
-    global _AUTO_SOLVE_GATE, _AUTO_SOLVE_GATE_SIZE  # noqa: PLW0603
-    with _AUTO_SOLVE_GATE_LOCK:
-        if _AUTO_SOLVE_GATE is None or _AUTO_SOLVE_GATE_SIZE != slots:
-            _AUTO_SOLVE_GATE = asyncio.Semaphore(slots)
-            _AUTO_SOLVE_GATE_SIZE = slots
-    return _AUTO_SOLVE_GATE
 
 
 def _status_from_arac_error(exc: AracApiError, fallback: int = 502) -> int:
@@ -203,113 +183,6 @@ async def create_arac_session(payload: AracSessionCreateRequest) -> AracSessionC
 async def respond_arac_captcha(payload: AracSessionCreateRequest) -> AracSessionCreateResponse:
     """Alias for captcha response submission endpoint."""
     return await create_arac_session(payload)
-
-
-@router.post("/session/auto-solve", response_model=AracAutoSolveResponse)
-async def auto_solve_arac_session(payload: AracAutoSolveRequest) -> AracAutoSolveResponse:
-    if not settings.arac_auto_solve_enabled:
-        raise HTTPException(503, detail="Captcha auto-solve is disabled on this server")
-
-    client = AracClient(get_session())
-
-    captcha_id = (payload.captchaId or "").strip()
-    captcha_image = (payload.captchaImageBase64 or "").strip()
-
-    if not captcha_id or not captcha_image:
-        try:
-            challenge = await client.get_captcha()
-        except AracApiError as exc:
-            raise HTTPException(_status_from_arac_error(exc), detail=str(exc)) from exc
-        captcha_id = challenge["captchaId"]
-        captcha_image = challenge["captchaImage"]
-
-    gate = _get_auto_solve_gate()
-    acquired = False
-    queue_wait_seconds = max(0.01, float(settings.arac_auto_solve_queue_wait_seconds))
-    solver_timeout_seconds = max(1.0, float(settings.arac_auto_solve_timeout_seconds))
-
-    try:
-        await asyncio.wait_for(gate.acquire(), timeout=queue_wait_seconds)
-        acquired = True
-    except TimeoutError as exc:
-        raise HTTPException(429, detail="Captcha auto-solve is busy; retry shortly") from exc
-
-    try:
-        candidates = await asyncio.wait_for(
-            run_in_threadpool(
-                collect_captcha_candidates_from_base64,
-                captcha_image,
-                max_candidates=payload.maxCandidates,
-            ),
-            timeout=solver_timeout_seconds,
-        )
-    except TimeoutError as exc:
-        raise HTTPException(503, detail="Captcha auto-solve timed out") from exc
-    except AracApiError as exc:
-        raise HTTPException(_status_from_arac_error(exc, fallback=503), detail=str(exc)) from exc
-    finally:
-        if acquired:
-            gate.release()
-
-    if not candidates:
-        return AracAutoSolveResponse(
-            captchaId=captcha_id,
-            captchaImageBase64=captcha_image,
-            solved=False,
-            strategy="ocr-candidates",
-            candidatesTried=[],
-            selectedCandidate=None,
-            sessionId=None,
-            sessionKey=None,
-            error="No 4-character captcha candidates generated",
-        )
-
-    attempted: list[str] = []
-    if not payload.createSession:
-        return AracAutoSolveResponse(
-            captchaId=captcha_id,
-            captchaImageBase64=captcha_image,
-            solved=False,
-            strategy="ocr-candidates",
-            candidatesTried=[],
-            selectedCandidate=candidates[0],
-            sessionId=None,
-            sessionKey=None,
-            error="createSession=false; returning best candidate only",
-        )
-
-    last_error: str | None = None
-    for candidate in candidates:
-        attempted.append(candidate)
-        try:
-            session = await client.create_session(captcha_id=captcha_id, captcha_answer=candidate)
-            return AracAutoSolveResponse(
-                captchaId=captcha_id,
-                captchaImageBase64=captcha_image,
-                solved=True,
-                strategy="ocr-candidates",
-                candidatesTried=attempted,
-                selectedCandidate=candidate,
-                sessionId=session["sessionId"],
-                sessionKey=session["sessionKey"],
-                error=None,
-            )
-        except AracApiError as exc:
-            last_error = str(exc)
-            if exc.status_code and exc.status_code >= 500:
-                break
-
-    return AracAutoSolveResponse(
-        captchaId=captcha_id,
-        captchaImageBase64=captcha_image,
-        solved=False,
-        strategy="ocr-candidates",
-        candidatesTried=attempted,
-        selectedCandidate=None,
-        sessionId=None,
-        sessionKey=None,
-        error=last_error or "Auto-solve candidates failed",
-    )
 
 
 @router.get("/fleet", response_model=list[BusPosition])

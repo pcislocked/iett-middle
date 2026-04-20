@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -359,13 +360,13 @@ def _safe_int(value: Any) -> int | None:
 
 
 def _parse_son_konum(value: Any) -> tuple[float | None, float | None]:
-    """Parse 'lon,lat' string from son_konum field into (lat, lon)."""
+    """Parse 'lon,lat' or 'lon;lat' son_konum field into (lat, lon)."""
     if not value:
         return None, None
     try:
-        parts = str(value).split(",")
-        lon = float(parts[0])
-        lat = float(parts[1])
+        parts = re.split(r"[;,]", str(value).strip())
+        lon = float(parts[0].strip())
+        lat = float(parts[1].strip())
         return lat, lon
     except (IndexError, ValueError):
         return None, None

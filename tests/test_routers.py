@@ -4,7 +4,6 @@ All external I/O is patched (IettClient methods, deps store functions).
 """
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -810,6 +809,36 @@ class TestStopsExtra:
             resp = client.get("/v1/stops/220602/arrivals")
         assert resp.status_code == 200
 
+    def test_arrivals_ntcapi_parses_semicolon_son_konum(self, client: TestClient) -> None:
+        raw = [{
+            "hatkodu": "500T",
+            "hattip": "4.LEVENT METRO",
+            "dakika": "3",
+            "saat": "3 dk",
+            "kapino": "A-001",
+            "son_konum": "29.0109;41.0819",
+            "son_hiz": "25",
+            "son_konum_saati": "2026-03-01 14:22:00",
+            "usb": "1",
+            "wifi": "0",
+            "klima": "1",
+            "engelli": "1",
+        }]
+        with (
+            patch("app.routers.stops.ntcapi_client.get_stop_arrivals", AsyncMock(return_value=raw)),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None)),
+            patch("app.routers.stops.cache_set", AsyncMock()),
+            patch("app.routers.stops.get_session", return_value=MagicMock()),
+            patch("app.routers.stops.get_plate_by_kapino", return_value="34 HO 1000"),
+        ):
+            resp = client.get("/v1/stops/220602/arrivals")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) == 1
+        assert body[0]["lat"] == pytest.approx(41.0819)
+        assert body[0]["lon"] == pytest.approx(29.0109)
+        assert body[0]["plate"] == "34 HO 1000"
+
     def test_arrivals_returns_cached(self, client: TestClient) -> None:
         cached = [{"route_code": "500T", "destination": "LEVENT", "eta_minutes": 5,
                    "eta_raw": "5 dk", "plate": None, "kapino": None,
@@ -1074,185 +1103,12 @@ class TestAracSession:
         assert resp.status_code == 200
         assert resp.json()["sessionId"] == "sid-2"
 
-    def test_auto_solve_success_after_retry(self, client: TestClient) -> None:
-        from app.services.arac_client import AracApiError
-
-        mock_arac = MagicMock()
-        mock_arac.create_session = AsyncMock(
-            side_effect=[
-                AracApiError("Wrong CAPTCHA", status_code=400),
-                {"sessionId": "sid-3", "sessionKey": "skey-3"},
-            ]
+    def test_auto_solve_endpoint_removed(self, client: TestClient) -> None:
+        resp = client.post(
+            "/v1/arac/session/auto-solve",
+            json={"captchaId": "cid", "captchaImageBase64": "AAAA"},
         )
-        with (
-            patch("app.routers.arac.get_session", return_value=MagicMock()),
-            patch("app.routers.arac.AracClient", return_value=mock_arac),
-            patch("app.routers.arac.collect_captcha_candidates_from_base64", return_value=["AAAA", "ABCD"]),
-        ):
-            resp = client.post(
-                "/v1/arac/session/auto-solve",
-                json={
-                    "captchaId": "cid-3",
-                    "captchaImageBase64": "QkJC",
-                    "maxCandidates": 8,
-                    "createSession": True,
-                },
-            )
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["solved"] is True
-        assert body["selectedCandidate"] == "ABCD"
-        assert body["sessionId"] == "sid-3"
-        assert body["candidatesTried"] == ["AAAA", "ABCD"]
-
-    def test_auto_solve_guess_only_mode(self, client: TestClient) -> None:
-        mock_arac = MagicMock()
-        mock_arac.create_session = AsyncMock()
-        with (
-            patch("app.routers.arac.get_session", return_value=MagicMock()),
-            patch("app.routers.arac.AracClient", return_value=mock_arac),
-            patch("app.routers.arac.collect_captcha_candidates_from_base64", return_value=["ZZZZ"]),
-        ):
-            resp = client.post(
-                "/v1/arac/session/auto-solve",
-                json={
-                    "captchaId": "cid-4",
-                    "captchaImageBase64": "Q0ND",
-                    "createSession": False,
-                },
-            )
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["solved"] is False
-        assert body["selectedCandidate"] == "ZZZZ"
-        assert body["sessionId"] is None
-
-    def test_auto_solve_defaults_to_guess_only_mode(self, client: TestClient) -> None:
-        mock_arac = MagicMock()
-        mock_arac.create_session = AsyncMock()
-        with (
-            patch("app.routers.arac.get_session", return_value=MagicMock()),
-            patch("app.routers.arac.AracClient", return_value=mock_arac),
-            patch("app.routers.arac.collect_captcha_candidates_from_base64", return_value=["TTTT"]),
-        ):
-            resp = client.post(
-                "/v1/arac/session/auto-solve",
-                json={"captchaId": "cid-def", "captchaImageBase64": "Q0ND"},
-            )
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["solved"] is False
-        assert body["selectedCandidate"] == "TTTT"
-        assert body["sessionId"] is None
-
-    def test_auto_solve_returns_503_when_solver_unavailable(self, client: TestClient) -> None:
-        from app.services.arac_client import AracApiError
-
-        mock_arac = MagicMock()
-        with (
-            patch("app.routers.arac.get_session", return_value=MagicMock()),
-            patch("app.routers.arac.AracClient", return_value=mock_arac),
-            patch(
-                "app.routers.arac.collect_captcha_candidates_from_base64",
-                side_effect=AracApiError("Auto-solve requires easyocr", status_code=503),
-            ),
-        ):
-            resp = client.post(
-                "/v1/arac/session/auto-solve",
-                json={"captchaId": "cid-5", "captchaImageBase64": "Q0ND"},
-            )
-        assert resp.status_code == 503
-
-    def test_auto_solve_returns_503_when_disabled(self, client: TestClient) -> None:
-        with patch("app.config.settings.arac_auto_solve_enabled", False):
-            resp = client.post(
-                "/v1/arac/session/auto-solve",
-                json={"captchaId": "cid-5", "captchaImageBase64": "Q0ND"},
-            )
-        assert resp.status_code == 503
-        assert "disabled" in resp.json()["detail"]
-
-    def test_auto_solve_returns_429_when_busy(self, client: TestClient) -> None:
-        mock_arac = MagicMock()
-        with (
-            patch("app.routers.arac.get_session", return_value=MagicMock()),
-            patch("app.routers.arac.AracClient", return_value=mock_arac),
-            patch("app.config.settings.arac_auto_solve_queue_wait_seconds", 0.01),
-            patch("app.routers.arac._get_auto_solve_gate", return_value=asyncio.Semaphore(0)),
-        ):
-            resp = client.post(
-                "/v1/arac/session/auto-solve",
-                json={"captchaId": "cid-5", "captchaImageBase64": "Q0ND"},
-            )
-        assert resp.status_code == 429
-        assert "busy" in resp.json()["detail"]
-
-    def test_auto_solve_returns_503_when_solver_times_out(self, client: TestClient) -> None:
-        mock_arac = MagicMock()
-        with (
-            patch("app.routers.arac.get_session", return_value=MagicMock()),
-            patch("app.routers.arac.AracClient", return_value=mock_arac),
-            patch("app.routers.arac.run_in_threadpool", new=AsyncMock(side_effect=TimeoutError)),
-        ):
-            resp = client.post(
-                "/v1/arac/session/auto-solve",
-                json={"captchaId": "cid-5", "captchaImageBase64": "Q0ND"},
-            )
-        assert resp.status_code == 503
-        assert "timed out" in resp.json()["detail"]
-
-    def test_auto_solve_fetches_new_captcha_when_missing_input(self, client: TestClient) -> None:
-        mock_arac = MagicMock()
-        mock_arac.get_captcha = AsyncMock(return_value={"captchaId": "cid-6", "captchaImage": "DDD"})
-        with (
-            patch("app.routers.arac.get_session", return_value=MagicMock()),
-            patch("app.routers.arac.AracClient", return_value=mock_arac),
-            patch("app.routers.arac.collect_captcha_candidates_from_base64", return_value=[]),
-        ):
-            resp = client.post("/v1/arac/session/auto-solve", json={})
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["captchaId"] == "cid-6"
-        assert body["solved"] is False
-
-    def test_auto_solve_uses_error_status_when_fetching_challenge_fails(self, client: TestClient) -> None:
-        from app.services.arac_client import AracApiError
-
-        mock_arac = MagicMock()
-        mock_arac.get_captcha = AsyncMock(side_effect=AracApiError("captcha unavailable", status_code=503))
-        with (
-            patch("app.routers.arac.get_session", return_value=MagicMock()),
-            patch("app.routers.arac.AracClient", return_value=mock_arac),
-        ):
-            resp = client.post("/v1/arac/session/auto-solve", json={})
-        assert resp.status_code == 503
-
-    def test_auto_solve_breaks_on_server_error(self, client: TestClient) -> None:
-        from app.services.arac_client import AracApiError
-
-        mock_arac = MagicMock()
-        mock_arac.create_session = AsyncMock(
-            side_effect=AracApiError("server failure", status_code=500)
-        )
-        with (
-            patch("app.routers.arac.get_session", return_value=MagicMock()),
-            patch("app.routers.arac.AracClient", return_value=mock_arac),
-            patch("app.routers.arac.collect_captcha_candidates_from_base64", return_value=["AAAA", "BBBB"]),
-        ):
-            resp = client.post(
-                "/v1/arac/session/auto-solve",
-                json={
-                    "captchaId": "cid-7",
-                    "captchaImageBase64": "QQ==",
-                    "createSession": True,
-                },
-            )
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["solved"] is False
-        assert body["candidatesTried"] == ["AAAA"]
-        assert "server failure" in (body["error"] or "")
-
+        assert resp.status_code == 404
 
 class TestAracFleet:
     _HEADERS = {"X-Arac-Session-Id": "sid-1", "X-Arac-Session-Key": "skey-1"}
@@ -1613,15 +1469,4 @@ class TestAracRouterHelpers:
         # Over-length route_id must be rejected
         resp4 = client.get(f"/v1/arac/routes/{'1' * 11}/stops", headers=_HEADERS)
         assert resp4.status_code == 422
-
-    def test_oversized_captcha_image_rejected(self, client: TestClient) -> None:
-        """captchaImageBase64 over 65,536 chars must be rejected with 422."""
-        resp = client.post(
-            "/v1/arac/session/auto-solve",
-            json={
-                "captchaId": "cid",
-                "captchaImageBase64": "A" * 65537,
-            },
-        )
-        assert resp.status_code == 422
 

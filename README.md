@@ -28,8 +28,6 @@ python -m venv .venv
 
 pip install -r requirements.txt
 pip install -r requirements-dev.txt
-# Optional OCR dependencies for /v1/arac/session/auto-solve
-pip install -r requirements-ocr.txt
 
 uvicorn app.main:app --reload --port 8000
 ```
@@ -52,10 +50,6 @@ Copy `.env.example` to `.env` and edit as needed:
 | `CACHE_TTL_ARRIVALS` | `20` | Arrivals cache TTL |
 | `FLEET_CACHE_MAX_AGE` | `900` | Force fleet cache refresh every 15 min (prevents 6h+ stale FILO data) |
 | `FLEET_MANUAL_REFRESH_COOLDOWN` | `10` | Minimum seconds between accepted `POST /v1/fleet/refresh` calls |
-| `ARAC_AUTO_SOLVE_ENABLED` | `true` | Enables `POST /v1/arac/session/auto-solve` (set `false` to force manual captcha only) |
-| `ARAC_AUTO_SOLVE_MAX_CONCURRENCY` | `1` | Max concurrent OCR solves; protects API responsiveness under load |
-| `ARAC_AUTO_SOLVE_QUEUE_WAIT_SECONDS` | `0.15` | Max wait for an OCR slot before returning 429 busy |
-| `ARAC_AUTO_SOLVE_TORCH_THREADS` | `1` | CPU thread cap used by OCR runtime to reduce spikes |
 | `ENABLE_OUTGOING_TRACE` | `false` | Enable verbose per-request outgoing aiohttp trace logs |
 | `PORT` | `8000` | Listen port |
 
@@ -69,7 +63,6 @@ POST /v1/arac/session/captcha                 fetch captcha challenge image
 POST /v1/arac/session/getpicture              alias for captcha challenge fetch
 POST /v1/arac/session/create                  create ARAC session from captcha answer
 POST /v1/arac/session/response                alias for captcha answer submit
-POST /v1/arac/session/auto-solve              OCR candidate solve (+ optional session create)
 GET /v1/arac/fleet                            ARAC fleet snapshot (requires session headers)
 GET /v1/arac/fleet/{kapino}                   ARAC single bus profile (requires session headers)
 GET /v1/arac/fleet/{kapino}/missions          ARAC mission timeline (requires session headers)
@@ -107,7 +100,6 @@ pytest
 Point at a remote Docker host or run locally:
 
 - GHCR published image targets linux/amd64 and linux/arm64.
-- OCR path uses CPU-only PyTorch wheels (no CUDA/NVIDIA runtime packages).
 
 ```bash
 # From repo root (contains docker-compose.yml)
@@ -116,16 +108,6 @@ docker compose up -d middle
 
 # Logs
 docker compose logs -f middle
-```
-
-`INSTALL_OCR` build arg controls optional ARAC OCR stack install:
-
-```bash
-# Keep full behavior (default): installs OCR dependencies.
-INSTALL_OCR=1 docker compose build middle
-
-# Slim image: skips OCR dependencies (auto-solve endpoint returns 503).
-INSTALL_OCR=0 docker compose build middle
 ```
 
 ## Known quirks

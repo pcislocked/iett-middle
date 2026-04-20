@@ -6,6 +6,7 @@ Sources:
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from app.models.canonical import Amenities, CanonicalArrival
@@ -93,17 +94,26 @@ def _safe_bool(value: Any) -> bool | None:
 
 
 def _parse_son_konum(value: Any) -> tuple[float | None, float | None]:
-    """Parse ntcapi ``son_konum`` string "lon,lat" → (lat, lon).
+    """Parse ntcapi ``son_konum`` string into ``(lat, lon)``.
 
-    IMPORTANT: the string is longitude-first, latitude second.
-    We return (lat, lon) in the conventional order.
+    Upstream currently emits longitude-first and latitude-second values,
+    historically as ``"lon,lat"`` and now also as ``"lon;lat"``.
+    We return ``(lat, lon)`` in the conventional order.
     """
     if not value:
         return None, None
     try:
-        parts = str(value).split(",")
-        lon = float(parts[0])
-        lat = float(parts[1])
+        text = str(value).strip()
+        if not text:
+            return None, None
+
+        # ntcapi uses both comma and semicolon separators in production.
+        parts = re.split(r"[;,]", text)
+        if len(parts) < 2:
+            return None, None
+
+        lon = float(parts[0].strip())
+        lat = float(parts[1].strip())
         return lat, lon
     except (IndexError, ValueError):
         return None, None
