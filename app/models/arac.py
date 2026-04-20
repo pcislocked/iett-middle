@@ -19,27 +19,6 @@ class AracSessionCreateResponse(BaseModel):
     sessionKey: str
 
 
-class AracAutoSolveRequest(BaseModel):
-    captchaId: str | None = None
-    # 65,536 chars ≈ 48 KiB decoded — well above any real captcha image;
-    # prevents DoS via oversized payloads fed into the OCR pipeline.
-    captchaImageBase64: str | None = Field(default=None, max_length=65536)
-    createSession: bool = False
-    maxCandidates: int = Field(default=8, ge=1, le=20)
-
-
-class AracAutoSolveResponse(BaseModel):
-    captchaId: str
-    captchaImageBase64: str
-    solved: bool
-    strategy: str
-    candidatesTried: list[str] = Field(default_factory=list)
-    selectedCandidate: str | None = None
-    sessionId: str | None = None
-    sessionKey: str | None = None
-    error: str | None = None
-
-
 class AracMissionItem(BaseModel):
     task_id: int | None = None
     archive_id: int | None = None

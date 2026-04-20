@@ -78,6 +78,11 @@ class TestParseSonKonum:
         assert lon == 29.015
         assert lat == 41.107
 
+    def test_valid_lon_lat_semicolon_string(self) -> None:
+        lat, lon = _parse_son_konum("29.015;41.107")
+        assert lon == 29.015
+        assert lat == 41.107
+
     def test_none_returns_none_pair(self) -> None:
         assert _parse_son_konum(None) == (None, None)
 

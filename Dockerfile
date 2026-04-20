@@ -1,8 +1,6 @@
 # iett-middle/Dockerfile
 FROM python:3.12-slim AS builder
 
-ARG INSTALL_OCR=1
-
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
@@ -13,19 +11,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY requirements.txt requirements-ocr.txt ./
+COPY requirements.txt ./
 
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-RUN pip install --no-cache-dir -r requirements.txt \
-    && if [ "$INSTALL_OCR" = "1" ]; then \
-                # Install CPU-only torch wheels to avoid CUDA/NVIDIA dependencies.
-                pip install --no-cache-dir \
-                    --index-url https://download.pytorch.org/whl/cpu \
-                    torch torchvision; \
-        pip install --no-cache-dir -r requirements-ocr.txt; \
-    fi
+RUN pip install --no-cache-dir -r requirements.txt
 
 FROM python:3.12-slim AS runtime
 

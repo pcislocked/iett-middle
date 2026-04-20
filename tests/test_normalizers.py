@@ -44,9 +44,21 @@ class TestArrivalsFromNtcapiYbs:
         assert abs(result["lat"] - 41.0819) < 1e-4, "lat should be 41.0819"
         assert abs(result["lon"] - 29.0109) < 1e-4, "lon should be 29.0109"
 
+    def test_son_konum_semicolon_separator_supported(self) -> None:
+        item = {**self.ITEM, "son_konum": "29.0109;41.0819"}
+        result = arrivals.from_ntcapi_ybs(item)
+        assert abs(result["lat"] - 41.0819) < 1e-4
+        assert abs(result["lon"] - 29.0109) < 1e-4
+
     def test_speed_kmh_mapped(self) -> None:
         result = arrivals.from_ntcapi_ybs(self.ITEM)
         assert result["speed_kmh"] == 25
+
+    def test_invalid_numeric_fields_map_to_none(self) -> None:
+        item = {**self.ITEM, "dakika": "x", "son_hiz": "not-int"}
+        result = arrivals.from_ntcapi_ybs(item)
+        assert result["eta_minutes"] is None
+        assert result["speed_kmh"] is None
 
     def test_amenities_flags(self) -> None:
         result = arrivals.from_ntcapi_ybs(self.ITEM)
@@ -55,6 +67,15 @@ class TestArrivalsFromNtcapiYbs:
         assert am["wifi"] is False
         assert am["ac"] is True
         assert am["accessible"] is None   # None input → None
+
+    def test_invalid_amenity_flags_map_to_none(self) -> None:
+        item = {**self.ITEM, "usb": "x", "wifi": "?", "klima": "-", "engelli": "nan"}
+        result = arrivals.from_ntcapi_ybs(item)
+        am = result["amenities"]
+        assert am["usb"] is None
+        assert am["wifi"] is None
+        assert am["ac"] is None
+        assert am["accessible"] is None
 
     def test_source_tag(self) -> None:
         result = arrivals.from_ntcapi_ybs(self.ITEM)
@@ -67,6 +88,24 @@ class TestArrivalsFromNtcapiYbs:
 
     def test_malformed_son_konum_returns_none(self) -> None:
         item = {**self.ITEM, "son_konum": "bad-data"}
+        result = arrivals.from_ntcapi_ybs(item)
+        assert result["lat"] is None
+        assert result["lon"] is None
+
+    def test_missing_son_konum_returns_none(self) -> None:
+        item = {**self.ITEM, "son_konum": None}
+        result = arrivals.from_ntcapi_ybs(item)
+        assert result["lat"] is None
+        assert result["lon"] is None
+
+    def test_blank_son_konum_returns_none(self) -> None:
+        item = {**self.ITEM, "son_konum": "   "}
+        result = arrivals.from_ntcapi_ybs(item)
+        assert result["lat"] is None
+        assert result["lon"] is None
+
+    def test_non_numeric_son_konum_parts_return_none(self) -> None:
+        item = {**self.ITEM, "son_konum": "xx,yy"}
         result = arrivals.from_ntcapi_ybs(item)
         assert result["lat"] is None
         assert result["lon"] is None

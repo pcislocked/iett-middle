@@ -1,6 +1,4 @@
 from app.models.arac import (
-    AracAutoSolveRequest,
-    AracAutoSolveResponse,
     AracCaptchaResponse,
     AracMissionItem,
     AracMissionsResponse,
@@ -17,8 +15,6 @@ from app.models.traffic import TrafficIndex, TrafficSegment
 __all__ = [
     "Arrival",
     "BusPosition",
-    "AracAutoSolveRequest",
-    "AracAutoSolveResponse",
     "AracCaptchaResponse",
     "AracSessionCreateRequest",
     "AracSessionCreateResponse",

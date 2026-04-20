@@ -25,13 +25,6 @@ class Settings(BaseSettings):
     fleet_manual_refresh_cooldown: int = 10  # minimum gap between POST /v1/fleet/refresh calls
     fleet_trail_minutes: int = 5    # how many minutes of trail to keep per bus
 
-    # ARAC OCR auto-solve runtime safety controls
-    arac_auto_solve_enabled: bool = True
-    arac_auto_solve_timeout_seconds: float = 8.0
-    arac_auto_solve_queue_wait_seconds: float = 0.15
-    arac_auto_solve_max_concurrency: int = 1
-    arac_auto_solve_torch_threads: int = 1
-
     # ntcapi.iett.istanbul — private IETT API
     ntcapi_client_id: str = "pLwqtobYHTBshBWRrEZdSWsngOywQvHa"
     ntcapi_client_secret: str = "JERLUJgaZSygMTqoCtrhrVnvqeVGGVznktlwuOfHqmQTzjnC"
