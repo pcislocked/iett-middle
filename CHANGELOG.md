@@ -5,6 +5,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.3.17] - 2026-04-20
+
+### Fixed
+- Restored stop-arrival GPS coordinates by accepting both `lon,lat` and `lon;lat` formats in ntcapi `son_konum` parsing.
+- Added router-level regression coverage for semicolon-delimited `son_konum` payloads.
+
+### Changed
+- Removed `POST /v1/arac/session/auto-solve` and the OCR solver stack; ARAC flow is now manual captcha/session only.
+- Removed OCR-only runtime/build dependencies and related Docker toggles from the middle service.
+
+### Tests
+- Expanded normalizer, ntcapi helper, and router test coverage for parser edge cases and ARAC endpoint surface changes.
+
+### Release Notes
+- Released as `v0.3.17`.
+
+---
+
 ## [0.3.16] - 2026-04-20
 
 ### Fixed

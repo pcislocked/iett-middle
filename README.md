@@ -4,7 +4,7 @@
 [![Coverage](https://img.shields.io/badge/coverage-report%20in%20CI-informational)](#running-tests)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
-[![Version](https://img.shields.io/badge/version-0.3.16-orange)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.17-orange)](./CHANGELOG.md)
 
 Smart caching proxy for Istanbul IETT public transit APIs.
 
