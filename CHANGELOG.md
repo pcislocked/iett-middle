@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.3.20] - 2026-05-23
+
+### Release Notes
+- App version bumped to `0.3.20` to stay synchronized with `iett-pwa`. No backend changes.
+
+---
+
 ## [0.3.19] - 2026-05-23
 
 ### Fixed
