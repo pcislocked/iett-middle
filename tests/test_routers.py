@@ -407,10 +407,10 @@ class TestStopsNearby:
         assert body[0]["distance_m"] > 0, "haversine should compute a positive distance, not 0"
 
     def test_skips_invalid_coordinates_from_ntcapi(self, client: TestClient) -> None:
-        processed = [{"stop_code": "1", "lat": "invalid", "lon": "invalid"}]
+        processed = {"stop_code": "1", "lat": "invalid", "lon": "invalid"}
         with (
             patch("app.routers.stops.ntcapi_client.get_nearby_stops", AsyncMock(return_value=[{"raw": "stop"}])),
-            patch("app.services.normalizers.stops.from_ntcapi_nearby_processed", return_value=processed[0]),
+            patch("app.services.normalizers.stops.from_ntcapi_nearby_processed", return_value=processed),
             patch("app.routers.stops.get_session", return_value=MagicMock()),
         ):
             resp = client.get("/v1/stops/nearby?lat=41.0&lon=29.0")
