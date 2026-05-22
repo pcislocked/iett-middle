@@ -304,7 +304,7 @@ class TestGetRouteStops:
             _mock_token(m)
             m.post(_SERVICE_URL, payload=raw)  # type: ignore[reportUnknownMemberType]
             result = await get_route_stops("500T", "G", session)
-        
+
         # Should return all 3 stops from both variants
         assert len(result) == 3
 

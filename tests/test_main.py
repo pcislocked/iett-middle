@@ -141,13 +141,15 @@ class TestOnRequestException:
 
 def test_lifespan() -> None:
     from unittest.mock import patch, AsyncMock
-    with patch("app.services.fleet_poller.refresh_fleet_forever", new_callable=AsyncMock) as mock_refresh, \
-         patch("app.services.stop_indexer.index_stops_forever", new_callable=AsyncMock) as mock_index:
+    with (
+        patch("app.services.fleet_poller.refresh_fleet_forever", new_callable=AsyncMock) as mock_refresh,
+        patch("app.services.stop_indexer.index_stops_forever", new_callable=AsyncMock) as mock_index,
+    ):
         with TestClient(app) as client:
             resp = client.get("/health")
             assert resp.status_code == 200
             assert resp.json()["status"] == "ok"
-            
+
         mock_refresh.assert_called_once()
         mock_index.assert_called_once()
 
