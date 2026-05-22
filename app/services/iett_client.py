@@ -237,14 +237,34 @@ class IettClient:
             params={"hatkod": hat_kodu, "hatstart": "X", "hatend": "Y", "langid": "1"},
         )
         raw = parse_route_stops_html(html, hat_kodu)
+        
+        # Normalize direction names to "G" and "D"
+        unique_dirs: list[str] = []
+        for s in raw:
+            d = s.get("direction")
+            if d and d not in unique_dirs:
+                unique_dirs.append(d)
+        
+        dir_map: dict[str, str] = {}
+        if len(unique_dirs) > 0:
+            dir_map[unique_dirs[0]] = "G"
+        if len(unique_dirs) > 1:
+            dir_map[unique_dirs[1]] = "D"
+
         result: list[RouteStop] = []
         for s in raw:
             coords = get_stop_coords(s["stop_code"])
+            norm_dir = dir_map.get(s.get("direction") or "", "G")
             result.append(
                 RouteStop(
-                    **s,
+                    route_code=s.get("route_code") or hat_kodu,
+                    direction=norm_dir,
+                    sequence=s.get("sequence") or 0,
+                    stop_code=s.get("stop_code") or "",
+                    stop_name=s.get("stop_name") or "",
                     latitude=coords[0] if coords else None,
                     longitude=coords[1] if coords else None,
+                    district=s.get("district"),
                 )
             )
         return result
