@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.3.18] - 2026-05-22
+
+### Fixed
+- Simplified redundant list-to-dict conversion in ntcapi coordinate filtering tests.
+- Clarified endpoint precedence for stop-arrival fallback via explicit test renaming.
+
+### Changed
+- App version bumped to `0.3.18` to stay synchronized with `iett-pwa`.
+
+### Release Notes
+- Released as `v0.3.18`.
+
+---
+
 ## [0.3.17] - 2026-04-20
 
 ### Fixed
