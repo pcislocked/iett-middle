@@ -9,6 +9,7 @@ expiry.
 from __future__ import annotations
 
 import asyncio
+from collections import defaultdict
 import logging
 import re
 import time
@@ -168,7 +169,9 @@ async def get_route_stops(
       route_code, stop_code, stop_name, sequence, lat, lon, district, direction_letter
     """
     yon_map = {"G": "119", "D": "120"}
-    yon = yon_map.get(direction.upper(), direction)
+    dir_upper = (direction or "").upper()
+    yon = yon_map.get(dir_upper, direction)
+    dir_letter = "G" if yon == "119" else "D" if yon == "120" else dir_upper
     payload = {
         "HATYONETIM.GUZERGAH.YON": yon,
         "HATYONETIM.HAT.HAT_KODU": hat_kodu,
@@ -178,11 +181,10 @@ async def get_route_stops(
     # Group all stops by their route variant code (e.g. "14M_G_D0", "14M_G_D1991", …).
     # ntcapi returns every service-pattern variant for this direction.
     # We return all variants flattened; the client will filter by route_code.
-    from collections import defaultdict  # noqa: PLC0415
     variants: dict[str, list[dict]] = defaultdict(list)
     seen_keys: set[str] = set()
     for item in raw:
-        rc = item.get("GUZERGAH_GUZERGAH_KODU") or f"{hat_kodu}_{direction}_D0"
+        rc = item.get("GUZERGAH_GUZERGAH_KODU") or f"{hat_kodu}_{dir_letter}_D0"
         dcode = str(item.get("DURAK_DURAK_KODU") or "")
         key = f"{rc}:{dcode}:{item.get('GUZERGAH_SEGMENT_SIRA')}"
         if key in seen_keys:
@@ -197,17 +199,18 @@ async def get_route_stops(
             "lat": geoloc.get("y"),
             "lon": geoloc.get("x"),
             "district": item.get("ILCELER_ILCEADI"),
-            "direction_letter": direction.upper(),
+            "direction_letter": dir_letter,
         })
 
     if not variants:
         return []
 
     all_stops = []
-    for var_stops in variants.values():
+    for rc in sorted(variants.keys()):
+        var_stops = sorted(variants[rc], key=lambda s: s["sequence"])
         all_stops.extend(var_stops)
 
-    return sorted(all_stops, key=lambda s: s["sequence"])
+    return all_stops
 
 
 async def get_route_metadata(
