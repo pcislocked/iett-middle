@@ -470,7 +470,7 @@ class TestStopArrivals:
         assert resp.status_code == 200
         assert resp.json() == []
 
-    def test_fallback_html_via_filter(self, client: TestClient) -> None:
+    def test_fallback_html_chooses_via_endpoint(self, client: TestClient) -> None:
         mock_client = MagicMock()
         mock_client.get_stop_arrivals_via = AsyncMock(return_value=[])
         with (
