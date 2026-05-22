@@ -176,10 +176,8 @@ async def get_route_stops(
     raw: list[dict] = await _call_service(session, "mainGetRoute", payload)
 
     # Group all stops by their route variant code (e.g. "14M_G_D0", "14M_G_D1991", …).
-    # ntcapi returns every service-pattern variant for this direction; we want only the
-    # canonical one.  Selection priority:
-    #   1. Variant whose code ends with "_D0"  (base/canonical service pattern)
-    #   2. Variant with the most stops         (covers edge cases where _D0 is missing)
+    # ntcapi returns every service-pattern variant for this direction.
+    # We return all variants flattened; the client will filter by route_code.
     from collections import defaultdict  # noqa: PLC0415
     variants: dict[str, list[dict]] = defaultdict(list)
     seen_keys: set[str] = set()
@@ -205,13 +203,11 @@ async def get_route_stops(
     if not variants:
         return []
 
-    # Pick canonical variant: prefer _D0, else the one with the most stops
-    canonical_key = next((k for k in variants if k.endswith("_D0")), None)
-    if canonical_key is None:
-        canonical_key = max(variants, key=lambda k: len(variants[k]))
+    all_stops = []
+    for var_stops in variants.values():
+        all_stops.extend(var_stops)
 
-    stops = sorted(variants[canonical_key], key=lambda s: s["sequence"])
-    return stops
+    return sorted(all_stops, key=lambda s: s["sequence"])
 
 
 async def get_route_metadata(
