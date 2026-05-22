@@ -169,7 +169,7 @@ class TestGetRouteStops:
             stops: list[RouteStop] = await client.get_route_stops("15F")
         assert stops[0].stop_code == "262541"
         assert stops[0].route_code == "15F"
-        assert stops[0].direction == "\u015eAH\u0130NKAYA GARAJI"
+        assert stops[0].direction == "G"
         assert stops[0].sequence == 1
         assert stops[0].latitude is None  # stop index not populated in unit tests
 

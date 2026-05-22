@@ -5,6 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.3.19] - 2026-05-23
+
+### Fixed
+- Fixed direction interleaving issue on route stops map when same stop appears in both variants.
+- Normalized fallback SOAP API `GUZERGAH_YON` direction values (`119`/`120` to `0`/`1`).
+- Cleaned imports and improved test coverage in the backend to ensure robust variants handling.
+
+### Release Notes
+- App version bumped to `0.3.19`.
+
+---
+
 ## [0.3.18] - 2026-05-22
 
 ### Fixed

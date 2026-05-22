@@ -501,11 +501,14 @@ def parse_route_metadata_json(raw: list[Any] | dict[str, Any]) -> list[dict[str,
     results: list[dict[str, Any]] = []
     for r in raw:
         try:
+            yon = int(r.get("GUZERGAH_YON") or 0)
+            # Map 119/120 to 0/1, while supporting 0/1 values directly
+            direction_val = 0 if yon == 119 else 1 if yon == 120 else (0 if yon == 0 else 1)
             results.append({
                 "direction_name": (r.get("GUZERGAH_GUZERGAH_ADI") or "").strip(),
                 "full_name": (r.get("GUZERGAH_ADI") or "").strip(),
                 "variant_code": r.get("GUZERGAH_GUZERGAH_KODU") or "",
-                "direction": int(r.get("GUZERGAH_YON") or 0),
+                "direction": direction_val,
                 "depar_no": int(r.get("GUZERGAH_DEPAR_NO") or 0),
             })
         except (TypeError, ValueError):
