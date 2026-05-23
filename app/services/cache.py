@@ -8,6 +8,7 @@ from typing import Any
 
 _store: dict[str, tuple[Any, float, float]] = {}
 cache_hit_time = contextvars.ContextVar("cache_hit_time", default=None)
+_DYNAMIC_PREFIXES = ("stops:arrivals:", "routes:announcements:", "traffic:")
 _lock = asyncio.Lock()
 
 # Track hit/miss stats per namespace (first segment of key before ":")
@@ -26,7 +27,7 @@ async def cache_get(key: str) -> Any | None:
         value, expires_at, created_at = entry
         if time.monotonic() < expires_at:
             _hits[ns] = _hits.get(ns, 0) + 1
-            if cache_hit_time.get() is None:
+            if cache_hit_time.get() is None and key.startswith(_DYNAMIC_PREFIXES):
                 cache_hit_time.set(created_at)
             return value
         # Expired
@@ -41,7 +42,7 @@ async def cache_set(key: str, value: Any, ttl: int) -> None:
     async with _lock:
         now = time.time()
         _store[key] = (value, time.monotonic() + ttl, now)
-        if cache_hit_time.get() is None:
+        if cache_hit_time.get() is None and key.startswith(_DYNAMIC_PREFIXES):
             cache_hit_time.set(now)
 
 
