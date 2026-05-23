@@ -5,6 +5,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.3.21] - 2026-05-23
+
+### Added
+- Added `X-IETT-Updated-At` middleware to expose the upstream IETT cache hit timestamp.
+- Added ContextVar-based tracking for upstream update times in the memory cache layer.
+
+### Fixed
+- Fixed cache hit time staleness bias by restricting ContextVar tracking to dynamic cache keys (arrivals, announcements, traffic).
+- Cleaned up git pollution by removing and ignoring temporary test coverage files.
+
+### Release Notes
+- App version bumped to `0.3.21` to stay synchronized with `iett-pwa`.
+
+---
+
 ## [0.3.20] - 2026-05-23
 
 ### Release Notes
