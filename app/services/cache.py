@@ -26,7 +26,8 @@ async def cache_get(key: str) -> Any | None:
         value, expires_at, created_at = entry
         if time.monotonic() < expires_at:
             _hits[ns] = _hits.get(ns, 0) + 1
-            cache_hit_time.set(created_at)
+            if cache_hit_time.get() is None:
+                cache_hit_time.set(created_at)
             return value
         # Expired
         _store.pop(key, None)
@@ -40,7 +41,8 @@ async def cache_set(key: str, value: Any, ttl: int) -> None:
     async with _lock:
         now = time.time()
         _store[key] = (value, time.monotonic() + ttl, now)
-        cache_hit_time.set(now)
+        if cache_hit_time.get() is None:
+            cache_hit_time.set(now)
 
 
 async def cache_delete(key: str) -> bool:

@@ -153,3 +153,43 @@ def test_lifespan() -> None:
         mock_refresh.assert_called_once()
         mock_index.assert_called_once()
 
+
+# ---------------------------------------------------------------------------
+# Middleware tests
+# ---------------------------------------------------------------------------
+
+class TestCacheHeaderMiddleware:
+    def test_header_present_when_contextvar_is_set(self) -> None:
+        import asyncio
+        import datetime
+        from unittest.mock import MagicMock
+        from fastapi import Request
+        from fastapi.responses import JSONResponse
+        from app.main import add_cache_timestamp_header
+        from app.services.cache import cache_hit_time
+
+        async def mock_call_next(req: Request):
+            # simulate a cache hit inside the endpoint
+            cache_hit_time.set(1600000000.0)
+            return JSONResponse({"ok": True})
+        
+        req = MagicMock(spec=Request)
+        resp = asyncio.run(add_cache_timestamp_header(req, mock_call_next))
+        assert "X-IETT-Updated-At" in resp.headers
+        assert resp.headers["X-IETT-Updated-At"] == datetime.datetime.fromtimestamp(1600000000.0, tz=datetime.timezone.utc).isoformat()
+        assert cache_hit_time.get() is None
+
+    def test_header_absent_when_contextvar_is_none(self) -> None:
+        import asyncio
+        from unittest.mock import MagicMock
+        from fastapi import Request
+        from fastapi.responses import JSONResponse
+        from app.main import add_cache_timestamp_header
+
+        async def mock_call_next(req: Request):
+            return JSONResponse({"ok": True})
+            
+        req = MagicMock(spec=Request)
+        resp = asyncio.run(add_cache_timestamp_header(req, mock_call_next))
+        assert "X-IETT-Updated-At" not in resp.headers
+

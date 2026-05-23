@@ -135,12 +135,17 @@ app.add_middleware(
 @app.middleware("http")
 async def add_cache_timestamp_header(request: Request, call_next):
     from app.services.cache import cache_hit_time
-    response = await call_next(request)
-    hit_time = cache_hit_time.get()
-    if hit_time is not None:
-        iso_time = datetime.datetime.fromtimestamp(hit_time, tz=datetime.timezone.utc).isoformat()
-        response.headers["X-IETT-Updated-At"] = iso_time
-    return response
+    
+    token = cache_hit_time.set(None)
+    try:
+        response = await call_next(request)
+        hit_time = cache_hit_time.get()
+        if hit_time is not None:
+            iso_time = datetime.datetime.fromtimestamp(hit_time, tz=datetime.timezone.utc).isoformat()
+            response.headers["X-IETT-Updated-At"] = iso_time
+        return response
+    finally:
+        cache_hit_time.reset(token)
 
 app.include_router(stops.router, prefix="/v1/stops", tags=["stops"])
 app.include_router(routes.router, prefix="/v1/routes", tags=["routes"])

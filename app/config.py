@@ -12,10 +12,10 @@ class Settings(BaseSettings):
     osrm_base: str = "https://router.project-osrm.org"
 
     cache_ttl_fleet: int = 30
-    cache_ttl_arrivals: int = 20
+    cache_ttl_arrivals: int = 10
     cache_ttl_stops: int = 86400
     cache_ttl_schedule: int = 3600
-    cache_ttl_announcements: int = 300
+    cache_ttl_announcements: int = 60
     cache_ttl_traffic: int = 30
     cache_ttl_search: int = 300
 
