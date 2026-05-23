@@ -11,6 +11,16 @@ cache_hit_time = contextvars.ContextVar("cache_hit_time", default=None)
 _DYNAMIC_PREFIXES = ("stops:arrivals:", "routes:announcements:", "traffic:")
 _lock = asyncio.Lock()
 
+
+def _set_cache_hit_time(val: float) -> None:
+    container = cache_hit_time.get()
+    if isinstance(container, dict):
+        if container.get("hit_time") is None:
+            container["hit_time"] = val
+    elif container is None:
+        cache_hit_time.set(val)
+
+
 # Track hit/miss stats per namespace (first segment of key before ":")
 _hits: dict[str, int] = {}
 _misses: dict[str, int] = {}
@@ -27,8 +37,8 @@ async def cache_get(key: str) -> Any | None:
         value, expires_at, created_at = entry
         if time.monotonic() < expires_at:
             _hits[ns] = _hits.get(ns, 0) + 1
-            if cache_hit_time.get() is None and key.startswith(_DYNAMIC_PREFIXES):
-                cache_hit_time.set(created_at)
+            if key.startswith(_DYNAMIC_PREFIXES):
+                _set_cache_hit_time(created_at)
             return value
         # Expired
         _store.pop(key, None)
@@ -42,8 +52,8 @@ async def cache_set(key: str, value: Any, ttl: int) -> None:
     async with _lock:
         now = time.time()
         _store[key] = (value, time.monotonic() + ttl, now)
-        if cache_hit_time.get() is None and key.startswith(_DYNAMIC_PREFIXES):
-            cache_hit_time.set(now)
+        if key.startswith(_DYNAMIC_PREFIXES):
+            _set_cache_hit_time(now)
 
 
 async def cache_delete(key: str) -> bool:

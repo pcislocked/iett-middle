@@ -136,10 +136,15 @@ app.add_middleware(
 async def add_cache_timestamp_header(request: Request, call_next):
     from app.services.cache import cache_hit_time
     
-    token = cache_hit_time.set(None)
+    container = {}
+    token = cache_hit_time.set(container)
     try:
         response = await call_next(request)
-        hit_time = cache_hit_time.get()
+        hit_time = container.get("hit_time")
+        if hit_time is None:
+            val = cache_hit_time.get()
+            if isinstance(val, (int, float)):
+                hit_time = val
         if hit_time is not None:
             iso_time = datetime.datetime.fromtimestamp(hit_time, tz=datetime.timezone.utc).isoformat()
             response.headers["X-IETT-Updated-At"] = iso_time
