@@ -1,13 +1,14 @@
 """iett-middle — main FastAPI application entry point."""
 from __future__ import annotations
 
+import datetime
 import logging
 import sys
 import time
 from contextlib import asynccontextmanager
 
 import aiohttp
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.deps import cancel_fleet_refresh_task, close_session, set_session
@@ -119,7 +120,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
 app = FastAPI(
     title="iett-middle",
     description="Smart caching proxy for IETT Istanbul public transit APIs.",
-    version="0.3.20",
+    version="0.3.21",
     lifespan=lifespan,
 )
 
@@ -128,7 +129,23 @@ app.add_middleware(
     allow_origins=["*"],
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
+    expose_headers=["X-IETT-Updated-At"],
 )
+
+@app.middleware("http")
+async def add_cache_timestamp_header(request: Request, call_next):
+    from app.services.cache import cache_hit_time
+    
+    token = cache_hit_time.set(None)
+    try:
+        response = await call_next(request)
+        hit_time = cache_hit_time.get()
+        if hit_time is not None:
+            iso_time = datetime.datetime.fromtimestamp(hit_time, tz=datetime.timezone.utc).isoformat()
+            response.headers["X-IETT-Updated-At"] = iso_time
+        return response
+    finally:
+        cache_hit_time.reset(token)
 
 app.include_router(stops.router, prefix="/v1/stops", tags=["stops"])
 app.include_router(routes.router, prefix="/v1/routes", tags=["routes"])
