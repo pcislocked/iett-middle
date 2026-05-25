@@ -284,6 +284,7 @@ class TestFleetDetailRouter:
                 "latitude": 41.08,
                 "longitude": 29.01,
                 "district": None,
+                "stop_direction": None,
             }
         ]
         with (
@@ -291,11 +292,12 @@ class TestFleetDetailRouter:
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
             patch("app.routers.fleet.get_trail", return_value=[]),
             patch("app.routers.fleet.get_session", return_value=MagicMock()),
-            patch("app.services.cache.cache_get", AsyncMock(return_value=cached_stops)),
+            patch("app.services.ntcapi_client.get_stop_arrivals", AsyncMock(return_value=[])),
+            patch("app.services.cache.cache_get", AsyncMock(side_effect=lambda k: cached_stops if "routes:stops" in k else None)),
             patch("app.services.cache.cache_set", AsyncMock()),
         ):
             resp = client.get("/v1/fleet/A-001/detail")
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp.text
         assert resp.json()["route_stops"] == cached_stops
 
     def test_200_no_route_code_returns_empty_stops(self, client: TestClient) -> None:

@@ -508,10 +508,15 @@ def parse_route_metadata_json(raw: list[Any] | dict[str, Any]) -> list[dict[str,
             
             # If API blindly returns 0 for yon, infer from code or name
             if yon == 0:
-                if "_D_" in variant_code:
+                variant_code_upper = variant_code.upper()
+                name_upper = (r.get("GUZERGAH_ADI") or "").upper()
+                
+                if re.search(r'_(D|G)(_|$)', variant_code_upper):
+                    direction_val = 1 if re.search(r'_D(_|$)', variant_code_upper) else 0
+                elif "DÖNÜŞ" in name_upper and "GİDİŞ" not in name_upper:
                     direction_val = 1
-                elif "Dönüş" in (r.get("GUZERGAH_ADI") or ""):
-                    direction_val = 1
+                elif "GİDİŞ" in name_upper and "DÖNÜŞ" not in name_upper:
+                    direction_val = 0
 
             results.append({
                 "direction_name": (r.get("GUZERGAH_GUZERGAH_ADI") or "").strip(),

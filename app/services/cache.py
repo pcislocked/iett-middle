@@ -4,10 +4,13 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import json
+import logging
 import os
 import sqlite3
 import time
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 DB_PATH = "data/cache.db"
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
@@ -23,25 +26,30 @@ _hits: dict[str, int] = {}
 _misses: dict[str, int] = {}
 
 def _init_db() -> None:
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, value TEXT, expires_at REAL, created_at REAL)"
-        )
-        # Load unexpired keys into memory
-        now = time.time()
-        c = conn.cursor()
-        c.execute("SELECT key, value, expires_at, created_at FROM cache")
-        for row in c.fetchall():
-            key, value_json, expires_at, created_at = row
-            if now < expires_at:
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, value TEXT, expires_at REAL, created_at REAL)"
+            )
+            # Clear expired items
+            now = time.time()
+            conn.execute("DELETE FROM cache WHERE expires_at < ?", (now,))
+            # Load unexpired keys into memory
+            c = conn.cursor()
+            c.execute("SELECT key, value, expires_at, created_at FROM cache")
+            for row in c.fetchall():
+                key, value_json, expires_at, created_at = row
                 try:
                     value = json.loads(value_json)
                     _store[key] = (value, expires_at, created_at)
                 except Exception:
                     pass
-        conn.commit()
+            conn.commit()
+    except Exception as exc:
+        logger.warning("cache.db initialization failed (read-only or permission issue?): %s", exc)
 
-_init_db()
+async def init_cache() -> None:
+    await asyncio.to_thread(_init_db)
 
 def _db_set(key: str, value: Any, expires_at: float, created_at: float) -> None:
     try:
@@ -52,24 +60,27 @@ def _db_set(key: str, value: Any, expires_at: float, created_at: float) -> None:
                 (key, value_json, expires_at, created_at),
             )
             conn.commit()
-    except Exception:
-        pass  # JSON serialization might fail for some types, though our caches are mostly dicts/lists.
+    except Exception as exc:
+        logger.warning("SQLite _db_set failed: %s", exc)
 
-def _db_delete(key: str) -> None:
+def _db_delete(key: str, created_at: float | None = None) -> None:
     try:
         with sqlite3.connect(DB_PATH, timeout=10) as conn:
-            conn.execute("DELETE FROM cache WHERE key = ?", (key,))
+            if created_at is not None:
+                conn.execute("DELETE FROM cache WHERE key = ? AND created_at = ?", (key, created_at))
+            else:
+                conn.execute("DELETE FROM cache WHERE key = ?", (key,))
             conn.commit()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("SQLite _db_delete failed: %s", exc)
 
 def _db_clear() -> None:
     try:
         with sqlite3.connect(DB_PATH, timeout=10) as conn:
             conn.execute("DELETE FROM cache")
             conn.commit()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("SQLite _db_clear failed: %s", exc)
 
 def _db_delete_namespace(namespace: str) -> None:
     try:
@@ -77,8 +88,8 @@ def _db_delete_namespace(namespace: str) -> None:
         with sqlite3.connect(DB_PATH, timeout=10) as conn:
             conn.execute("DELETE FROM cache WHERE key = ? OR key LIKE ?", (namespace, f"{prefix}%"))
             conn.commit()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("SQLite _db_delete_namespace failed: %s", exc)
 
 def _set_cache_hit_time(val: float) -> None:
     container = cache_hit_time.get()
@@ -102,8 +113,13 @@ async def cache_get(key: str) -> Any | None:
                 _set_cache_hit_time(created_at)
             return value
         # Expired
-        _store.pop(key, None)
-        await asyncio.to_thread(_db_delete, key)
+        async with _lock:
+            # Re-check under lock in case another task updated it
+            entry = _store.get(key)
+            if entry is not None and time.time() >= entry[1]:
+                _, _, created_at = entry
+                _store.pop(key, None)
+                await asyncio.to_thread(_db_delete, key, created_at)
     _misses[ns] = _misses.get(ns, 0) + 1
     return None
 
@@ -121,12 +137,13 @@ async def cache_set(key: str, value: Any, ttl: int) -> None:
 async def cache_delete(key: str) -> bool:
     async with _lock:
         existed = False
+        created_at = None
         entry = _store.get(key)
         if entry is not None:
-            _, expires_at, _ = entry
+            _, expires_at, created_at = entry
             existed = time.time() < expires_at
         _store.pop(key, None)
-        await asyncio.to_thread(_db_delete, key)
+        await asyncio.to_thread(_db_delete, key, created_at)
         return existed
 
 async def cache_invalidate_namespace(namespace: str) -> int:

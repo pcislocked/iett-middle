@@ -220,8 +220,10 @@ async def get_bus_detail(kapino: str) -> dict[str, Any]:
         if not target_stop_codes:
             # Fallback to nearest stop or first stop
             ns = bus.get("nearest_stop")
-            if ns: target_stop_codes.append(ns)
-            elif route_stops_data: target_stop_codes.append(route_stops_data[0].get("stop_code"))
+            if ns:
+                target_stop_codes.append(ns)
+            elif route_stops_data:
+                target_stop_codes.append(route_stops_data[0].get("stop_code"))
 
         # Make targets unique and preserve order
         seen_targets = set()
@@ -237,10 +239,11 @@ async def get_bus_detail(kapino: str) -> dict[str, Any]:
                 raw_arrs = await ntcapi_client.get_stop_arrivals(target_stop_code, session)
                 canonical_arrs = [normalizers.arrivals.from_ntcapi_ybs(r) for r in raw_arrs]
                 for arr in canonical_arrs:
-                    if arr.kapino and arr.kapino.upper() == kapino.upper():
-                        found_amenities = arr.amenities
+                    arr_kapino = arr.get("kapino")
+                    if arr_kapino and arr_kapino.upper() == kapino.upper():
+                        found_amenities = arr.get("amenities")
                         if found_amenities:
-                            amenities = found_amenities.model_dump()
+                            amenities = found_amenities if isinstance(found_amenities, dict) else getattr(found_amenities, "model_dump", lambda: found_amenities)()
                             # Cache for 30 days
                             await cache_set(f"amenities:kapino:{kapino.upper()}", amenities, 86400 * 30)
                         break

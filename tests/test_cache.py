@@ -220,3 +220,46 @@ class TestCacheInvalidation:
         assert stats["active_keys"] == 0
         assert stats["hits"] == {}
         assert stats["misses"] == {}
+
+# ---------------------------------------------------------------------------
+# SQLite Persistence
+# ---------------------------------------------------------------------------
+
+class TestSQLitePersistence:
+    def setup_method(self) -> None:
+        _clear()
+        asyncio.run(cache_clear())  # also clears DB
+
+    def test_persistence_across_reloads(self) -> None:
+        # Write some data
+        asyncio.run(cache_set("sqlite:test", {"hello": "world"}, ttl=60))
+        
+        # Clear memory store to simulate reboot
+        _clear()
+        
+        # Reload from DB
+        cache_mod._init_db()
+        
+        # Check if loaded into memory correctly
+        result = asyncio.run(cache_get("sqlite:test"))
+        assert result == {"hello": "world"}
+
+    def test_expired_rows_cleared_on_startup(self) -> None:
+        # Set with very short ttl
+        asyncio.run(cache_set("sqlite:exp", "gone", ttl=0))
+        time.sleep(0.01)  # ensure it's expired
+        
+        # Simulate reboot and time passing
+        _clear()
+        
+        # Reload
+        cache_mod._init_db()
+        
+        # Should be missing
+        assert asyncio.run(cache_get("sqlite:exp")) is None
+        
+        # Also ensure DB table is empty for that key
+        with cache_mod.sqlite3.connect(cache_mod.DB_PATH) as conn:
+            c = conn.cursor()
+            c.execute("SELECT count(*) FROM cache WHERE key = ?", ("sqlite:exp",))
+            assert c.fetchone()[0] == 0

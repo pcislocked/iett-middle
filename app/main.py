@@ -73,6 +73,7 @@ def _make_trace_config() -> aiohttp.TraceConfig:
 async def lifespan(app: FastAPI):  # noqa: ARG001
     import asyncio  # noqa: PLC0415
 
+    from app.services.cache import init_cache  # noqa: PLC0415
     from app.config import settings  # noqa: PLC0415
     from app.services.fleet_poller import refresh_fleet_forever  # noqa: PLC0415
     from app.services.stop_indexer import index_stops_forever  # noqa: PLC0415
@@ -88,6 +89,8 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
         headers={"User-Agent": "iett-middle/1.0 (+https://github.com/pcislocked)"},
     ))
     logger.info("HTTP session started")
+
+    await init_cache()
 
     # Keep fleet refreshed in the background. The cadence is derived from the
     # maximum tolerated staleness so the coupling stays explicit.

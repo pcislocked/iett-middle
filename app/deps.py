@@ -202,6 +202,11 @@ def get_stop_coords(stop_code: str) -> tuple[float, float] | None:
     return s["latitude"], s["longitude"]
 
 
+def get_stop(stop_code: str) -> dict[str, Any] | None:
+    """Return the full stop dictionary for a stop code, or None if not in index."""
+    return _stop_by_code.get(stop_code)
+
+
 def get_nearby_stops(lat: float, lon: float, radius_m: float = 500.0) -> list[dict[str, Any]]:
     """Return stops within *radius_m* metres sorted by ascending distance.
 
