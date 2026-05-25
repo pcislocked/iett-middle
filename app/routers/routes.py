@@ -169,6 +169,20 @@ async def get_route_stops(hat_kodu: str):
         except IettApiError as exc:
             raise HTTPException(502, detail=str(exc)) from exc
 
+    # Enrich with physical stop direction from index or detail cache if available
+    from app.deps import _stop_by_code  # noqa: PLC0415
+    for s in stops:
+        if s.stop_direction is None:
+            # Check detail cache first (populated when user visits stop page)
+            cached_detail = await cache_get(f"stops:detail:{s.stop_code}")
+            if cached_detail and isinstance(cached_detail, dict):
+                s.stop_direction = cached_detail.get("direction")
+                
+            if s.stop_direction is None:
+                idx_stop = _stop_by_code.get(s.stop_code)
+                if idx_stop:
+                    s.stop_direction = idx_stop.get("direction")
+
     data = [s.model_dump() for s in stops]
     if stops and all(s.latitude is not None for s in stops):
         await cache_set(key, data, settings.cache_ttl_stops)

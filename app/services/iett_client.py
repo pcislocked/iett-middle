@@ -288,5 +288,8 @@ class IettClient:
         announcements = parse_announcements_xml(xml)
         if hat_kodu:
             hat_upper = hat_kodu.upper().strip()
-            announcements = [a for a in announcements if a.route_code.upper().strip() == hat_upper]
+            announcements = [
+                a for a in announcements 
+                if hat_upper in [code.strip() for code in a.route_code.upper().split(',')]
+            ]
         return announcements

@@ -199,6 +199,68 @@ async def get_bus_detail(kapino: str) -> dict[str, Any]:
                 except Exception:  # noqa: BLE001
                     logger.exception("IETT fallback for route stops failed for route %r", route_code)
 
+    # ── Probe & Cache Amenities ─────────────────────────────────────────────
+    # If the bus is active on a route and we have its upcoming stops, we can
+    # try to hit the stop-arrivals endpoint for its next stop to extract its
+    # wifi/klima/usb capabilities (since fleet data doesn't provide them).
+    amenities = await cache_get(f"amenities:kapino:{kapino.upper()}")
+    
+    if amenities is None and route_is_live and route_stops_data:
+        # Find up to 3 upcoming stops this bus is approaching
+        # If we have stop_sequence from fleet, use it; otherwise fallback
+        seq = bus.get("stop_sequence")
+        target_stop_codes = []
+        if seq is not None and seq > 0:
+            for s in route_stops_data:
+                s_seq = s.get("sequence")
+                # Start from the 2nd stop ahead (seq + 1) to avoid race conditions
+                if s_seq and seq + 1 <= s_seq <= seq + 3:
+                    target_stop_codes.append(s.get("stop_code"))
+                    
+        if not target_stop_codes:
+            # Fallback to nearest stop or first stop
+            ns = bus.get("nearest_stop")
+            if ns: target_stop_codes.append(ns)
+            elif route_stops_data: target_stop_codes.append(route_stops_data[0].get("stop_code"))
+
+        # Make targets unique and preserve order
+        seen_targets = set()
+        unique_targets = []
+        for t in target_stop_codes:
+            if t and t not in seen_targets:
+                seen_targets.add(t)
+                unique_targets.append(t)
+
+        session = get_session()
+        for target_stop_code in unique_targets[:2]:
+            try:
+                raw_arrs = await ntcapi_client.get_stop_arrivals(target_stop_code, session)
+                canonical_arrs = [normalizers.arrivals.from_ntcapi_ybs(r) for r in raw_arrs]
+                for arr in canonical_arrs:
+                    if arr.kapino and arr.kapino.upper() == kapino.upper():
+                        found_amenities = arr.amenities
+                        if found_amenities:
+                            amenities = found_amenities.model_dump()
+                            # Cache for 30 days
+                            await cache_set(f"amenities:kapino:{kapino.upper()}", amenities, 86400 * 30)
+                        break
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to probe amenities for %r at %r: %s", kapino, target_stop_code, exc)
+            
+            # If we found amenities from this stop's arrivals, stop probing!
+            if amenities:
+                break
+        
+        # If still not found after probing, set a negative cache for 15 minutes to prevent spamming
+        if not amenities:
+            await cache_set(f"amenities:kapino:{kapino.upper()}", {}, 900)
+
+    if amenities:
+        bus["has_usb"] = amenities.get("usb")
+        bus["has_wifi"] = amenities.get("wifi")
+        bus["is_air_conditioned"] = amenities.get("ac")
+        bus["accessible"] = amenities.get("accessible")
+
     return {**bus, "resolved_route_code": route_code, "route_is_live": route_is_live, "route_stops": route_stops_data}
 
 

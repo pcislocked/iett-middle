@@ -130,12 +130,22 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
 
         # ── primary: ntcapi ybs (has kapino + live bus location) ──────
         try:
+            from app.services.cache import cache_set  # noqa: PLC0415
             raw_items = await ntcapi_client.get_stop_arrivals(dcode, session)
             canonical = [normalizers.arrivals.from_ntcapi_ybs(r) for r in raw_items]
             canonical.sort(
                 key=lambda a: a.get("eta_minutes") if a.get("eta_minutes") is not None else 9999
             )
             arrivals_data = list(canonical)
+            
+            # Opportunistically cache amenities for fleet details
+            for arr in canonical:
+                if arr.kapino and arr.amenities:
+                    await cache_set(
+                        f"amenities:kapino:{arr.kapino.upper()}",
+                        arr.amenities.model_dump(),
+                        86400 * 30  # 30 days
+                    )
         except NtcApiError as exc:
             logger.warning("ntcapi arrivals failed for %s, falling back to HTML: %s", dcode, exc)
 

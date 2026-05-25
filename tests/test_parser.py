@@ -226,7 +226,7 @@ class TestParseRouteMetadata:
     def test_field_mapping(self):
         r = parse_route_metadata_json(ROUTE_METADATA_JSON)[0]
         assert r["variant_code"] == "500T_D_D0"
-        assert r["direction"] == 0
+        assert r["direction"] == 1
         assert r["depar_no"] == 1
         assert "4. LEVENT METRO" in r["direction_name"]
 

@@ -28,6 +28,7 @@ class RouteStop(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     district: str | None = None
+    stop_direction: str | None = None
 
 
 class NearbyStop(BaseModel):
