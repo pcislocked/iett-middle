@@ -231,6 +231,7 @@ class TestSQLitePersistence:
         asyncio.run(cache_clear())  # also clears DB
 
     def test_persistence_across_reloads(self) -> None:
+        cache_mod._init_db()
         # Write some data
         asyncio.run(cache_set("sqlite:test", {"hello": "world"}, ttl=60))
         
@@ -245,6 +246,7 @@ class TestSQLitePersistence:
         assert result == {"hello": "world"}
 
     def test_expired_rows_cleared_on_startup(self) -> None:
+        cache_mod._init_db()
         # Set with very short ttl
         asyncio.run(cache_set("sqlite:exp", "gone", ttl=0))
         time.sleep(0.01)  # ensure it's expired

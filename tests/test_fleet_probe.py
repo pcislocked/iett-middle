@@ -27,7 +27,8 @@ def test_bus_detail_returns_cached_amenities():
     
     with patch("app.routers.fleet.get_fleet_snapshot", return_value=[
         {"kapino": "C-123", "route_code": "500T", "latitude": 41.0, "longitude": 29.0, "last_seen": "2024-01-01T00:00:00Z"}
-    ]), patch("app.routers.fleet.get_trail", return_value=[]), patch("app.routers.fleet.ensure_fleet_fresh", new_callable=AsyncMock):
+    ]), patch("app.routers.fleet.get_trail", return_value=[]), patch("app.routers.fleet.ensure_fleet_fresh", new_callable=AsyncMock), \
+    patch("app.services.ntcapi_client.get_route_stops", AsyncMock(return_value=[])):
         
         with TestClient(app) as client:
             response = client.get("/v1/fleet/C-123/detail")
