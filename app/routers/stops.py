@@ -20,8 +20,12 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+_background_tasks = set()
+
 def _fire_and_forget(coro) -> None:
     task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
     task.add_done_callback(
         lambda t: t.exception() and logger.warning("Background task failed: %s", t.exception())
     )
@@ -144,17 +148,22 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
             arrivals_data = list(canonical)
             
             # Opportunistically cache amenities for fleet details
+            from app.services.cache import _store  # noqa: PLC0415
             for arr in canonical:
                 kapino = arr.get("kapino")
                 amenities = arr.get("amenities")
                 if kapino and amenities:
-                    _fire_and_forget(
-                        cache_set(
-                            f"amenities:kapino:{kapino.upper()}",
-                            amenities if isinstance(amenities, dict) else getattr(amenities, "model_dump", lambda: amenities)(),
-                            86400 * 30  # 30 days
+                    amenities_dict = amenities if isinstance(amenities, dict) else getattr(amenities, "model_dump", lambda: amenities)()
+                    cache_key = f"amenities:kapino:{kapino.upper()}"
+                    existing = _store.get(cache_key)
+                    if existing is None or existing[0] != amenities_dict:
+                        _fire_and_forget(
+                            cache_set(
+                                cache_key,
+                                amenities_dict,
+                                86400 * 30  # 30 days
+                            )
                         )
-                    )
         except NtcApiError as exc:
             logger.warning("ntcapi arrivals failed for %s, falling back to HTML: %s", dcode, exc)
 

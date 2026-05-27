@@ -19,7 +19,22 @@ from app.services.cache import (
 
 # ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
+import tempfile
+import os
+
+@pytest.fixture(autouse=True)
+def _mock_db_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure cache tests use an isolated SQLite database."""
+    fd, path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    monkeypatch.setattr(cache_mod, "DB_PATH", path)
+    monkeypatch.setattr(cache_mod, "_db_initialized", False)
+    cache_mod._init_db()
+    yield
+    try:
+        os.remove(path)
+    except Exception:
+        pass
 
 def _clear() -> None:
     """Wipe state between tests."""

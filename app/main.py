@@ -73,7 +73,7 @@ def _make_trace_config() -> aiohttp.TraceConfig:
 async def lifespan(app: FastAPI):  # noqa: ARG001
     import asyncio  # noqa: PLC0415
 
-    from app.services.cache import init_cache  # noqa: PLC0415
+    from app.services.cache import init_cache, sweep_expired_forever  # noqa: PLC0415
     from app.config import settings  # noqa: PLC0415
     from app.services.fleet_poller import refresh_fleet_forever  # noqa: PLC0415
     from app.services.stop_indexer import index_stops_forever  # noqa: PLC0415
@@ -97,6 +97,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     fleet_refresh_interval = settings.fleet_cache_max_age
     fleet_refresher = asyncio.create_task(refresh_fleet_forever(fleet_refresh_interval))
     stop_indexer = asyncio.create_task(index_stops_forever())
+    cache_sweeper = asyncio.create_task(sweep_expired_forever())
 
     yield
 
@@ -109,6 +110,12 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     stop_indexer.cancel()
     try:
         await stop_indexer
+    except asyncio.CancelledError:
+        pass
+        
+    cache_sweeper.cancel()
+    try:
+        await cache_sweeper
     except asyncio.CancelledError:
         pass
 

@@ -179,8 +179,8 @@ async def cache_set(key: str, value: Any, ttl: int) -> None:
         if key.startswith(_DYNAMIC_PREFIXES):
             _set_cache_hit_time(now_time)
             
-    if not key.startswith(_DYNAMIC_PREFIXES):
-        await asyncio.to_thread(_db_set, key, value, expires_at_time, now_time)
+        if not key.startswith(_DYNAMIC_PREFIXES):
+            await asyncio.to_thread(_db_set, key, value, expires_at_time, now_time)
 
 async def cache_delete(key: str) -> bool:
     existed = False
@@ -233,3 +233,25 @@ def get_cache_stats() -> dict[str, Any]:
         "hits": dict(_hits),
         "misses": dict(_misses),
     }
+
+async def sweep_expired_forever() -> None:
+    """Periodically iterate over the cache and evict expired items to prevent unbounded growth."""
+    while True:
+        await asyncio.sleep(600)  # Sweep every 10 minutes
+        try:
+            now_mono = time.monotonic()
+            expired_keys = []
+            async with _lock:
+                for k, v in _store.items():
+                    if now_mono >= v[1]:
+                        expired_keys.append((k, v[2]))
+                for k, _ in expired_keys:
+                    _store.pop(k, None)
+            
+            # DB deletes are done outside the lock to prevent blocking
+            for k, created_at in expired_keys:
+                await asyncio.to_thread(_db_delete, k, created_at)
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.warning("sweep_expired_forever failed: %s", exc)

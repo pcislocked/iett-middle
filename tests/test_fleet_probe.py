@@ -88,7 +88,10 @@ def test_bus_detail_negative_cache_on_probe_failure():
         assert data.get("is_air_conditioned") is None
         assert data.get("has_usb") is None
         
-        # Verify negative cache was set (empty dict)
-        from app.services.cache import cache_get
-        cached_val = asyncio.run(cache_get("amenities:kapino:C-123"))
-        assert cached_val == {}
+        # Verify negative cache was set by issuing a second request
+        # The mock should not be called again
+        mock_ntcapi.reset_mock()
+        with TestClient(app) as client:
+            response2 = client.get("/v1/fleet/C-123/detail")
+        assert response2.status_code == 200
+        mock_ntcapi.assert_not_called()
