@@ -127,7 +127,7 @@ async def get_route_stops(hat_kodu: str):
     ntcapi ``mainGetRoute`` is the primary source (fetches both directions);
     IETT SOAP ``GetHatDuraklari`` is the fallback.
     """
-    key = f"routes:stops:{hat_kodu}"
+    key = f"routes:stops:v2:{hat_kodu}"
     cached = await cache_get(key)
     if cached is not None:
         return cached

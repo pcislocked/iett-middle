@@ -148,15 +148,14 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
             arrivals_data = list(canonical)
             
             # Opportunistically cache amenities for fleet details
-            from app.services.cache import _store  # noqa: PLC0415
             for arr in canonical:
                 kapino = arr.get("kapino")
                 amenities = arr.get("amenities")
                 if kapino and amenities:
                     amenities_dict = amenities if isinstance(amenities, dict) else getattr(amenities, "model_dump", lambda: amenities)()
                     cache_key = f"amenities:kapino:{kapino.upper()}"
-                    existing = _store.get(cache_key)
-                    if existing is None or existing[0] != amenities_dict:
+                    existing = await cache_get(cache_key)
+                    if existing is None or existing != amenities_dict:
                         _fire_and_forget(
                             cache_set(
                                 cache_key,
