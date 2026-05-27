@@ -5,7 +5,7 @@ import asyncio
 import logging
 import math as _math
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 
 from app.config import settings
 from app.deps import get_plate_by_kapino, get_session
@@ -20,15 +20,13 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-_background_tasks = set()
+async def _batch_cache_set(items: list[tuple[str, dict, int]]) -> None:
+    for k, v, ttl in items:
+        try:
+            await cache_set(k, v, ttl)
+        except Exception as exc:
+            logger.warning("Background cache_set failed for %s: %s", k, exc)
 
-def _fire_and_forget(coro) -> None:
-    task = asyncio.create_task(coro)
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
-    task.add_done_callback(
-        lambda t: t.exception() and logger.warning("Background task failed: %s", t.exception())
-    )
 
 def _haversine_m(user_lat: float, user_lon: float, stop_lat: float, stop_lon: float) -> float:
     """Haversine distance in metres."""
@@ -123,7 +121,7 @@ async def get_arrivals_raw(dcode: str):
 
 
 @router.get("/{dcode}/arrivals", response_model=list[Arrival])
-async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
+async def get_arrivals(dcode: str, background_tasks: BackgroundTasks, via: str | None = Query(default=None)):
     """Live ETAs at a stop, sourced from ntcapi ybs (has kapino + live location).
 
     Falls back to the legacy IETT HTML endpoint if ntcapi is unavailable.
@@ -148,6 +146,7 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
             arrivals_data = list(canonical)
             
             # Opportunistically cache amenities for fleet details
+            amenities_to_cache = []
             for arr in canonical:
                 kapino = arr.get("kapino")
                 amenities = arr.get("amenities")
@@ -156,13 +155,9 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
                     cache_key = f"amenities:kapino:{kapino.upper()}"
                     existing = await cache_get(cache_key)
                     if existing is None or existing != amenities_dict:
-                        _fire_and_forget(
-                            cache_set(
-                                cache_key,
-                                amenities_dict,
-                                86400 * 30  # 30 days
-                            )
-                        )
+                        amenities_to_cache.append((cache_key, amenities_dict, 86400 * 30))
+            if amenities_to_cache:
+                background_tasks.add_task(_batch_cache_set, amenities_to_cache)
         except NtcApiError as exc:
             logger.warning("ntcapi arrivals failed for %s, falling back to HTML: %s", dcode, exc)
 

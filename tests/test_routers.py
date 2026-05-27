@@ -264,7 +264,7 @@ class TestFleetDetailRouter:
             patch("app.routers.fleet.get_last_route_by_kapino", return_value="15F"),
             patch("app.routers.fleet.get_session", return_value=MagicMock()),
             patch("app.services.ntcapi_client.get_route_stops", AsyncMock(return_value=[])),
-            patch("app.services.cache.cache_get", AsyncMock(return_value=[])),
+            patch("app.services.cache.cache_get", AsyncMock(return_value=None)),
             patch("app.services.cache.cache_set", AsyncMock()),
         ):
             resp = client.get("/v1/fleet/A-001/detail")

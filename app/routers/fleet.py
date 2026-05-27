@@ -207,6 +207,9 @@ async def get_bus_detail(kapino: str) -> dict[str, Any]:
     cache_key = f"amenities:kapino:{kapino.upper()}"
     amenities = await cache_get(cache_key)
     
+    if amenities is not None and not isinstance(amenities, dict):
+        amenities = None
+        
     if amenities is None and route_is_live and route_stops_data:
         event = _inflight_probes.get(kapino.upper())
         if event:
@@ -224,8 +227,8 @@ async def get_bus_detail(kapino: str) -> dict[str, Any]:
                 if seq is not None and seq > 0:
                     for s in route_stops_data:
                         s_seq = s.get("sequence")
-                        # Start from the next stop ahead (seq + 1) to avoid race conditions
-                        if s_seq and seq + 1 <= s_seq <= seq + 3:
+                        # Start from the 2nd stop ahead (seq + 2) to avoid race conditions
+                        if s_seq and seq + 2 <= s_seq <= seq + 4:
                             target_stop_codes.append(s.get("stop_code"))
                             
                 if not target_stop_codes:

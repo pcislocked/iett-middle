@@ -179,8 +179,8 @@ async def cache_set(key: str, value: Any, ttl: int) -> None:
         if key.startswith(_DYNAMIC_PREFIXES):
             _set_cache_hit_time(now_time)
             
-        if not key.startswith(_DYNAMIC_PREFIXES):
-            await asyncio.to_thread(_db_set, key, value, expires_at_time, now_time)
+    if not key.startswith(_DYNAMIC_PREFIXES):
+        await asyncio.to_thread(_db_set, key, value, expires_at_time, now_time)
 
 async def cache_delete(key: str) -> bool:
     existed = False
