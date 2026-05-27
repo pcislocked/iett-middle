@@ -39,7 +39,7 @@ def _init_db() -> list[tuple[str, Any, float, float]]:
             )
             # Clear expired items
             now = time.time()
-            conn.execute("DELETE FROM cache WHERE expires_at < ?", (now,))
+            conn.execute("DELETE FROM cache WHERE expires_at <= ?", (now,))
             # Load unexpired keys into memory
             c = conn.cursor()
             c.execute("SELECT key, value, expires_at, created_at FROM cache")
@@ -60,8 +60,11 @@ def _init_db() -> list[tuple[str, Any, float, float]]:
 async def init_cache() -> None:
     rows = await asyncio.to_thread(_init_db)
     async with _lock:
+        now_time = time.time()
+        now_mono = time.monotonic()
         for key, value, expires_at, created_at in rows:
-            _store[key] = (value, expires_at, created_at)
+            expires_at_mono = now_mono + (expires_at - now_time)
+            _store[key] = (value, expires_at_mono, created_at)
 
 def _db_set(key: str, value: Any, expires_at: float, created_at: float) -> None:
     if _db_disabled:
@@ -84,6 +87,10 @@ def _db_set(key: str, value: Any, expires_at: float, created_at: float) -> None:
 def _db_delete(key: str, created_at: float | None = None) -> None:
     if _db_disabled:
         return
+    if not _db_initialized:
+        _init_db()
+        if _db_disabled:
+            return
     try:
         with sqlite3.connect(DB_PATH, timeout=10) as conn:
             if created_at is not None:
@@ -97,6 +104,10 @@ def _db_delete(key: str, created_at: float | None = None) -> None:
 def _db_clear() -> None:
     if _db_disabled:
         return
+    if not _db_initialized:
+        _init_db()
+        if _db_disabled:
+            return
     try:
         with sqlite3.connect(DB_PATH, timeout=10) as conn:
             conn.execute("DELETE FROM cache")
@@ -107,6 +118,10 @@ def _db_clear() -> None:
 def _db_delete_namespace(namespace: str) -> None:
     if _db_disabled:
         return
+    if not _db_initialized:
+        _init_db()
+        if _db_disabled:
+            return
     try:
         prefix = f"{namespace}:"
         with sqlite3.connect(DB_PATH, timeout=10) as conn:
@@ -130,20 +145,23 @@ async def cache_get(key: str) -> Any | None:
     ns = _namespace(key)
     entry = _store.get(key)
     if entry is not None:
-        value, expires_at, created_at = entry
-        if time.time() < expires_at:
+        value, expires_at_mono, created_at = entry
+        if time.monotonic() < expires_at_mono:
             _hits[ns] = _hits.get(ns, 0) + 1
             if key.startswith(_DYNAMIC_PREFIXES):
                 _set_cache_hit_time(created_at)
             return value
         # Expired
+        db_del_args = None
         async with _lock:
             # Re-check under lock in case another task updated it
             entry = _store.get(key)
-            if entry is not None and time.time() >= entry[1]:
+            if entry is not None and time.monotonic() >= entry[1]:
                 _, _, created_at = entry
                 _store.pop(key, None)
-                await asyncio.to_thread(_db_delete, key, created_at)
+                db_del_args = (key, created_at)
+        if db_del_args:
+            await asyncio.to_thread(_db_delete, *db_del_args)
     _misses[ns] = _misses.get(ns, 0) + 1
     return None
 
@@ -151,43 +169,50 @@ async def cache_set(key: str, value: Any, ttl: int) -> None:
     if ttl < 0:
         raise ValueError("ttl must be >= 0")
     
-    now = time.time()
-    expires_at = now + ttl
+    now_time = time.time()
+    now_mono = time.monotonic()
+    expires_at_time = now_time + ttl
+    expires_at_mono = now_mono + ttl
     
     async with _lock:
-        _store[key] = (value, expires_at, now)
+        _store[key] = (value, expires_at_mono, now_time)
         if key.startswith(_DYNAMIC_PREFIXES):
-            _set_cache_hit_time(now)
+            _set_cache_hit_time(now_time)
             
-    await asyncio.to_thread(_db_set, key, value, expires_at, now)
+    if not key.startswith(_DYNAMIC_PREFIXES):
+        await asyncio.to_thread(_db_set, key, value, expires_at_time, now_time)
 
 async def cache_delete(key: str) -> bool:
+    existed = False
+    created_at = None
     async with _lock:
-        existed = False
-        created_at = None
         entry = _store.get(key)
         if entry is not None:
-            _, expires_at, created_at = entry
-            existed = time.time() < expires_at
-        _store.pop(key, None)
+            _, expires_at_mono, created_at = entry
+            existed = time.monotonic() < expires_at_mono
+            _store.pop(key, None)
+    
+    if created_at is not None:
         await asyncio.to_thread(_db_delete, key, created_at)
-        return existed
+    return existed
 
 async def cache_invalidate_namespace(namespace: str) -> int:
     prefix = f"{namespace}:"
+    removed = 0
     async with _lock:
-        now = time.time()
+        now_mono = time.monotonic()
         keys = [k for k in _store if k == namespace or k.startswith(prefix)]
-        removed = 0
         for k in keys:
-            _, expires_at, _ = _store[k]
-            if now < expires_at:
+            _, expires_at_mono, _ = _store[k]
+            if now_mono < expires_at_mono:
                 removed += 1
             _store.pop(k, None)
-        await asyncio.to_thread(_db_delete_namespace, namespace)
         _hits.pop(namespace, None)
         _misses.pop(namespace, None)
-        return removed
+        
+    if keys:
+        await asyncio.to_thread(_db_delete_namespace, namespace)
+    return removed
 
 async def cache_clear() -> int:
     async with _lock:
@@ -195,12 +220,13 @@ async def cache_clear() -> int:
         _store.clear()
         _hits.clear()
         _misses.clear()
-        await asyncio.to_thread(_db_clear)
-        return removed
+        
+    await asyncio.to_thread(_db_clear)
+    return removed
 
 def get_cache_stats() -> dict[str, Any]:
-    now = time.time()
-    active = sum(1 for _, (_, exp, _) in _store.items() if now < exp)
+    now_mono = time.monotonic()
+    active = sum(1 for _, (_, exp, _) in _store.items() if now_mono < exp)
     return {
         "active_keys": active,
         "total_keys": len(_store),

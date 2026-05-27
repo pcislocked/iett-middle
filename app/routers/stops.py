@@ -20,6 +20,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+def _fire_and_forget(coro) -> None:
+    task = asyncio.create_task(coro)
+    task.add_done_callback(
+        lambda t: t.exception() and logger.warning("Background task failed: %s", t.exception())
+    )
 
 def _haversine_m(user_lat: float, user_lon: float, stop_lat: float, stop_lon: float) -> float:
     """Haversine distance in metres."""
@@ -143,7 +148,7 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
                 kapino = arr.get("kapino")
                 amenities = arr.get("amenities")
                 if kapino and amenities:
-                    asyncio.create_task(
+                    _fire_and_forget(
                         cache_set(
                             f"amenities:kapino:{kapino.upper()}",
                             amenities if isinstance(amenities, dict) else getattr(amenities, "model_dump", lambda: amenities)(),
