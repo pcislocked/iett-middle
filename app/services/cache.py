@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 DB_PATH = "data/cache.db"
 _db_initialized = False
+_db_disabled = False
 
 # We use time.time() for persistence because time.monotonic() resets on reboot.
 _store: dict[str, tuple[Any, float, float]] = {}
@@ -26,7 +27,9 @@ _hits: dict[str, int] = {}
 _misses: dict[str, int] = {}
 
 def _init_db() -> None:
-    global _db_initialized
+    global _db_initialized, _db_disabled
+    if _db_disabled:
+        return
     try:
         os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
         with sqlite3.connect(DB_PATH) as conn:
@@ -50,13 +53,18 @@ def _init_db() -> None:
             _db_initialized = True
     except Exception as exc:
         logger.warning("cache.db initialization failed (read-only or permission issue?): %s", exc)
+        _db_disabled = True
 
 async def init_cache() -> None:
     await asyncio.to_thread(_init_db)
 
 def _db_set(key: str, value: Any, expires_at: float, created_at: float) -> None:
+    if _db_disabled:
+        return
     if not _db_initialized:
         _init_db()
+        if _db_disabled:
+            return
     try:
         value_json = json.dumps(value)
         with sqlite3.connect(DB_PATH, timeout=10) as conn:
@@ -69,6 +77,8 @@ def _db_set(key: str, value: Any, expires_at: float, created_at: float) -> None:
         logger.warning("SQLite _db_set failed: %s", exc)
 
 def _db_delete(key: str, created_at: float | None = None) -> None:
+    if _db_disabled:
+        return
     try:
         with sqlite3.connect(DB_PATH, timeout=10) as conn:
             if created_at is not None:
@@ -80,6 +90,8 @@ def _db_delete(key: str, created_at: float | None = None) -> None:
         logger.warning("SQLite _db_delete failed: %s", exc)
 
 def _db_clear() -> None:
+    if _db_disabled:
+        return
     try:
         with sqlite3.connect(DB_PATH, timeout=10) as conn:
             conn.execute("DELETE FROM cache")
@@ -88,6 +100,8 @@ def _db_clear() -> None:
         logger.warning("SQLite _db_clear failed: %s", exc)
 
 def _db_delete_namespace(namespace: str) -> None:
+    if _db_disabled:
+        return
     try:
         prefix = f"{namespace}:"
         with sqlite3.connect(DB_PATH, timeout=10) as conn:

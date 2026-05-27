@@ -15,6 +15,12 @@ def wipe_cache():
     yield
     asyncio.run(cache_clear())
 
+@pytest.fixture(autouse=True)
+def mock_background_tasks():
+    with patch("app.services.fleet_poller.refresh_fleet_forever", new_callable=AsyncMock), \
+         patch("app.services.stop_indexer.index_stops_forever", new_callable=AsyncMock):
+        yield
+
 def test_bus_detail_returns_cached_amenities():
     # Pre-populate cache with amenities
     asyncio.run(cache_set("amenities:kapino:C-123", {"ac": True, "usb": False, "wifi": True, "accessible": True}, 3600))
@@ -82,6 +88,6 @@ def test_bus_detail_negative_cache_on_probe_failure():
         assert data.get("has_usb") is None
         
         # Verify negative cache was set (empty dict)
-        from app.services.cache import _store
-        assert "amenities:kapino:C-123" in _store
-        assert _store["amenities:kapino:C-123"][0] == {}
+        from app.services.cache import cache_get
+        cached_val = asyncio.run(cache_get("amenities:kapino:C-123"))
+        assert cached_val == {}

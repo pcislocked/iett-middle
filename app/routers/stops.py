@@ -130,7 +130,6 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
 
         # ── primary: ntcapi ybs (has kapino + live bus location) ──────
         try:
-            from app.services.cache import cache_set  # noqa: PLC0415
             raw_items = await ntcapi_client.get_stop_arrivals(dcode, session)
             canonical = [normalizers.arrivals.from_ntcapi_ybs(r) for r in raw_items]
             canonical.sort(
