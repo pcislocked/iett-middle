@@ -26,10 +26,11 @@ _lock = asyncio.Lock()
 _hits: dict[str, int] = {}
 _misses: dict[str, int] = {}
 
-def _init_db() -> None:
+def _init_db() -> list[tuple[str, Any, float, float]]:
     global _db_initialized, _db_disabled
+    rows_to_load = []
     if _db_disabled:
-        return
+        return rows_to_load
     try:
         os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
         with sqlite3.connect(DB_PATH) as conn:
@@ -46,17 +47,21 @@ def _init_db() -> None:
                 key, value_json, expires_at, created_at = row
                 try:
                     value = json.loads(value_json)
-                    _store[key] = (value, expires_at, created_at)
-                except Exception:
-                    pass
+                    rows_to_load.append((key, value, expires_at, created_at))
+                except Exception as exc:
+                    logger.warning("Skipping cache row with invalid JSON for key %r: %s", key, exc)
             conn.commit()
             _db_initialized = True
     except Exception as exc:
         logger.warning("cache.db initialization failed (read-only or permission issue?): %s", exc)
         _db_disabled = True
+    return rows_to_load
 
 async def init_cache() -> None:
-    await asyncio.to_thread(_init_db)
+    rows = await asyncio.to_thread(_init_db)
+    async with _lock:
+        for key, value, expires_at, created_at in rows:
+            _store[key] = (value, expires_at, created_at)
 
 def _db_set(key: str, value: Any, expires_at: float, created_at: float) -> None:
     if _db_disabled:
@@ -145,13 +150,16 @@ async def cache_get(key: str) -> Any | None:
 async def cache_set(key: str, value: Any, ttl: int) -> None:
     if ttl < 0:
         raise ValueError("ttl must be >= 0")
+    
+    now = time.time()
+    expires_at = now + ttl
+    
     async with _lock:
-        now = time.time()
-        expires_at = now + ttl
         _store[key] = (value, expires_at, now)
         if key.startswith(_DYNAMIC_PREFIXES):
             _set_cache_hit_time(now)
-        await asyncio.to_thread(_db_set, key, value, expires_at, now)
+            
+    await asyncio.to_thread(_db_set, key, value, expires_at, now)
 
 async def cache_delete(key: str) -> bool:
     async with _lock:

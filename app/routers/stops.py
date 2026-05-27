@@ -1,6 +1,7 @@
 """Stops router — /v1/stops"""
 from __future__ import annotations
 
+import asyncio
 import logging
 import math as _math
 
@@ -142,10 +143,12 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
                 kapino = arr.get("kapino")
                 amenities = arr.get("amenities")
                 if kapino and amenities:
-                    await cache_set(
-                        f"amenities:kapino:{kapino.upper()}",
-                        amenities if isinstance(amenities, dict) else getattr(amenities, "model_dump", lambda: amenities)(),
-                        86400 * 30  # 30 days
+                    asyncio.create_task(
+                        cache_set(
+                            f"amenities:kapino:{kapino.upper()}",
+                            amenities if isinstance(amenities, dict) else getattr(amenities, "model_dump", lambda: amenities)(),
+                            86400 * 30  # 30 days
+                        )
                     )
         except NtcApiError as exc:
             logger.warning("ntcapi arrivals failed for %s, falling back to HTML: %s", dcode, exc)

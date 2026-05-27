@@ -213,7 +213,7 @@ async def get_bus_detail(kapino: str) -> dict[str, Any]:
         if seq is not None and seq > 0:
             for s in route_stops_data:
                 s_seq = s.get("sequence")
-                # Start from the 2nd stop ahead (seq + 1) to avoid race conditions
+                # Start from the next stop ahead (seq + 1) to avoid race conditions
                 if s_seq and seq + 1 <= s_seq <= seq + 3:
                     target_stop_codes.append(s.get("stop_code"))
                     
