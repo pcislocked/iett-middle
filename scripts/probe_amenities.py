@@ -9,14 +9,15 @@ def _call_service(alias, data):
         "grant_type": "client_credentials",
         "scope": settings.ntcapi_scope,
     }
-    r = requests.post(url, json=payload, headers={"User-Agent": "okhttp/5.0.0-alpha.11"})
+    r = requests.post(url, json=payload, headers={"User-Agent": "okhttp/5.0.0-alpha.11"}, timeout=10)
     r.raise_for_status()
     token = r.json()["access_token"]
     
     r2 = requests.post(
         "https://ntcapi.iett.istanbul/service",
         json={"alias": alias, "data": data},
-        headers={"Authorization": f"Bearer {token}", "User-Agent": "okhttp/5.0.0-alpha.11"}
+        headers={"Authorization": f"Bearer {token}", "User-Agent": "okhttp/5.0.0-alpha.11"},
+        timeout=10,
     )
     r2.raise_for_status()
     return r2.json()

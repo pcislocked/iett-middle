@@ -13,7 +13,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 DB_PATH = "data/cache.db"
-os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+_db_initialized = False
 
 # We use time.time() for persistence because time.monotonic() resets on reboot.
 _store: dict[str, tuple[Any, float, float]] = {}
@@ -26,7 +26,9 @@ _hits: dict[str, int] = {}
 _misses: dict[str, int] = {}
 
 def _init_db() -> None:
+    global _db_initialized
     try:
+        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
         with sqlite3.connect(DB_PATH) as conn:
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, value TEXT, expires_at REAL, created_at REAL)"
@@ -45,6 +47,7 @@ def _init_db() -> None:
                 except Exception:
                     pass
             conn.commit()
+            _db_initialized = True
     except Exception as exc:
         logger.warning("cache.db initialization failed (read-only or permission issue?): %s", exc)
 
@@ -52,6 +55,8 @@ async def init_cache() -> None:
     await asyncio.to_thread(_init_db)
 
 def _db_set(key: str, value: Any, expires_at: float, created_at: float) -> None:
+    if not _db_initialized:
+        _init_db()
     try:
         value_json = json.dumps(value)
         with sqlite3.connect(DB_PATH, timeout=10) as conn:

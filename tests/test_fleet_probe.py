@@ -6,10 +6,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services.cache import cache_clear, cache_set
+from app.services.cache import cache_clear, cache_set, init_cache
 
 @pytest.fixture(autouse=True)
 def wipe_cache():
+    asyncio.run(init_cache())
     asyncio.run(cache_clear())
     yield
     asyncio.run(cache_clear())
@@ -40,21 +41,6 @@ def test_bus_detail_probes_amenities_on_cache_miss():
         {"route_code": "500T", "direction": "G", "stop_name": "Stop 2", "stop_code": "S2", "sequence": 2, "latitude": 41.2, "longitude": 29.2},
     ], 3600))
     
-    class MockArrival:
-        def __init__(self):
-            self.kapino = "C-123"
-            class MockAmenities:
-                def model_dump(self):
-                    return {"ac": False, "usb": True, "wifi": False, "accessible": True}
-            self.amenities = MockAmenities()
-            
-        def get(self, key):
-            if key == "kapino":
-                return self.kapino
-            if key == "amenities":
-                return {"ac": False, "usb": True, "wifi": False, "accessible": True}
-            return None
-            
     mock_ntcapi = AsyncMock()
     # Return our mock arrival with dict format like from_ntcapi_ybs does
     mock_ntcapi.return_value = [{"kapino": "C-123", "amenities": {"ac": False, "usb": True, "wifi": False, "accessible": True}}]
