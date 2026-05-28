@@ -561,7 +561,14 @@ class TestRoutesSearch:
         assert resp.status_code == 200
 
     def test_422_when_q_missing(self, client: TestClient) -> None:
-        resp = client.get("/v1/routes/search")
+        mock_client = MagicMock()
+        with (
+            patch("app.routers.routes.cache_get", AsyncMock(return_value=None)),
+            patch("app.routers.routes.cache_set", AsyncMock()),
+            patch("app.routers.routes.get_session", return_value=MagicMock()),
+            patch("app.routers.routes.IettClient", return_value=mock_client),
+        ):
+            resp = client.get("/v1/routes/search")
         assert resp.status_code == 422
 
 
@@ -580,6 +587,18 @@ class TestRoutesMeta:
             resp = client.get("/v1/routes/500T")
         assert resp.status_code == 200
 
+    def test_200_ntcapi_success(self, client: TestClient) -> None:
+        raw_meta = [_route_meta()]
+        with (
+            patch("app.routers.routes.ntcapi_client.get_route_metadata", AsyncMock(return_value=raw_meta)),
+            patch("app.routers.routes.cache_get", AsyncMock(return_value=None)),
+            patch("app.routers.routes.cache_set", AsyncMock()),
+            patch("app.routers.routes.get_session", return_value=MagicMock()),
+            patch("app.routers.routes.IettClient", MagicMock()),
+        ):
+            resp = client.get("/v1/routes/500T")
+        assert resp.status_code == 200
+
 
 class TestRoutesBuses:
     def test_200_with_buses(self, client: TestClient) -> None:
@@ -587,6 +606,8 @@ class TestRoutesBuses:
         mock_client = MagicMock()
         mock_client.get_route_buses = AsyncMock(return_value=[bus])
         with (
+            patch("app.routers.routes.ntcapi_client.get_route_metadata", _NTCAPI_DOWN),
+            patch("app.routers.routes.ntcapi_client.get_route_buses_ybs", AsyncMock(return_value=[])),
             patch("app.routers.routes.cache_get", AsyncMock(return_value=None)),
             patch("app.routers.routes.cache_set", AsyncMock()),
             patch("app.routers.routes.get_session", return_value=MagicMock()),

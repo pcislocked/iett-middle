@@ -26,10 +26,24 @@ _lock = asyncio.Lock()
 _hits: dict[str, int] = {}
 _misses: dict[str, int] = {}
 
+_last_fallback_log_time = 0.0
+FALLBACK_LOG_INTERVAL = 60.0  # Log at most once per 60 seconds
+
+def _log_db_fallback(operation: str) -> None:
+    global _last_fallback_log_time
+    now = time.time()
+    if now - _last_fallback_log_time >= FALLBACK_LOG_INTERVAL:
+        _last_fallback_log_time = now
+        logger.warning(
+            "SQLite database is disabled; cache operations are falling back to in-memory only. Operation: %s",
+            operation,
+        )
+
 def _init_db() -> list[tuple[str, Any, float, float]]:
     global _db_initialized, _db_disabled
     rows_to_load = []
     if _db_disabled:
+        _log_db_fallback("init")
         return rows_to_load
     try:
         os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
@@ -67,11 +81,14 @@ async def init_cache() -> None:
             _store[key] = (value, expires_at_mono, created_at)
 
 def _db_set(key: str, value: Any, expires_at: float, created_at: float) -> None:
+    global _db_disabled
     if _db_disabled:
+        _log_db_fallback("set")
         return
     if not _db_initialized:
         _init_db()
         if _db_disabled:
+            _log_db_fallback("set")
             return
     try:
         value_json = json.dumps(value)
@@ -83,13 +100,17 @@ def _db_set(key: str, value: Any, expires_at: float, created_at: float) -> None:
             conn.commit()
     except Exception as exc:
         logger.warning("SQLite _db_set failed: %s", exc)
+        _db_disabled = True
 
 def _db_delete(key: str, created_at: float | None = None) -> None:
+    global _db_disabled
     if _db_disabled:
+        _log_db_fallback("delete")
         return
     if not _db_initialized:
         _init_db()
         if _db_disabled:
+            _log_db_fallback("delete")
             return
     try:
         with sqlite3.connect(DB_PATH, timeout=10) as conn:
@@ -100,13 +121,17 @@ def _db_delete(key: str, created_at: float | None = None) -> None:
             conn.commit()
     except Exception as exc:
         logger.warning("SQLite _db_delete failed: %s", exc)
+        _db_disabled = True
 
 def _db_delete_batch(expired_keys: list[tuple[str, float]]) -> None:
+    global _db_disabled
     if _db_disabled:
+        _log_db_fallback("delete_batch")
         return
     if not _db_initialized:
         _init_db()
         if _db_disabled:
+            _log_db_fallback("delete_batch")
             return
     if not expired_keys:
         return
@@ -116,13 +141,18 @@ def _db_delete_batch(expired_keys: list[tuple[str, float]]) -> None:
             conn.commit()
     except Exception as exc:
         logger.warning("SQLite _db_delete_batch failed: %s", exc)
+        _db_disabled = True
+        raise exc
 
 def _db_clear() -> None:
+    global _db_disabled
     if _db_disabled:
+        _log_db_fallback("clear")
         return
     if not _db_initialized:
         _init_db()
         if _db_disabled:
+            _log_db_fallback("clear")
             return
     try:
         with sqlite3.connect(DB_PATH, timeout=10) as conn:
@@ -130,13 +160,17 @@ def _db_clear() -> None:
             conn.commit()
     except Exception as exc:
         logger.warning("SQLite _db_clear failed: %s", exc)
+        _db_disabled = True
 
 def _db_delete_namespace(namespace: str) -> None:
+    global _db_disabled
     if _db_disabled:
+        _log_db_fallback("delete_namespace")
         return
     if not _db_initialized:
         _init_db()
         if _db_disabled:
+            _log_db_fallback("delete_namespace")
             return
     try:
         prefix = f"{namespace}:"
@@ -145,6 +179,7 @@ def _db_delete_namespace(namespace: str) -> None:
             conn.commit()
     except Exception as exc:
         logger.warning("SQLite _db_delete_namespace failed: %s", exc)
+        _db_disabled = True
 
 def _set_cache_hit_time(val: float) -> None:
     container = cache_hit_time.get()
@@ -168,16 +203,13 @@ async def cache_get(key: str) -> Any | None:
                 _set_cache_hit_time(created_at)
             return value
         # Expired
-        db_del_args = None
         async with _lock:
             # Re-check under lock in case another task updated it
             entry = _store.get(key)
             if entry is not None and time.monotonic() >= entry[1]:
                 _, _, created_at = entry
                 _store.pop(key, None)
-                db_del_args = (key, created_at)
-        if db_del_args:
-            await asyncio.to_thread(_db_delete, *db_del_args)
+                await asyncio.to_thread(_db_delete, key, created_at)
     _misses[ns] = _misses.get(ns, 0) + 1
     return None
 
@@ -194,9 +226,8 @@ async def cache_set(key: str, value: Any, ttl: int) -> None:
         _store[key] = (value, expires_at_mono, now_time)
         if key.startswith(_DYNAMIC_PREFIXES):
             _set_cache_hit_time(now_time)
-            
-    if not key.startswith(_DYNAMIC_PREFIXES):
-        await asyncio.to_thread(_db_set, key, value, expires_at_time, now_time)
+        if not key.startswith(_DYNAMIC_PREFIXES):
+            await asyncio.to_thread(_db_set, key, value, expires_at_time, now_time)
 
 async def cache_delete(key: str) -> bool:
     existed = False
@@ -207,9 +238,8 @@ async def cache_delete(key: str) -> bool:
             _, expires_at_mono, created_at = entry
             existed = time.monotonic() < expires_at_mono
             _store.pop(key, None)
-    
-    if created_at is not None:
-        await asyncio.to_thread(_db_delete, key, created_at)
+        if created_at is not None:
+            await asyncio.to_thread(_db_delete, key, created_at)
     return existed
 
 async def cache_invalidate_namespace(namespace: str) -> int:
@@ -225,9 +255,8 @@ async def cache_invalidate_namespace(namespace: str) -> int:
             _store.pop(k, None)
         _hits.pop(namespace, None)
         _misses.pop(namespace, None)
-        
-    if keys:
-        await asyncio.to_thread(_db_delete_namespace, namespace)
+        if keys:
+            await asyncio.to_thread(_db_delete_namespace, namespace)
     return removed
 
 async def cache_clear() -> int:
@@ -236,8 +265,7 @@ async def cache_clear() -> int:
         _store.clear()
         _hits.clear()
         _misses.clear()
-        
-    await asyncio.to_thread(_db_clear)
+        await asyncio.to_thread(_db_clear)
     return removed
 
 def get_cache_stats() -> dict[str, Any]:
@@ -252,6 +280,8 @@ def get_cache_stats() -> dict[str, Any]:
 
 async def sweep_expired_forever() -> None:
     """Periodically iterate over the cache and evict expired items to prevent unbounded growth."""
+    consecutive_failures = 0
+    max_failures = 5
     while True:
         await asyncio.sleep(600)  # Sweep every 10 minutes
         try:
@@ -263,11 +293,24 @@ async def sweep_expired_forever() -> None:
                         expired_keys.append((k, v[2]))
                 for k, _ in expired_keys:
                     _store.pop(k, None)
-            
-            # DB deletes are done outside the lock to prevent blocking
-            if expired_keys:
-                await asyncio.to_thread(_db_delete_batch, expired_keys)
+                if expired_keys:
+                    await asyncio.to_thread(_db_delete_batch, expired_keys)
+            consecutive_failures = 0
         except asyncio.CancelledError:
             break
         except Exception as exc:
-            logger.warning("sweep_expired_forever failed: %s", exc)
+            consecutive_failures += 1
+            if consecutive_failures >= max_failures:
+                logger.critical(
+                    "sweep_expired_forever failed consecutively %d times. Permanent failure detected. Disabling background sweeping. Last error: %s",
+                    consecutive_failures,
+                    exc,
+                )
+                break
+            else:
+                logger.warning(
+                    "sweep_expired_forever failed (%d/%d): %s",
+                    consecutive_failures,
+                    max_failures,
+                    exc,
+                )
