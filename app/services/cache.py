@@ -101,6 +101,22 @@ def _db_delete(key: str, created_at: float | None = None) -> None:
     except Exception as exc:
         logger.warning("SQLite _db_delete failed: %s", exc)
 
+def _db_delete_batch(expired_keys: list[tuple[str, float]]) -> None:
+    if _db_disabled:
+        return
+    if not _db_initialized:
+        _init_db()
+        if _db_disabled:
+            return
+    if not expired_keys:
+        return
+    try:
+        with sqlite3.connect(DB_PATH, timeout=10) as conn:
+            conn.executemany("DELETE FROM cache WHERE key = ? AND created_at = ?", expired_keys)
+            conn.commit()
+    except Exception as exc:
+        logger.warning("SQLite _db_delete_batch failed: %s", exc)
+
 def _db_clear() -> None:
     if _db_disabled:
         return
@@ -249,8 +265,8 @@ async def sweep_expired_forever() -> None:
                     _store.pop(k, None)
             
             # DB deletes are done outside the lock to prevent blocking
-            for k, created_at in expired_keys:
-                await asyncio.to_thread(_db_delete, k, created_at)
+            if expired_keys:
+                await asyncio.to_thread(_db_delete_batch, expired_keys)
         except asyncio.CancelledError:
             break
         except Exception as exc:

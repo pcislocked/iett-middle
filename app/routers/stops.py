@@ -158,7 +158,7 @@ async def get_arrivals(dcode: str, background_tasks: BackgroundTasks, via: str |
                         amenities_to_cache.append((cache_key, amenities_dict, 86400 * 30))
             if amenities_to_cache:
                 background_tasks.add_task(_batch_cache_set, amenities_to_cache)
-        except NtcApiError as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning("ntcapi arrivals failed for %s, falling back to HTML: %s", dcode, exc)
 
         # ── fallback: legacy IETT HTML (no kapino, no location) ───────

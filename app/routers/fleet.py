@@ -273,7 +273,8 @@ async def get_bus_detail(kapino: str) -> dict[str, Any]:
                     await cache_set(cache_key, {}, 900)
             finally:
                 event.set()
-                _inflight_probes.pop(kapino.upper(), None)
+                if _inflight_probes.get(kapino.upper()) is event:
+                    _inflight_probes.pop(kapino.upper(), None)
 
     if amenities:
         bus["has_usb"] = amenities.get("usb")
