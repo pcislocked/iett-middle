@@ -139,13 +139,17 @@ def client() -> TestClient:
 
 class TestFleetRoot:
     def test_503_when_empty(self, client: TestClient) -> None:
-        with patch("app.routers.fleet.get_fleet_snapshot", return_value=[]):
+        with (
+            patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
+            patch("app.routers.fleet.get_fleet_snapshot", return_value=[]),
+        ):
             resp = client.get("/v1/fleet")
         assert resp.status_code == 503
 
     def test_200_with_buses(self, client: TestClient) -> None:
         bus = _bus()
         with (
+            patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
             patch("app.routers.fleet.get_trail", return_value=[]),
         ):
@@ -158,6 +162,7 @@ class TestFleetRoot:
 class TestFleetMeta:
     def test_always_200(self, client: TestClient) -> None:
         with (
+            patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[]),
             patch("app.routers.fleet.get_fleet_updated_at", return_value=None),
         ):
@@ -168,6 +173,7 @@ class TestFleetMeta:
     def test_count_matches_snapshot(self, client: TestClient) -> None:
         now = datetime.now(timezone.utc)
         with (
+            patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[_bus(), _bus("B-002")]),
             patch("app.routers.fleet.get_fleet_updated_at", return_value=now),
         ):
@@ -212,6 +218,7 @@ class TestFleetKapino:
     def test_200_when_found(self, client: TestClient) -> None:
         bus = _bus("A-001")
         with (
+            patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
             patch("app.routers.fleet.get_trail", return_value=[]),
         ):
@@ -220,7 +227,10 @@ class TestFleetKapino:
         assert resp.json()["kapino"] == "A-001"
 
     def test_404_when_missing(self, client: TestClient) -> None:
-        with patch("app.routers.fleet.get_fleet_snapshot", return_value=[]):
+        with (
+            patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
+            patch("app.routers.fleet.get_fleet_snapshot", return_value=[]),
+        ):
             resp = client.get("/v1/fleet/NOTEXIST")
         assert resp.status_code == 404
 
@@ -949,6 +959,33 @@ class TestStopsExtra:
         ):
             resp = client.get("/v1/stops/301341/routes")
         assert resp.status_code == 502
+
+    def test_arrivals_ntcapi_background_cache_set_error(self, client: TestClient, caplog: pytest.LogCaptureFixture) -> None:
+        import logging
+        raw = [{"route_code": "500T", "destination": "LEVENT", "eta_minutes": 3,
+                "eta_raw": "3 dk", "plate": None, "kapino": "A-001",
+                "lat": None, "lon": None, "speed_kmh": None, "last_seen_ts": None, "amenities": {"wifi": True}}]
+        canonical = [{"route_code": "500T", "destination": "LEVENT", "eta_minutes": 3,
+                      "eta_raw": "3 dk", "plate": None, "kapino": "A-001",
+                      "lat": None, "lon": None, "speed_kmh": None, "last_seen_ts": None, "amenities": {"wifi": True}}]
+
+        async def mock_cache_set(k, v, ttl=None):
+            if k.startswith("amenities:"):
+                raise Exception("mock cache set fail")
+
+        with (
+            patch("app.routers.stops.ntcapi_client.get_stop_arrivals", AsyncMock(return_value=raw)),
+            patch("app.services.normalizers.arrivals.from_ntcapi_ybs", return_value=canonical[0]),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None)),
+            patch("app.routers.stops.cache_set", AsyncMock(side_effect=mock_cache_set)),
+            patch("app.routers.stops.get_session", return_value=MagicMock()),
+            patch("app.routers.stops.get_plate_by_kapino", return_value=None),
+            caplog.at_level(logging.WARNING, logger="app.routers.stops"),
+        ):
+            resp = client.get("/v1/stops/220602/arrivals")
+        assert resp.status_code == 200
+        assert any("Background cache_set failed" in r.message for r in caplog.records)
+
 
 
 # ===========================  extra /v1/fleet detail  =======================
