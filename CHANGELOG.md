@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.3.23] - 2026-05-30
+
+### Fixed
+- Fixed backend tests failing due to endpoint swap from IETT SOAP to Mobiett JSON endpoints. Mocked `ntcapi.iett.istanbul` properly.
+
+### Release Notes
+- Released as `v0.3.23`.
+
+---
+
 ## [0.3.18] - 2026-05-30
 
 ### Fixed

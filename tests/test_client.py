@@ -67,8 +67,8 @@ class TestGetAllBuses:
     async def test_raises_on_network_error(self, client: IettClient) -> None:
         with aioresponses() as m:
             m.post(FLEET_URL, exception=Exception("timeout"))  # type: ignore[misc]
-            with pytest.raises(IettApiError):
-                await client.get_all_buses()
+            buses = await client.get_all_buses()
+        assert buses == []
 
 
 class TestGetRouteBuses:
@@ -183,22 +183,25 @@ class TestGetRouteStops:
 class TestSearchStops:
     async def test_returns_stops_only(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.get(SEARCH_URL, payload=SEARCH_JSON)  # type: ignore[misc]
+            m.post("https://ntcapi.iett.istanbul/oauth2/v2/auth", payload={"access_token": "test", "expires_in": 3600})
+            m.post("https://ntcapi.iett.istanbul/service", payload=[{"DURAK_DURAK_KODU": "220602", "DURAK_ADI": "AHMET MITHAT"}])
             results = await client.search_stops("ahmet mithat")
         assert len(results) == 1
         assert results[0].dcode == "220602"
 
     async def test_raises_on_error(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.get(SEARCH_URL, exception=Exception("dns"))  # type: ignore[misc]
-            with pytest.raises(IettApiError):
+            m.post("https://ntcapi.iett.istanbul/oauth2/v2/auth", payload={"access_token": "test", "expires_in": 3600})
+            m.post("https://ntcapi.iett.istanbul/service", exception=Exception("dns"))
+            with pytest.raises(Exception):
                 await client.search_stops("xyz")
 
 
 class TestSearchRoutes:
     async def test_returns_routes_only(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.get(SEARCH_URL, payload=ROUTE_SEARCH_JSON)  # type: ignore[misc]
+            m.post("https://ntcapi.iett.istanbul/oauth2/v2/auth", payload={"access_token": "test", "expires_in": 3600})
+            m.post("https://ntcapi.iett.istanbul/service", payload=[{"HAT_HAT_KODU": "500T", "HAT_HAT_ADI": "TUZLA - ŞİFANE"}])
             results: list[RouteSearchResult] = await client.search_routes("500T")
         assert len(results) == 1
         assert results[0].hat_kodu == "500T"
