@@ -203,13 +203,16 @@ async def cache_get(key: str) -> Any | None:
                 _set_cache_hit_time(created_at)
             return value
         # Expired
+        deleted_created_at = None
         async with _lock:
             # Re-check under lock in case another task updated it
             entry = _store.get(key)
             if entry is not None and time.monotonic() >= entry[1]:
                 _, _, created_at = entry
                 _store.pop(key, None)
-                await asyncio.to_thread(_db_delete, key, created_at)
+                deleted_created_at = created_at
+        if deleted_created_at is not None:
+            await asyncio.to_thread(_db_delete, key, deleted_created_at)
     _misses[ns] = _misses.get(ns, 0) + 1
     return None
 
@@ -226,8 +229,9 @@ async def cache_set(key: str, value: Any, ttl: int) -> None:
         _store[key] = (value, expires_at_mono, now_time)
         if key.startswith(_DYNAMIC_PREFIXES):
             _set_cache_hit_time(now_time)
-        if not key.startswith(_DYNAMIC_PREFIXES):
-            await asyncio.to_thread(_db_set, key, value, expires_at_time, now_time)
+            
+    if not key.startswith(_DYNAMIC_PREFIXES):
+        await asyncio.to_thread(_db_set, key, value, expires_at_time, now_time)
 
 async def cache_delete(key: str) -> bool:
     existed = False
@@ -238,13 +242,14 @@ async def cache_delete(key: str) -> bool:
             _, expires_at_mono, created_at = entry
             existed = time.monotonic() < expires_at_mono
             _store.pop(key, None)
-        if created_at is not None:
-            await asyncio.to_thread(_db_delete, key, created_at)
+    if created_at is not None:
+        await asyncio.to_thread(_db_delete, key, created_at)
     return existed
 
 async def cache_invalidate_namespace(namespace: str) -> int:
     prefix = f"{namespace}:"
     removed = 0
+    has_keys = False
     async with _lock:
         now_mono = time.monotonic()
         keys = [k for k in _store if k == namespace or k.startswith(prefix)]
@@ -255,8 +260,9 @@ async def cache_invalidate_namespace(namespace: str) -> int:
             _store.pop(k, None)
         _hits.pop(namespace, None)
         _misses.pop(namespace, None)
-        if keys:
-            await asyncio.to_thread(_db_delete_namespace, namespace)
+        has_keys = len(keys) > 0
+    if has_keys:
+        await asyncio.to_thread(_db_delete_namespace, namespace)
     return removed
 
 async def cache_clear() -> int:
@@ -265,7 +271,7 @@ async def cache_clear() -> int:
         _store.clear()
         _hits.clear()
         _misses.clear()
-        await asyncio.to_thread(_db_clear)
+    await asyncio.to_thread(_db_clear)
     return removed
 
 def get_cache_stats() -> dict[str, Any]:
@@ -281,9 +287,13 @@ def get_cache_stats() -> dict[str, Any]:
 async def sweep_expired_forever() -> None:
     """Periodically iterate over the cache and evict expired items to prevent unbounded growth."""
     consecutive_failures = 0
-    max_failures = 5
     while True:
-        await asyncio.sleep(600)  # Sweep every 10 minutes
+        if consecutive_failures > 0:
+            backoff = min(600, 2 ** consecutive_failures)
+            await asyncio.sleep(backoff)
+        else:
+            await asyncio.sleep(600)  # Sweep every 10 minutes
+            
         try:
             now_mono = time.monotonic()
             expired_keys = []
@@ -293,24 +303,15 @@ async def sweep_expired_forever() -> None:
                         expired_keys.append((k, v[2]))
                 for k, _ in expired_keys:
                     _store.pop(k, None)
-                if expired_keys:
-                    await asyncio.to_thread(_db_delete_batch, expired_keys)
+            if expired_keys:
+                await asyncio.to_thread(_db_delete_batch, expired_keys)
             consecutive_failures = 0
         except asyncio.CancelledError:
             break
         except Exception as exc:
             consecutive_failures += 1
-            if consecutive_failures >= max_failures:
-                logger.critical(
-                    "sweep_expired_forever failed consecutively %d times. Permanent failure detected. Disabling background sweeping. Last error: %s",
-                    consecutive_failures,
-                    exc,
-                )
-                break
-            else:
-                logger.warning(
-                    "sweep_expired_forever failed (%d/%d): %s",
-                    consecutive_failures,
-                    max_failures,
-                    exc,
-                )
+            logger.error(
+                "sweep_expired_forever failed (consecutive failure #%d): %s",
+                consecutive_failures,
+                exc,
+            )

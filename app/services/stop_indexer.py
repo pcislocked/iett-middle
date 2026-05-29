@@ -34,8 +34,14 @@ async def index_stops_forever() -> None:
         except asyncio.CancelledError:
             logger.info("Stop indexer cancelled — shutting down")
             raise
-        except Exception:  # noqa: BLE001
-            logger.exception("Unexpected error in stop indexer")
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Unexpected error in stop indexer (will retry in 60 s): %s", exc)
+            try:
+                await asyncio.sleep(60)
+            except asyncio.CancelledError:
+                logger.info("Stop indexer cancelled during error retry sleep")
+                raise
+            continue
 
         # Wait until next daily refresh
         try:

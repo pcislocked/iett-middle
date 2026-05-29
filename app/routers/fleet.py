@@ -152,7 +152,7 @@ async def get_bus_detail(kapino: str) -> dict[str, Any]:
 
     route_stops_data: list[dict[str, Any]] = []
     if route_code:
-        cache_key = f"routes:stops:{route_code}"
+        cache_key = f"routes:stops:v2:{route_code}"
         cached = await cache_get(cache_key)
         if cached is not None:
             route_stops_data = cast(list[dict[str, Any]], cached)
@@ -180,6 +180,12 @@ async def get_bus_detail(kapino: str) -> dict[str, Any]:
                     )
                     for c in canonical
                 ]
+                from app.deps import get_stop  # noqa: PLC0415
+                for s in stops:
+                    if s.stop_direction is None:
+                        idx_stop = get_stop(s.stop_code)
+                        if idx_stop:
+                            s.stop_direction = idx_stop.get("direction")
                 route_stops_data = [s.model_dump() for s in stops]
                 if stops and all(
                     s.latitude is not None and s.longitude is not None for s in stops
@@ -196,9 +202,25 @@ async def get_bus_detail(kapino: str) -> dict[str, Any]:
                 try:
                     client = IettClient(session)
                     stops = await client.get_route_stops(route_code)
+                    from app.deps import get_stop  # noqa: PLC0415
+                    for s in stops:
+                        if s.stop_direction is None:
+                            idx_stop = get_stop(s.stop_code)
+                            if idx_stop:
+                                s.stop_direction = idx_stop.get("direction")
                     route_stops_data = [s.model_dump() for s in stops]
+                    if stops:
+                        await cache_set(cache_key, route_stops_data, settings.cache_ttl_stops)
                 except Exception:  # noqa: BLE001
                     logger.exception("IETT fallback for route stops failed for route %r", route_code)
+
+        # Safety enrichment for cached stops that might lack direction
+        from app.deps import get_stop  # noqa: PLC0415
+        for s in route_stops_data:
+            if s.get("stop_direction") is None:
+                idx_stop = get_stop(s.get("stop_code") or "")
+                if idx_stop:
+                    s["stop_direction"] = idx_stop.get("direction")
 
     # ── Probe & Cache Amenities ─────────────────────────────────────────────
     # If the bus is active on a route and we have its upcoming stops, we can
