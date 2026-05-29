@@ -511,3 +511,53 @@ def parse_route_metadata_json(raw: list[Any] | dict[str, Any]) -> list[dict[str,
         except (TypeError, ValueError):
             continue
     return results
+
+
+# ---------------------------------------------------------------------------
+# 13. Mobiett JSON API Parsers
+# ---------------------------------------------------------------------------
+
+def parse_mobiett_buses(raw: list[dict[str, Any]]) -> list[BusPosition]:
+    """Parse 'ybs' point-passing live fleet data into BusPosition models."""
+    result: list[BusPosition] = []
+    for r in raw:
+        try:
+            guzergah = r.get("K_GUZERGAH_GUZERGAHKODU") or ""
+            direction_letter: str | None = None
+            route_code: str | None = None
+            parts = guzergah.split("_")
+            if len(parts) > 0:
+                route_code = parts[0]
+            if len(parts) > 1 and parts[1] in ("G", "D"):
+                direction_letter = parts[1]
+                
+            result.append(
+                BusPosition(
+                    kapino=r.get("K_ARAC_KAPINUMARASI", ""),
+                    plate=None,  # Mobiett JSON API does not provide license plates
+                    latitude=float(r.get("ENLEM", 0)),
+                    longitude=float(r.get("BOYLAM", 0)),
+                    last_seen=r.get("SISTEMSAATI", ""),
+                    route_code=route_code,
+                    direction_letter=direction_letter,
+                )
+            )
+        except (TypeError, ValueError):
+            continue
+    return result
+
+def parse_mobiett_stop(raw: dict[str, Any]) -> StopDetail | None:
+    """Parse 'mainGetBusStop' JSON response into StopDetail."""
+    try:
+        geoloc = raw.get("DURAK_GEOLOC") or {}
+        lat = geoloc.get("y")
+        lon = geoloc.get("x")
+        return StopDetail(
+            dcode=str(raw.get("DURAK_DURAK_KODU", "")),
+            name=raw.get("DURAK_ADI", ""),
+            latitude=float(lat) if lat else 0.0,
+            longitude=float(lon) if lon else 0.0,
+            direction=raw.get("DURAK_YON_BILGISI"),
+        )
+    except (TypeError, ValueError):
+        return None

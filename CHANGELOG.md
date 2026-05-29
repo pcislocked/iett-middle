@@ -5,6 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.3.18] - 2026-05-30
+
+### Fixed
+- Replaced dead IETT SOAP endpoints with official Mobiett JSON endpoints (`ntcapi.iett.istanbul`).
+- Search stops, search routes, route schedules, and route live fleets now successfully retrieve data via the new API.
+- Re-architected `IettClient` and `MobiettClient` initialization to ensure OAuth2 cache survival and avoid request amplification.
+
+### Release Notes
+- Released as `v0.3.18` emergency fix to bypass the IBB data blackout.
+
+---
+
 ## [0.3.17] - 2026-04-20
 
 ### Fixed

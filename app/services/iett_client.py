@@ -49,7 +49,9 @@ class IettApiError(Exception):
 
 class IettClient:
     def __init__(self, session: aiohttp.ClientSession) -> None:
+        from app.services.mobiett_client import MobiettClient
         self._session = session
+        self.mobiett = MobiettClient(self._session)
 
     # ------------------------------------------------------------------
     # Helpers
@@ -103,21 +105,60 @@ class IettClient:
 
     async def get_all_buses(self) -> list[BusPosition]:
         """All ~7,000 active Istanbul buses (fleet snapshot)."""
-        xml = await self._soap_post(
-            f"{settings.iett_soap_base}/FiloDurum/SeferGerceklesme.asmx",
-            '<GetFiloAracKonum_json xmlns="http://tempuri.org/"/>',
-            '"http://tempuri.org/GetFiloAracKonum_json"',
-        )
-        return parse_all_fleet_xml(xml)
+        try:
+            xml = await self._soap_post(
+                f"{settings.iett_soap_base}/FiloDurum/SeferGerceklesme.asmx",
+                '<GetFiloAracKonum_json xmlns="http://tempuri.org/"/>',
+                '"http://tempuri.org/GetFiloAracKonum_json"',
+            )
+            return parse_all_fleet_xml(xml)
+        except Exception as e:
+            logger.warning(f"get_all_buses SOAP fallback failed, returning empty: {e}")
+            return []
 
     async def get_route_buses(self, hat_kodu: str) -> list[BusPosition]:
         """Live positions of all buses on a specific route."""
-        xml = await self._soap_post(
-            f"{settings.iett_soap_base}/FiloDurum/SeferGerceklesme.asmx",
-            f'<GetHatOtoKonum_json xmlns="http://tempuri.org/"><HatKodu>{hat_kodu}</HatKodu></GetHatOtoKonum_json>',
-            '"http://tempuri.org/GetHatOtoKonum_json"',
-        )
-        return parse_route_fleet_xml(xml)
+        from app.services.iett_parser import parse_mobiett_buses
+        
+        async def fetch_soap():
+            xml = await self._soap_post(
+                f"{settings.iett_soap_base}/FiloDurum/SeferGerceklesme.asmx",
+                f'<GetHatOtoKonum_json xmlns="http://tempuri.org/"><HatKodu>{hat_kodu}</HatKodu></GetHatOtoKonum_json>',
+                '"http://tempuri.org/GetHatOtoKonum_json"',
+            )
+            return parse_route_fleet_xml(xml)
+            
+        async def fetch_json():
+            data = await self.mobiett.get_live_fleet(hat_kodu)
+            return parse_mobiett_buses(data)
+            
+        soap_task = asyncio.create_task(fetch_soap())
+        json_task = asyncio.create_task(fetch_json())
+        
+        results = await asyncio.gather(soap_task, json_task, return_exceptions=True)
+        soap_res = results[0]
+        json_res = results[1]
+        
+        buses: dict[str, BusPosition] = {}
+        
+        if not isinstance(json_res, Exception):
+            for b in json_res:
+                if b.kapino:
+                    buses[b.kapino] = b
+                
+        if not isinstance(soap_res, Exception):
+            for b in soap_res:
+                if not b.kapino:
+                    continue
+                if b.kapino in buses:
+                    buses[b.kapino] = buses[b.kapino].model_copy(update={"plate": b.plate})
+                else:
+                    buses[b.kapino] = b
+                    
+        if isinstance(json_res, Exception) and isinstance(soap_res, Exception):
+            raise json_res
+            
+        return list(buses.values())
 
     # ------------------------------------------------------------------
     # Stops
@@ -152,27 +193,71 @@ class IettClient:
         return [a for a in all_arrivals if a.route_code in common]
 
     async def search_stops(self, query: str) -> list[StopSearchResult]:
-        """Search stops by name. Returns stop dcode + name."""
-        raw = await self._get_json(
-            f"{settings.iett_rest_base}/tr/RouteStation/GetSearchItems",
-            params={"key": query, "langid": "1"},
+        """Search stops by name."""
+        query = query.upper()
+        if not query.endswith("%"):
+            query = query + "%"
+            
+        res = await self.mobiett._post_service(
+            "mainGetBusStop_basic_search", 
+            {"HATYONETIM.DURAK.ADI": query}
         )
-        return [StopSearchResult(**item) for item in parse_search_results(raw)]
+        if not isinstance(res, list) or not res:
+            res = await self.mobiett._post_service(
+                "mainGetBusStop_basic_search", 
+                {"HATYONETIM.DURAK.DURAK_KODU": query}
+            )
+        if not isinstance(res, list):
+            res = []
+            
+        return [
+            StopSearchResult(
+                dcode=str(r.get("DURAK_DURAK_KODU", "")), 
+                name=r.get("DURAK_ADI", "")
+            ) for r in res if r.get("DURAK_DURAK_KODU")
+        ]
 
     async def get_stop_detail(self, dcode: str) -> StopDetail | None:
-        """Stop name + coordinates via GetDurak_json (single SOAP call).
+        """Stop name + coordinates via SOAP or JSON fallback.
 
         Falls back to the in-memory stop index for coordinates when the SOAP
         response omits or zeroes them out.
         """
         from app.deps import get_stop_coords  # noqa: PLC0415
+        from app.services.iett_parser import parse_mobiett_stop
+        
+        async def fetch_soap():
+            xml = await self._soap_post(
+                f"{settings.iett_soap_base}/UlasimAnaVeri/HatDurakGuzergah.asmx",
+                f'<GetDurak_json xmlns="http://tempuri.org/"><DurakKodu>{dcode}</DurakKodu></GetDurak_json>',
+                '"http://tempuri.org/GetDurak_json"',
+            )
+            return parse_stop_detail_xml(xml, dcode)
+            
+        async def fetch_json():
+            data = await self.mobiett.get_stop_detail(dcode)
+            if data:
+                return parse_mobiett_stop(data)
+            return None
+            
+        soap_task = asyncio.create_task(fetch_soap())
+        json_task = asyncio.create_task(fetch_json())
+        
+        results = await asyncio.gather(soap_task, json_task, return_exceptions=True)
+        soap_res = results[0]
+        json_res = results[1]
+        
+        detail = None
+        if not isinstance(soap_res, Exception) and soap_res:
+            detail = soap_res
+        elif not isinstance(json_res, Exception) and json_res:
+            detail = json_res
+            
+        if isinstance(json_res, Exception) and isinstance(soap_res, Exception):
+            logger.error(f"get_stop_detail failed for {dcode}: SOAP={soap_res}, JSON={json_res}")
+            # Propagate the json exception since it's the more modern one
+            raise json_res
 
-        xml = await self._soap_post(
-            f"{settings.iett_soap_base}/UlasimAnaVeri/HatDurakGuzergah.asmx",
-            f'<GetDurak_json xmlns="http://tempuri.org/"><DurakKodu>{dcode}</DurakKodu></GetDurak_json>',
-            '"http://tempuri.org/GetDurak_json"',
-        )
-        detail = parse_stop_detail_xml(xml, dcode)
         if detail is not None and (
             detail.latitude in (None, 0.0) or detail.longitude in (None, 0.0)
         ):
@@ -203,11 +288,28 @@ class IettClient:
 
     async def search_routes(self, query: str) -> list[RouteSearchResult]:
         """Search routes by name or code. Returns hat_kodu + name."""
-        raw = await self._get_json(
-            f"{settings.iett_rest_base}/tr/RouteStation/GetSearchItems",
-            params={"key": query, "langid": "1"},
+        query = query.upper()
+        if not query.endswith("%"):
+            query = query + "%"
+            
+        res = await self.mobiett._post_service(
+            "mainGetLine_basic_search", 
+            {"HATYONETIM.HAT.HAT_KODU": query}
         )
-        return [RouteSearchResult(**item) for item in parse_route_search_results(raw)]
+        if not isinstance(res, list) or not res:
+            res = await mobiett._post_service(
+                "mainGetLine_basic_search", 
+                {"HATYONETIM.HAT.HAT_ADI": query}
+            )
+        if not isinstance(res, list):
+            res = []
+            
+        return [
+            RouteSearchResult(
+                hat_kodu=r.get("HAT_HAT_KODU", ""), 
+                name=r.get("HAT_HAT_ADI", "")
+            ) for r in res if r.get("HAT_HAT_KODU")
+        ]
 
     async def get_route_metadata(self, hat_kodu: str) -> list[RouteMetadata]:
         """Route variant metadata (direction names, variant codes) via GetAllRoute."""
