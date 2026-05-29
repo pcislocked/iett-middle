@@ -52,6 +52,7 @@ _fleet_updated_at: datetime | None = None
 _fleet_refresh_task: asyncio.Task | None = None
 # kapino (upper) → last known route_code (survives when bus parks / goes offline)
 _kapino_last_route: dict[str, str] = {}
+_kapino_last_seen_local: dict[str, float] = {}
 
 
 def get_fleet_snapshot() -> list[dict[str, Any]]:
@@ -141,6 +142,7 @@ def get_last_route_by_kapino(kapino: str) -> str | None:
 def update_fleet(buses: list[BusPosition]) -> None:  # noqa: C901
     """Called by the background poller.  Updates fleet dict and trail deques."""
     global _fleet_updated_at  # noqa: PLW0603
+    import time  # noqa: PLC0415
     from app.config import settings  # noqa: PLC0415
 
     # Max trail entries = (trail_minutes * 60) / poll_interval, rounded up
@@ -167,6 +169,16 @@ def update_fleet(buses: list[BusPosition]) -> None:  # noqa: C901
         # Persist last known route even when bus later goes offline / parks
         if b.route_code:
             _kapino_last_route[k.upper()] = b.route_code.strip().upper()
+
+        _kapino_last_seen_local[k] = time.time()
+
+    # Evict buses not seen in > 30 minutes (1800 seconds)
+    now = time.time()
+    expired = [k for k, ts in _kapino_last_seen_local.items() if now - ts > 1800]
+    for k in expired:
+        _fleet.pop(k, None)
+        _trail.pop(k, None)
+        _kapino_last_seen_local.pop(k, None)
 
     _fleet_updated_at = datetime.now(UTC)
 

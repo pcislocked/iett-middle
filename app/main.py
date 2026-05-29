@@ -75,8 +75,8 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
 
     from app.services.cache import init_cache, sweep_expired_forever  # noqa: PLC0415
     from app.config import settings  # noqa: PLC0415
-    from app.services.fleet_poller import refresh_fleet_forever  # noqa: PLC0415
-    from app.services.stop_indexer import index_stops_forever  # noqa: PLC0415
+    from app.services.fleet_poller import refresh_fleet_forever, refresh_fleet_once  # noqa: PLC0415
+    from app.services.stop_indexer import index_stops_forever, index_stops_once  # noqa: PLC0415
 
     connector = aiohttp.TCPConnector(
         resolver=aiohttp.ThreadedResolver() if sys.platform == "win32" else None,
@@ -91,6 +91,17 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     logger.info("HTTP session started")
 
     await init_cache()
+
+    # Synchronously populate essential caches before accepting traffic
+    try:
+        await index_stops_once()
+    except Exception as exc:
+        logger.warning("Initial stop index fetch failed: %s", exc)
+        
+    try:
+        await refresh_fleet_once()
+    except Exception as exc:
+        logger.warning("Initial fleet fetch failed: %s", exc)
 
     # Keep fleet refreshed in the background. The cadence is derived from the
     # maximum tolerated staleness so the coupling stays explicit.

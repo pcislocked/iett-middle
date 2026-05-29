@@ -108,7 +108,7 @@ class IettClient:
             '<GetFiloAracKonum_json xmlns="http://tempuri.org/"/>',
             '"http://tempuri.org/GetFiloAracKonum_json"',
         )
-        return parse_all_fleet_xml(xml)
+        return await asyncio.to_thread(parse_all_fleet_xml, xml)
 
     async def get_route_buses(self, hat_kodu: str) -> list[BusPosition]:
         """Live positions of all buses on a specific route."""
@@ -190,7 +190,7 @@ class IettClient:
             '<GetDurak_json xmlns="http://tempuri.org/"><DurakKodu></DurakKodu></GetDurak_json>',
             '"http://tempuri.org/GetDurak_json"',
         )
-        return parse_all_stops_json(xml)
+        return await asyncio.to_thread(parse_all_stops_json, xml)
 
     async def get_garages(self) -> list[Garage]:
         """All IETT bus garage locations via GetGaraj_json."""

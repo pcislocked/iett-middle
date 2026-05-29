@@ -21,6 +21,7 @@ _store: dict[str, tuple[Any, float, float]] = {}
 cache_hit_time = contextvars.ContextVar("cache_hit_time", default=None)
 _DYNAMIC_PREFIXES = ("stops:arrivals:", "routes:announcements:", "traffic:")
 _lock = asyncio.Lock()
+_db_lock = asyncio.Lock()
 
 # Track hit/miss stats per namespace
 _hits: dict[str, int] = {}
@@ -212,7 +213,8 @@ async def cache_get(key: str) -> Any | None:
                 _store.pop(key, None)
                 deleted_created_at = created_at
         if deleted_created_at is not None:
-            await asyncio.to_thread(_db_delete, key, deleted_created_at)
+            async with _db_lock:
+                await asyncio.to_thread(_db_delete, key, deleted_created_at)
     _misses[ns] = _misses.get(ns, 0) + 1
     return None
 
@@ -231,7 +233,8 @@ async def cache_set(key: str, value: Any, ttl: int) -> None:
             _set_cache_hit_time(now_time)
             
     if not key.startswith(_DYNAMIC_PREFIXES):
-        await asyncio.to_thread(_db_set, key, value, expires_at_time, now_time)
+        async with _db_lock:
+            await asyncio.to_thread(_db_set, key, value, expires_at_time, now_time)
 
 async def cache_delete(key: str) -> bool:
     existed = False
@@ -243,7 +246,8 @@ async def cache_delete(key: str) -> bool:
             existed = time.monotonic() < expires_at_mono
             _store.pop(key, None)
     if created_at is not None:
-        await asyncio.to_thread(_db_delete, key, created_at)
+        async with _db_lock:
+            await asyncio.to_thread(_db_delete, key, created_at)
     return existed
 
 async def cache_invalidate_namespace(namespace: str) -> int:
@@ -262,7 +266,8 @@ async def cache_invalidate_namespace(namespace: str) -> int:
         _misses.pop(namespace, None)
         has_keys = len(keys) > 0
     if has_keys:
-        await asyncio.to_thread(_db_delete_namespace, namespace)
+        async with _db_lock:
+            await asyncio.to_thread(_db_delete_namespace, namespace)
     return removed
 
 async def cache_clear() -> int:
@@ -271,7 +276,8 @@ async def cache_clear() -> int:
         _store.clear()
         _hits.clear()
         _misses.clear()
-    await asyncio.to_thread(_db_clear)
+    async with _db_lock:
+        await asyncio.to_thread(_db_clear)
     return removed
 
 def get_cache_stats() -> dict[str, Any]:
@@ -304,7 +310,8 @@ async def sweep_expired_forever() -> None:
                 for k, _ in expired_keys:
                     _store.pop(k, None)
             if expired_keys:
-                await asyncio.to_thread(_db_delete_batch, expired_keys)
+                async with _db_lock:
+                    await asyncio.to_thread(_db_delete_batch, expired_keys)
             consecutive_failures = 0
         except asyncio.CancelledError:
             break

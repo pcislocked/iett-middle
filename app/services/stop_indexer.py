@@ -12,21 +12,27 @@ logger = logging.getLogger(__name__)
 _REFRESH_INTERVAL = 24 * 60 * 60  # 24 hours
 
 
+async def index_stops_once() -> None:
+    from app.deps import get_session, update_stop_index  # noqa: PLC0415
+    from app.services.iett_client import IettClient  # noqa: PLC0415
+
+    client = IettClient(get_session())
+    stops = await client.get_all_stops()
+    update_stop_index(stops)
+    logger.info("Stop index ready: %d stops indexed", len(stops))
+
+
 async def index_stops_forever() -> None:
     """Fetch the full stop catalogue on startup, refresh daily.
 
     Lazy imports to avoid circular-import problems at module load time.
     """
-    from app.deps import get_session, update_stop_index  # noqa: PLC0415
-    from app.services.iett_client import IettApiError, IettClient  # noqa: PLC0415
+    from app.services.iett_client import IettApiError  # noqa: PLC0415
 
     logger.info("Stop indexer started — fetching all stops…")
     while True:
         try:
-            client = IettClient(get_session())
-            stops = await client.get_all_stops()
-            update_stop_index(stops)
-            logger.info("Stop index ready: %d stops indexed", len(stops))
+            await index_stops_once()
         except IettApiError as exc:
             logger.warning("Stop index fetch failed (will retry in 60 s): %s", exc)
             await asyncio.sleep(60)
