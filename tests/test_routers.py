@@ -744,7 +744,7 @@ class TestRoutesStopsFallback:
         cached = [{"route_code": "500T", "direction": "G", "sequence": 1,
                    "stop_code": "301341", "stop_name": "LEVENT",
                    "latitude": 41.08, "longitude": 29.01, "district": None}]
-        with patch("app.routers.routes.cache_get", AsyncMock(return_value=cached)):
+        with patch("app.routers.routes.cache_get_or_fetch", AsyncMock(return_value=cached)):
             resp = client.get("/v1/routes/500T/stops")
         assert resp.status_code == 200
         assert resp.json()[0]["stop_code"] == "301341"
@@ -785,7 +785,7 @@ class TestStopsExtra:
         assert "500T" in body
 
     def test_get_routes_at_stop_returns_cached(self, client: TestClient) -> None:
-        with patch("app.routers.stops.cache_get", AsyncMock(return_value=["500T"])):
+        with patch("app.routers.stops.cache_get_or_fetch", AsyncMock(return_value=["500T"])):
             resp = client.get("/v1/stops/301341/routes")
         assert resp.status_code == 200
         assert resp.json() == ["500T"]
@@ -844,7 +844,7 @@ class TestStopsExtra:
                    "eta_raw": "5 dk", "plate": None, "kapino": None,
                    "lat": None, "lon": None, "speed_kmh": None, "last_seen_ts": None, "amenities": None}]
         with (
-            patch("app.routers.stops.cache_get", AsyncMock(return_value=cached)),
+            patch("app.routers.stops.cache_get_or_fetch", AsyncMock(return_value=cached)),
             patch("app.routers.stops.get_plate_by_kapino", return_value=None),
         ):
             resp = client.get("/v1/stops/220602/arrivals")

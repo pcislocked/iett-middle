@@ -5,6 +5,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.3.24] - 2026-05-30
+
+### Fixed
+- Fixed token expiry logic in ntcapi client to guard against clock skew generating negative token lifespans.
+- Fixed uncached IettClient bypass in stops.py arrivals `via` filtering by routing through the cached router endpoint.
+- Fixed deadlock in `requestGps` on the frontend where failed `getCurrentPosition` caused permanent lockout.
+- Fixed silent exception swallowing on frontend ARAC captcha refresh failure.
+- Fixed fetch retry logic in the frontend client to properly recreate a fresh `AbortSignal` for retry execution.
+- Fixed focus trap bug in `StopPage.tsx` where tabbing while focus was outside the dialog bypassed the trap.
+
+### Release Notes
+- Released as `v0.3.24`.
+
+---
+
 ## [0.3.23] - 2026-05-30
 
 ### Fixed

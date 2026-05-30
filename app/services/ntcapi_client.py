@@ -37,12 +37,12 @@ async def _ensure_token(session: aiohttp.ClientSession) -> str:
     """Return a valid Bearer token, refreshing if needed."""
     global _token, _token_expiry
     # Fast path: token valid for at least another 60 s
-    if _token and time.time() < _token_expiry - 60:
+    if _token and time.monotonic() < _token_expiry - 60:
         return _token
 
     async with _token_lock:
         # Re-check inside the lock (another coroutine may have refreshed)
-        if _token and time.time() < _token_expiry - 60:
+        if _token and time.monotonic() < _token_expiry - 60:
             return _token
 
         payload = {
@@ -62,12 +62,17 @@ async def _ensure_token(session: aiohttp.ClientSession) -> str:
             data = await resp.json()
 
         _token = data["access_token"]
-        # expire_date is epoch-ms; also honour expires_in as a fallback
-        if "expire_date" in data:
-            _token_expiry = data["expire_date"] / 1000.0
+        if "expires_in" in data:
+            _token_expiry = time.monotonic() + data["expires_in"]
+        elif "expire_date" in data:
+            expires_in = (data["expire_date"] / 1000.0) - time.time()
+            if expires_in < 60 or expires_in > 86400:
+                # If clock skew makes it negative or too large, assume 1 hour
+                expires_in = 3600
+            _token_expiry = time.monotonic() + expires_in
         else:
-            _token_expiry = time.time() + data.get("expires_in", 3600)
-        logger.debug("ntcapi: new token obtained, expires at %s", _token_expiry)
+            _token_expiry = time.monotonic() + 3600
+        logger.debug("ntcapi: new token obtained, expires at monotonic %s", _token_expiry)
         return _token  # type: ignore[return-value]
 
 

@@ -3,15 +3,18 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any
+from typing import Any, Callable, Awaitable
 
 _store: dict[str, tuple[Any, float]] = {}
 _lock = asyncio.Lock()
+_inflight: dict[str, asyncio.Event] = {}
 
 # Track hit/miss stats per namespace (first segment of key before ":")
 _hits: dict[str, int] = {}
 _misses: dict[str, int] = {}
 
+MAX_CACHE_SIZE = 10000
+MAX_STATS_SIZE = 1000
 
 def _namespace(key: str) -> str:
     return key.split(":")[0]
@@ -23,11 +26,13 @@ async def cache_get(key: str) -> Any | None:
     if entry is not None:
         value, expires_at = entry
         if time.monotonic() < expires_at:
-            _hits[ns] = _hits.get(ns, 0) + 1
+            if len(_hits) < MAX_STATS_SIZE or ns in _hits:
+                _hits[ns] = _hits.get(ns, 0) + 1
             return value
         # Expired
         _store.pop(key, None)
-    _misses[ns] = _misses.get(ns, 0) + 1
+    if len(_misses) < MAX_STATS_SIZE or ns in _misses:
+        _misses[ns] = _misses.get(ns, 0) + 1
     return None
 
 
@@ -35,7 +40,55 @@ async def cache_set(key: str, value: Any, ttl: int) -> None:
     if ttl < 0:
         raise ValueError("ttl must be >= 0")
     async with _lock:
+        if len(_store) >= MAX_CACHE_SIZE:
+            # Sweep expired
+            now = time.monotonic()
+            expired = [k for k, (_, exp) in _store.items() if now >= exp]
+            for k in expired:
+                _store.pop(k, None)
+            
+            # If still too large, forcefully remove some elements
+            if len(_store) >= MAX_CACHE_SIZE:
+                to_remove = list(_store.keys())[: MAX_CACHE_SIZE // 10]
+                for k in to_remove:
+                    _store.pop(k, None)
+                    
         _store[key] = (value, time.monotonic() + ttl)
+
+
+async def cache_get_or_fetch(key: str, ttl: int, fetcher: Callable[[], Awaitable[Any]]) -> Any | None:
+    """Fetch a value from cache, or execute the fetcher if missing/expired.
+    
+    Prevents cache stampedes by ensuring only one concurrent fetcher runs per key.
+    """
+    while True:
+        cached = await cache_get(key)
+        if cached is not None:
+            return cached
+
+        # Use a lock to check/set the inflight event safely
+        async with _lock:
+            if key in _inflight:
+                event = _inflight[key]
+                is_leader = False
+            else:
+                event = asyncio.Event()
+                _inflight[key] = event
+                is_leader = True
+
+        if not is_leader:
+            await event.wait()
+            continue
+            
+        try:
+            value = await fetcher()
+            await cache_set(key, value, ttl)
+            return value
+        finally:
+            async with _lock:
+                if key in _inflight:
+                    _inflight[key].set()
+                    del _inflight[key]
 
 
 async def cache_delete(key: str) -> bool:

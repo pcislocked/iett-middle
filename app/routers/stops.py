@@ -1,6 +1,7 @@
 """Stops router — /v1/stops"""
 from __future__ import annotations
 
+import asyncio
 import logging
 import math as _math
 
@@ -10,7 +11,7 @@ from app.config import settings
 from app.deps import get_plate_by_kapino, get_session
 from app.models.bus import Arrival
 from app.models.stop import NearbyStop, StopDetail, StopSearchResult
-from app.services.cache import cache_get, cache_set
+from app.services.cache import cache_get, cache_set, cache_get_or_fetch
 from app.services.iett_client import IettApiError, IettClient
 from app.services import normalizers, ntcapi_client
 from app.services.ntcapi_client import NtcApiError
@@ -34,17 +35,16 @@ def _haversine_m(user_lat: float, user_lon: float, stop_lat: float, stop_lon: fl
 async def search_stops(q: str = Query(..., min_length=2)):
     """Search stops by name."""
     key = f"stops:search:{q.lower()}"
-    cached = await cache_get(key)
-    if cached is not None:
-        return cached
-    client = IettClient(get_session())
-    try:
-        results = await client.search_stops(q)
-    except IettApiError as exc:
-        raise HTTPException(502, detail=str(exc)) from exc
-    data = [r.model_dump() for r in results]
-    await cache_set(key, data, settings.cache_ttl_search)
-    return results
+    
+    async def _fetch():
+        client = IettClient(get_session())
+        try:
+            results = await client.search_stops(q)
+        except IettApiError as exc:
+            raise HTTPException(502, detail=str(exc)) from exc
+        return [r.model_dump() for r in results]
+        
+    return await cache_get_or_fetch(key, settings.cache_ttl_search, _fetch)
 
 
 @router.get("/nearby", response_model=list[NearbyStop])
@@ -121,10 +121,8 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
     canonical data layer.
     """
     key = f"stops:arrivals:{dcode}" + (f":via:{via}" if via else "")
-    cached = await cache_get(key)
-    if cached is not None:
-        arrivals_data: list[dict] = cached
-    else:
+    
+    async def _fetch():
         session = get_session()
         arrivals_data = []
 
@@ -132,6 +130,29 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
         try:
             raw_items = await ntcapi_client.get_stop_arrivals(dcode, session)
             canonical = [normalizers.arrivals.from_ntcapi_ybs(r) for r in raw_items]
+            
+            # Enrich empty destinations via route search fallback
+            client = IettClient(session)
+            async def _fill_dest(a: dict):
+                if not a.get("destination"):
+                    c_key = f"route:name:{a['route_code']}"
+                    cached_name = await cache_get(c_key)
+                    if cached_name is not None:
+                        a["destination"] = cached_name
+                        return
+                    try:
+                        res = await client.search_routes(a["route_code"])
+                        for r in res:
+                            if r.hat_kodu.upper() == a["route_code"].upper():
+                                await cache_set(c_key, r.name, 86400)
+                                a["destination"] = r.name
+                                return
+                        await cache_set(c_key, "", 3600)
+                    except Exception as e:
+                        logger.warning("Failed to fetch route name for %s: %s", a["route_code"], e)
+
+            await asyncio.gather(*[_fill_dest(a) for a in canonical])
+
             canonical.sort(
                 key=lambda a: a.get("eta_minutes") if a.get("eta_minutes") is not None else 9999
             )
@@ -156,16 +177,17 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
         # ── via filter (applied after ntcapi fetch if needed) ─────────
         if via and arrivals_data:
             try:
-                client2 = IettClient(session)
-                routes_via = await client2.get_routes_at_stop(via)
+                routes_via = await get_routes_at_stop(via)
                 arrivals_data = [a for a in arrivals_data if a.get("route_code") in routes_via]
-            except IettApiError as exc:
+            except Exception as exc:
                 logger.warning(
                     "via-filter lookup failed for stop %s via %s — returning unfiltered arrivals: %s",
                     dcode, via, exc,
                 )
+                
+        return arrivals_data
 
-        await cache_set(key, arrivals_data, settings.cache_ttl_arrivals)
+    arrivals_data = await cache_get_or_fetch(key, settings.cache_ttl_arrivals, _fetch)
 
     # Enrich with plate from in-memory fleet store (free, O(1) by kapino).
     result = []
@@ -180,29 +202,29 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
 async def get_routes_at_stop(dcode: str):
     """All route codes that pass through a stop."""
     key = f"stops:routes:{dcode}"
-    cached = await cache_get(key)
-    if cached is not None:
-        return cached
-    client = IettClient(get_session())
-    try:
-        route_codes = await client.get_routes_at_stop(dcode)
-    except IettApiError as exc:
-        raise HTTPException(502, detail=str(exc)) from exc
-    data = sorted(route_codes)
-    await cache_set(key, data, settings.cache_ttl_search)
-    return data
+    
+    async def _fetch():
+        client = IettClient(get_session())
+        try:
+            route_codes = await client.get_routes_at_stop(dcode)
+        except IettApiError as exc:
+            raise HTTPException(502, detail=str(exc)) from exc
+        return sorted(route_codes)
+        
+    return await cache_get_or_fetch(key, settings.cache_ttl_search, _fetch)
 
 
 @router.get("/{dcode}", response_model=StopDetail)
 async def get_stop_detail(dcode: str):
     """Stop name and coordinates (from search + route stop lookup). Long-cached."""
     key = f"stops:detail:{dcode}"
-    cached = await cache_get(key)
-    if cached is not None:
-        return cached
-    client = IettClient(get_session())
-    detail = await client.get_stop_detail(dcode)
-    if detail is None:
-        raise HTTPException(404, detail=f"Stop {dcode!r} not found")
-    await cache_set(key, detail.model_dump(), settings.cache_ttl_stops)
-    return detail
+    
+    async def _fetch():
+        client = IettClient(get_session())
+        detail = await client.get_stop_detail(dcode)
+        if detail is None:
+            raise HTTPException(404, detail=f"Stop {dcode!r} not found")
+        return detail.model_dump()
+        
+    detail_data = await cache_get_or_fetch(key, settings.cache_ttl_stops, _fetch)
+    return StopDetail(**detail_data)

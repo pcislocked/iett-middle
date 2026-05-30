@@ -139,7 +139,7 @@ class TestEnsureToken:
             m.post(_SERVICE_URL, payload=[])  # type: ignore[reportUnknownMemberType]
             await get_stop_arrivals("301341", session)
         assert _ntc_mod._token == "tok2"
-        assert _ntc_mod._token_expiry == pytest.approx(future_ms / 1000, rel=1e-3)
+        assert _ntc_mod._token_expiry == pytest.approx(time.monotonic() + 7200, rel=1e-3)
 
 
 # ---------------------------------------------------------------------------

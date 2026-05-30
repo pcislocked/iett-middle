@@ -67,8 +67,8 @@ class TestGetAllBuses:
     async def test_raises_on_network_error(self, client: IettClient) -> None:
         with aioresponses() as m:
             m.post(FLEET_URL, exception=Exception("timeout"))  # type: ignore[misc]
-            buses = await client.get_all_buses()
-        assert buses == []
+            with pytest.raises(IettApiError):
+                await client.get_all_buses()
 
 
 class TestGetRouteBuses:

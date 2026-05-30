@@ -105,16 +105,12 @@ class IettClient:
 
     async def get_all_buses(self) -> list[BusPosition]:
         """All ~7,000 active Istanbul buses (fleet snapshot)."""
-        try:
-            xml = await self._soap_post(
-                f"{settings.iett_soap_base}/FiloDurum/SeferGerceklesme.asmx",
-                '<GetFiloAracKonum_json xmlns="http://tempuri.org/"/>',
-                '"http://tempuri.org/GetFiloAracKonum_json"',
-            )
-            return parse_all_fleet_xml(xml)
-        except Exception as e:
-            logger.warning(f"get_all_buses SOAP fallback failed, returning empty: {e}")
-            return []
+        xml = await self._soap_post(
+            f"{settings.iett_soap_base}/FiloDurum/SeferGerceklesme.asmx",
+            '<GetFiloAracKonum_json xmlns="http://tempuri.org/"/>',
+            '"http://tempuri.org/GetFiloAracKonum_json"',
+        )
+        return parse_all_fleet_xml(xml)
 
     async def get_route_buses(self, hat_kodu: str) -> list[BusPosition]:
         """Live positions of all buses on a specific route."""
@@ -156,6 +152,10 @@ class IettClient:
                     buses[b.kapino] = b
                     
         if isinstance(json_res, Exception) and isinstance(soap_res, Exception):
+            raise json_res
+            
+        if isinstance(json_res, Exception) and not isinstance(soap_res, Exception) and not soap_res:
+            logger.warning(f"get_route_buses JSON failed for {hat_kodu} and SOAP fallback was empty. Raising JSON error.")
             raise json_res
             
         return list(buses.values())
@@ -247,10 +247,20 @@ class IettClient:
         soap_res = results[0]
         json_res = results[1]
         
+        soap_valid = not isinstance(soap_res, Exception) and soap_res
+        json_valid = not isinstance(json_res, Exception) and json_res
+        
         detail = None
-        if not isinstance(soap_res, Exception) and soap_res:
+        if soap_valid and json_valid:
+            soap_has_coords = soap_res.latitude not in (None, 0.0) and soap_res.longitude not in (None, 0.0)
+            json_has_coords = json_res.latitude not in (None, 0.0) and json_res.longitude not in (None, 0.0)
+            if json_has_coords and not soap_has_coords:
+                detail = json_res
+            else:
+                detail = soap_res
+        elif soap_valid:
             detail = soap_res
-        elif not isinstance(json_res, Exception) and json_res:
+        elif json_valid:
             detail = json_res
             
         if isinstance(json_res, Exception) and isinstance(soap_res, Exception):
@@ -297,7 +307,7 @@ class IettClient:
             {"HATYONETIM.HAT.HAT_KODU": query}
         )
         if not isinstance(res, list) or not res:
-            res = await mobiett._post_service(
+            res = await self.mobiett._post_service(
                 "mainGetLine_basic_search", 
                 {"HATYONETIM.HAT.HAT_ADI": query}
             )

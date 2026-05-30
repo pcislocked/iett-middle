@@ -11,6 +11,17 @@ if sys.platform == "win32":
 
 
 # ---------------------------------------------------------------------------
+# Clear cache fixture
+# ---------------------------------------------------------------------------
+import pytest
+from app.services.cache import _store, _inflight
+
+@pytest.fixture(autouse=True)
+def clear_cache():
+    _store.clear()
+    _inflight.clear()
+
+# ---------------------------------------------------------------------------
 # Real captured SOAP XML responses (from live probe 2026-02-27)
 # ---------------------------------------------------------------------------
 
