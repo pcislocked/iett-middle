@@ -866,7 +866,7 @@ class TestFleetDetailFallbacks:
             patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
             patch("app.routers.fleet.get_trail", return_value=[]),
-            patch("app.routers.fleet.get_session", return_value=MagicMock()),
+            patch("app.routers.routes.get_session", return_value=MagicMock()),
             patch("app.services.cache.cache_get", AsyncMock(return_value=None)),
             patch("app.services.cache.cache_set", AsyncMock()),
             patch("app.services.ntcapi_client.get_route_stops", AsyncMock(return_value=[{"raw": "x"}])),
@@ -892,11 +892,11 @@ class TestFleetDetailFallbacks:
             patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
             patch("app.routers.fleet.get_trail", return_value=[]),
-            patch("app.routers.fleet.get_session", return_value=MagicMock()),
+            patch("app.routers.routes.get_session", return_value=MagicMock()),
             patch("app.services.cache.cache_get", AsyncMock(return_value=None)),
             patch("app.services.cache.cache_set", AsyncMock()),
             patch("app.services.ntcapi_client.get_route_stops", AsyncMock(side_effect=NE("down"))),
-            patch("app.services.iett_client.IettClient", return_value=mock_iett),
+            patch("app.routers.routes.IettClient", return_value=mock_iett),
         ):
             resp = client.get("/v1/fleet/A-001/detail")
         assert resp.status_code == 200
@@ -916,11 +916,11 @@ class TestFleetDetailFallbacks:
             patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
             patch("app.routers.fleet.get_trail", return_value=[]),
-            patch("app.routers.fleet.get_session", return_value=MagicMock()),
+            patch("app.routers.routes.get_session", return_value=MagicMock()),
             patch("app.services.cache.cache_get", AsyncMock(return_value=None)),
             patch("app.services.cache.cache_set", AsyncMock()),
             patch("app.services.ntcapi_client.get_route_stops", AsyncMock(side_effect=NE("down"))),
-            patch("app.services.iett_client.IettClient", return_value=mock_iett),
+            patch("app.routers.routes.IettClient", return_value=mock_iett),
         ):
             resp = client.get("/v1/fleet/A-001/detail")
         assert resp.status_code == 200

@@ -138,20 +138,16 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
             client = IettClient(session)
             
             async def _resolve_route(rc: str):
-                c_key = f"routes:name:{rc}"
-                cached = await cache_get(c_key)
-                if cached is not None:
-                    route_names[rc] = cached
-                    return
-                try:
+                async def _fetch_name() -> str:
                     res = await client.search_routes(rc)
                     for r in res:
                         if r.hat_kodu.upper() == rc.upper():
-                            await cache_set(c_key, r.name, 86400)
-                            route_names[rc] = r.name
-                            return
-                    await cache_set(c_key, "", 3600)
-                    route_names[rc] = ""
+                            return r.name
+                    return ""
+
+                try:
+                    name = await cache_get_or_fetch(f"routes:name:{rc}", 86400, _fetch_name)
+                    route_names[rc] = name
                 except Exception as e:
                     logger.warning("Failed to fetch route name for %s: %s", rc, e)
             

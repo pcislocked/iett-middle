@@ -167,7 +167,11 @@ async def get_route_stops(hat_kodu: str):
                 if not stops:
                     raise HTTPException(502, detail=str(exc)) from exc
 
-        return [s.model_dump() for s in stops]
+        dumped = [s.model_dump() for s in stops]
+        if has_null_coords:
+            from app.services.cache import SkipCache
+            raise SkipCache(dumped)
+        return dumped
 
     return await cache_get_or_fetch(key, settings.cache_ttl_stops, _fetch)
 

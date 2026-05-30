@@ -73,6 +73,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     import asyncio  # noqa: PLC0415
 
     from app.config import settings  # noqa: PLC0415
+    from app.services.cache import sweep_forever  # noqa: PLC0415
     from app.services.fleet_poller import refresh_fleet_forever  # noqa: PLC0415
     from app.services.stop_indexer import index_stops_forever  # noqa: PLC0415
 
@@ -93,8 +94,15 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     fleet_refresh_interval = settings.fleet_cache_max_age
     fleet_refresher = asyncio.create_task(refresh_fleet_forever(fleet_refresh_interval))
     stop_indexer = asyncio.create_task(index_stops_forever())
+    cache_sweeper = asyncio.create_task(sweep_forever())
 
     yield
+
+    cache_sweeper.cancel()
+    try:
+        await cache_sweeper
+    except asyncio.CancelledError:
+        pass
 
     fleet_refresher.cancel()
     try:
@@ -119,7 +127,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
 app = FastAPI(
     title="iett-middle",
     description="Smart caching proxy for IETT Istanbul public transit APIs.",
-    version="0.3.24",
+    version="0.3.25",
     lifespan=lifespan,
 )
 

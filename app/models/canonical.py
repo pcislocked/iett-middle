@@ -99,11 +99,11 @@ class CanonicalBusPosition(TypedDict, total=False):
 # ---------------------------------------------------------------------------
 
 class CanonicalRouteStop(TypedDict, total=False):
-    route_code: str            # "14M_G_D0"  (variant code)
-    direction: str             # "G" | "D"
-    sequence: int              # 1-based position in the route
+    route_code: str | None     # "14M_G_D0"  (variant code)
+    direction: str | None      # "G" | "D"
+    sequence: int | None       # 1-based position in the route
     stop_code: str             # "220731"
-    stop_name: str             # "YENİ CAMİİ"
+    stop_name: str | None      # "YENİ CAMİİ"
     lat: float | None
     lon: float | None
     district: str | None       # "Beykoz"
@@ -121,13 +121,13 @@ _Direction = Literal["G", "D"]       # G=outbound (gidiş), D=return (dönüş)
 
 
 class CanonicalScheduledDeparture(TypedDict, total=False):
-    route_code: str            # "500T"
-    route_name: str            # "TUZLA ŞİFA MAHALLESİ - 4. LEVENT METRO"
-    route_variant: str         # "500T_D_D0"
-    direction: str             # "G" | "D"
-    day_type: str              # "H" | "C" | "P"
+    route_code: str | None     # "500T"
+    route_name: str | None     # "TUZLA ŞİFA MAHALLESİ - 4. LEVENT METRO"
+    route_variant: str | None  # "500T_D_D0"
+    direction: str | None      # "G" | "D"
+    day_type: str | None       # "H" | "C" | "P"
     # IETT SOAP uses "I"/"İ" for weekday — normaliser converts to "H"
-    service_type: str          # "ÖHO"
+    service_type: str | None   # "ÖHO"
     departure_time: str | None # "HH:MM" — None when source row is malformed
     _source: str               # "ntcapi_timetable" | "iett_soap_schedule"
 
@@ -138,7 +138,7 @@ class CanonicalScheduledDeparture(TypedDict, total=False):
 
 class CanonicalStop(TypedDict, total=False):
     stop_code: str             # "220731"
-    stop_name: str             # "YENİ CAMİİ"
+    stop_name: str | None      # "YENİ CAMİİ"
     lat: float | None
     lon: float | None
     direction: str | None      # "G" | "D" | None (stops can be bidirectional)

@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.3.25] - 2026-05-30
+
+### Fixed
+- Fixed memory leak and zombie bus issues in fleet poller by purging stale buses during full snapshots.
+- Implemented `SkipCache` handling to prevent caching of invalid or coord-less stops.
+- Created robust `sweep_forever` background daemon to continuously garbage collect expired cache entries.
+- Fixed time consistency bugs by explicitly using `time.monotonic()` for all TTL operations.
+- Corrected typos and mocked data structure errors in test suites.
+
+
+
 ## [0.3.24] - 2026-05-30
 
 ### Fixed

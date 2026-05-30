@@ -150,53 +150,11 @@ async def get_bus_detail(kapino: str) -> dict[str, Any]:
 
     route_stops_data: list[dict[str, Any]] = []
     if route_code:
-        cache_key = f"routes:stops:{route_code}"
-        cached = await cache_get(cache_key)
-        if cached is not None:
-            route_stops_data = cast(list[dict[str, Any]], cached)
-        else:
-            session = get_session()
-            try:
-                raw_g, raw_d = await asyncio.gather(
-                    ntcapi_client.get_route_stops(route_code, "G", session),
-                    ntcapi_client.get_route_stops(route_code, "D", session),
-                )
-                canonical = [
-                    normalizers.route_stops.from_ntcapi_route_processed(r)
-                    for r in raw_g + raw_d
-                ]
-                stops = [
-                    RouteStop(
-                        route_code=c.get("route_code") or route_code,
-                        direction=c.get("direction") or "G",
-                        sequence=c.get("sequence") or 0,
-                        stop_code=c.get("stop_code") or "",
-                        stop_name=c.get("stop_name") or "",
-                        latitude=c.get("lat"),
-                        longitude=c.get("lon"),
-                        district=c.get("district"),
-                    )
-                    for c in canonical
-                ]
-                route_stops_data = [s.model_dump() for s in stops]
-                if stops and all(
-                    s.latitude is not None and s.longitude is not None for s in stops
-                ):
-                    await cache_set(cache_key, route_stops_data, settings.cache_ttl_stops)
-            except (NtcApiError, IettApiError):
-                needs_fallback = True
-            except Exception:  # noqa: BLE001
-                logger.exception("Unexpected error fetching ntcapi route stops for route %r", route_code)
-                needs_fallback = True
-            else:
-                needs_fallback = False
-            if needs_fallback:
-                try:
-                    client = IettClient(session)
-                    stops = await client.get_route_stops(route_code)
-                    route_stops_data = [s.model_dump() for s in stops]
-                except Exception:  # noqa: BLE001
-                    logger.exception("IETT fallback for route stops failed for route %r", route_code)
+        from app.routers.routes import get_route_stops
+        try:
+            route_stops_data = await get_route_stops(route_code)
+        except Exception as e:
+            logger.exception("Failed to fetch route stops for %s", route_code)
 
     return {**bus, "resolved_route_code": route_code, "route_is_live": route_is_live, "route_stops": route_stops_data}
 

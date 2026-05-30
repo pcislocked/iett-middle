@@ -47,11 +47,16 @@ class IettApiError(Exception):
     """Raised when an IETT API call fails."""
 
 
+_global_mobiett: Any = None
+
 class IettClient:
     def __init__(self, session: aiohttp.ClientSession) -> None:
-        from app.services.mobiett_client import MobiettClient
+        global _global_mobiett
         self._session = session
-        self.mobiett = MobiettClient(self._session)
+        if _global_mobiett is None or _global_mobiett._session.closed:
+            from app.services.mobiett_client import MobiettClient
+            _global_mobiett = MobiettClient(self._session)
+        self.mobiett = _global_mobiett
 
     # ------------------------------------------------------------------
     # Helpers

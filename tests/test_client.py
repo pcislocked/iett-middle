@@ -201,7 +201,7 @@ class TestSearchRoutes:
     async def test_returns_routes_only(self, client: IettClient) -> None:
         with aioresponses() as m:
             m.post("https://ntcapi.iett.istanbul/oauth2/v2/auth", payload={"access_token": "test", "expires_in": 3600})
-            m.post("https://ntcapi.iett.istanbul/service", payload=[{"HAT_HAT_KODU": "500T", "HAT_HAT_ADI": "TUZLA - ŞİFANE"}])
+            m.post("https://ntcapi.iett.istanbul/service", payload=[{"HAT_HAT_KODU": "500T", "HAT_HAT_ADI": "TUZLA - ŞİFA MAH."}])
             results: list[RouteSearchResult] = await client.search_routes("500T")
         assert len(results) == 1
         assert results[0].hat_kodu == "500T"

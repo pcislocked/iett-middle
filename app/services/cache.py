@@ -56,6 +56,12 @@ async def cache_set(key: str, value: Any, ttl: int) -> None:
         _store[key] = (value, time.monotonic() + ttl)
 
 
+class SkipCache(Exception):
+    """Raise from a fetcher to return a value without caching it."""
+    def __init__(self, value: Any):
+        self.value = value
+
+
 async def cache_get_or_fetch(key: str, ttl: int, fetcher: Callable[[], Awaitable[Any]]) -> Any | None:
     """Fetch a value from cache, or execute the fetcher if missing/expired.
     
@@ -84,6 +90,8 @@ async def cache_get_or_fetch(key: str, ttl: int, fetcher: Callable[[], Awaitable
             value = await fetcher()
             await cache_set(key, value, ttl)
             return value
+        except SkipCache as e:
+            return e.value
         finally:
             async with _lock:
                 if key in _inflight:
@@ -135,6 +143,17 @@ async def cache_clear() -> int:
         _hits.clear()
         _misses.clear()
         return removed
+
+
+async def sweep_forever(interval: int = 60) -> None:
+    """Periodically clean up expired cache entries in the background."""
+    while True:
+        await asyncio.sleep(interval)
+        async with _lock:
+            now = time.monotonic()
+            expired = [k for k, (_, exp) in _store.items() if now >= exp]
+            for k in expired:
+                _store.pop(k, None)
 
 
 def get_cache_stats() -> dict[str, Any]:

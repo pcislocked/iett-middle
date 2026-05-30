@@ -183,6 +183,11 @@ def update_fleet(buses: list[BusPosition], is_full_snapshot: bool = True) -> Non
         _kapino_last_route.pop(k.upper(), None)
 
     if is_full_snapshot:
+        current_kapinos = {b.kapino for b in buses}
+        for k in list(_fleet.keys()):
+            if k not in current_kapinos:
+                _fleet.pop(k, None)
+                
         _fleet_updated_at = datetime.now(UTC)
         _fleet_updated_at_mono = now
 
