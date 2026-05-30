@@ -70,8 +70,7 @@ async def get_fleet() -> list[dict[str, Any]]:
     """
     from app.config import settings  # noqa: PLC0415
     
-    # Use max age from settings to force periodic refresh (default 15min)
-    await ensure_fleet_fresh(max_age_seconds=settings.fleet_cache_max_age)
+    await ensure_fleet_fresh()
     snapshot = get_fleet_snapshot()
     if not snapshot:
         raise HTTPException(
@@ -86,7 +85,7 @@ async def get_fleet_meta() -> FleetMetaResponse:
     """Lightweight status: bus count + last update timestamp."""
     from app.config import settings  # noqa: PLC0415
     
-    await ensure_fleet_fresh(max_age_seconds=settings.fleet_cache_max_age)
+    await ensure_fleet_fresh()
     updated = get_fleet_updated_at()
     return {
         "bus_count": len(get_fleet_snapshot()),
@@ -135,7 +134,7 @@ async def get_bus_detail(kapino: str) -> dict[str, Any]:
     from app.services.iett_client import IettApiError, IettClient  # noqa: PLC0415
     from app.services.ntcapi_client import NtcApiError  # noqa: PLC0415
 
-    await ensure_fleet_fresh(max_age_seconds=settings.fleet_cache_max_age)
+    await ensure_fleet_fresh()
     snapshot = get_fleet_snapshot()
     match = next((b for b in snapshot if b["kapino"].upper() == kapino.upper()), None)
     if match is None:
@@ -207,7 +206,7 @@ async def get_bus(kapino: str) -> dict[str, Any]:
     """Single bus live position + trail by door number (e.g. C-325)."""
     from app.config import settings  # noqa: PLC0415
     
-    await ensure_fleet_fresh(max_age_seconds=settings.fleet_cache_max_age)
+    await ensure_fleet_fresh()
     snapshot = get_fleet_snapshot()
     match = next((b for b in snapshot if b["kapino"].upper() == kapino.upper()), None)
     if match is None:

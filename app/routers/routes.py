@@ -86,6 +86,9 @@ async def get_route_buses(hat_kodu: str):
         try:
             raw_meta = await get_route_metadata(hat_kodu)
             hat_id = next((m.get("hat_id") for m in raw_meta if m.get("hat_id")), None)
+        except HTTPException as exc:
+            logger.warning("Upstream metadata API failed (HTTP %s): %s", exc.status_code, exc.detail)
+            hat_id = None
         except Exception as exc:
             logger.warning("Failed to get route metadata for hat_id: %s", exc)
             hat_id = None
@@ -93,7 +96,7 @@ async def get_route_buses(hat_kodu: str):
             buses = await ntcapi_client.get_route_buses_ybs(hat_id, hat_kodu, session)
             if buses:
                 from app.deps import update_fleet
-                update_fleet(buses)
+                update_fleet(buses, is_full_snapshot=False)
                 return buses
     except Exception as exc:  # noqa: BLE001
         logger.warning("ybs point-passing failed for %s, falling back to SOAP: %s", hat_kodu, exc)
@@ -104,7 +107,7 @@ async def get_route_buses(hat_kodu: str):
         buses = await client.get_route_buses(hat_kodu)
         if buses:
             from app.deps import update_fleet
-            update_fleet(buses)
+            update_fleet(buses, is_full_snapshot=False)
             return buses
     except Exception as exc:  # noqa: BLE001
         logger.warning("get_route_buses SOAP failed for %s, falling back to fleet: %s", hat_kodu, exc)

@@ -132,26 +132,34 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
             canonical = [normalizers.arrivals.from_ntcapi_ybs(r) for r in raw_items]
             
             # Enrich empty destinations via route search fallback
+            # Resolve missing destinations per-route to avoid cache stampede
+            missing_routes = list({a["route_code"] for a in canonical if not a.get("destination") and a.get("route_code")})
+            route_names: dict[str, str] = {}
             client = IettClient(session)
-            async def _fill_dest(a: dict):
-                if not a.get("destination"):
-                    c_key = f"route:name:{a['route_code']}"
-                    cached_name = await cache_get(c_key)
-                    if cached_name is not None:
-                        a["destination"] = cached_name
-                        return
-                    try:
-                        res = await client.search_routes(a["route_code"])
-                        for r in res:
-                            if r.hat_kodu.upper() == a["route_code"].upper():
-                                await cache_set(c_key, r.name, 86400)
-                                a["destination"] = r.name
-                                return
-                        await cache_set(c_key, "", 3600)
-                    except Exception as e:
-                        logger.warning("Failed to fetch route name for %s: %s", a["route_code"], e)
-
-            await asyncio.gather(*[_fill_dest(a) for a in canonical])
+            
+            async def _resolve_route(rc: str):
+                c_key = f"routes:name:{rc}"
+                cached = await cache_get(c_key)
+                if cached is not None:
+                    route_names[rc] = cached
+                    return
+                try:
+                    res = await client.search_routes(rc)
+                    for r in res:
+                        if r.hat_kodu.upper() == rc.upper():
+                            await cache_set(c_key, r.name, 86400)
+                            route_names[rc] = r.name
+                            return
+                    await cache_set(c_key, "", 3600)
+                    route_names[rc] = ""
+                except Exception as e:
+                    logger.warning("Failed to fetch route name for %s: %s", rc, e)
+            
+            if missing_routes:
+                await asyncio.gather(*[_resolve_route(rc) for rc in missing_routes])
+                for a in canonical:
+                    if not a.get("destination") and a.get("route_code") in route_names:
+                        a["destination"] = route_names[a["route_code"]]
 
             canonical.sort(
                 key=lambda a: a.get("eta_minutes") if a.get("eta_minutes") is not None else 9999

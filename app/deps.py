@@ -141,7 +141,7 @@ def get_last_route_by_kapino(kapino: str) -> str | None:
     return _kapino_last_route.get(kapino.upper())
 
 
-def update_fleet(buses: list[BusPosition]) -> None:  # noqa: C901
+def update_fleet(buses: list[BusPosition], is_full_snapshot: bool = True) -> None:  # noqa: C901
     """Called by the background poller.  Updates fleet dict and trail deques."""
     global _fleet_updated_at, _fleet_updated_at_mono  # noqa: PLW0603
     from app.config import settings  # noqa: PLC0415
@@ -182,8 +182,9 @@ def update_fleet(buses: list[BusPosition]) -> None:  # noqa: C901
         _trail.pop(k, None)
         _kapino_last_route.pop(k.upper(), None)
 
-    _fleet_updated_at = datetime.now(UTC)
-    _fleet_updated_at_mono = now
+    if is_full_snapshot:
+        _fleet_updated_at = datetime.now(UTC)
+        _fleet_updated_at_mono = now
 
 
 # ---------------------------------------------------------------------------
