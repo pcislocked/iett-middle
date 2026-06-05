@@ -1,5 +1,5 @@
 fastapi>=0.115
-uvicorn[standard]>=0.30
+uvicorn[standard]>=0.49.0
 aiohttp>=3.8,<3.11
 beautifulsoup4>=4.12
 lxml>=5.3
