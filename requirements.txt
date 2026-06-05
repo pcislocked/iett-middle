@@ -1,6 +1,6 @@
 fastapi>=0.115
 uvicorn[standard]>=0.30
-aiohttp>=3.11
+aiohttp>=3.8,<3.11
 beautifulsoup4>=4.12
 lxml>=5.3
 cryptography>=42.0
