@@ -159,10 +159,6 @@ class IettClient:
         if isinstance(json_res, Exception) and isinstance(soap_res, Exception):
             raise json_res
             
-        if isinstance(json_res, Exception) and not isinstance(soap_res, Exception) and not soap_res:
-            logger.warning(f"get_route_buses JSON failed for {hat_kodu} and SOAP fallback was empty. Raising JSON error.")
-            raise json_res
-            
         return list(buses.values())
 
     # ------------------------------------------------------------------
@@ -270,8 +266,7 @@ class IettClient:
             
         if isinstance(json_res, Exception) and isinstance(soap_res, Exception):
             logger.error(f"get_stop_detail failed for {dcode}: SOAP={soap_res}, JSON={json_res}")
-            # Propagate the json exception since it's the more modern one
-            raise json_res
+            raise IettApiError(f"Both SOAP and JSON failed for stop {dcode}") from json_res
 
         if detail is not None and (
             detail.latitude in (None, 0.0) or detail.longitude in (None, 0.0)
