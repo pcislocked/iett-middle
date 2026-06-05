@@ -78,6 +78,41 @@ class TestGetRouteBuses:
             buses: list[BusPosition] = await client.get_route_buses("500T")
         assert buses[0].route_code == "500T"
 
+    async def test_fallback_to_json_when_soap_fails(self, client: IettClient) -> None:
+        from app.services.mobiett_client import MOBIETT_SERVICE_URL, MOBIETT_AUTH_URL
+        with aioresponses() as m:
+            m.post(FLEET_URL, exception=TimeoutError("SOAP down"))
+            m.post(MOBIETT_AUTH_URL, payload={"access_token": "token", "expires_in": 3600})
+            
+            def callback(url, **kwargs):
+                from aioresponses import CallbackResult
+                alias = kwargs["json"]["alias"]
+                if alias == "mainGetRoute":
+                    return CallbackResult(payload=[{"HAT_ID": "290"}])
+                if alias == "ybs":
+                    return CallbackResult(payload=[{
+                        "H_GOREV_DURAK_GECIS_DURAKID": 1130,
+                        "H_GOREV_D_G_GECISZAMANI": "2026-06-05T14:58:17.000+0000",
+                        "H_GOREV_D_G_GIRISZAMANI": "2026-06-05T14:57:32.000+0000",
+                        "H_GOREV_DURAK_GECIS_GOREVID": 161679726,
+                        "H_GOREV_D_G_KAYITZAMANI": "2026-06-05T14:58:17.869+0000",
+                        "H_GOREV_DURAK_GECIS_SIRANO": 32,
+                        "H_GOREV_HATID": "290",
+                        "K_GUZERGAH_GUZERGAHKODU": "500T_G_D0",
+                        "K_ARAC_KAPINUMARASI": "C-387",
+                        "ENLEM": 40.87966,
+                        "BOYLAM": 29.25863,
+                        "SISTEMSAATI": "2026-06-05T14:58:23.000+0000"
+                    }])
+                return CallbackResult(payload=[])
+            
+            m.post(MOBIETT_SERVICE_URL, callback=callback, repeat=True)
+                
+            buses = await client.get_route_buses("500T")
+        assert len(buses) > 0
+        assert buses[0].route_code == "500T"
+        assert buses[0].kapino == "C-387"
+
     async def test_nearest_stop_parsed(self, client: IettClient) -> None:
         with aioresponses() as m:
             m.post(FLEET_URL, body=ROUTE_FLEET_XML)  # type: ignore[misc]
@@ -230,6 +265,35 @@ class TestGetStopDetail:
         assert detail is not None
         assert detail.name == "AHMET MİTHAT EFENDİ"
         assert detail.dcode == "220602"
+
+    async def test_fallback_to_json_when_soap_fails(self, client: IettClient) -> None:
+        from app.services.mobiett_client import MOBIETT_SERVICE_URL, MOBIETT_AUTH_URL
+        with aioresponses() as m:
+            m.post(HAT_DURAK_URL, exception=TimeoutError("SOAP down"))
+            m.post(MOBIETT_AUTH_URL, payload={"access_token": "token", "expires_in": 3600})
+            m.post(MOBIETT_SERVICE_URL, payload=[{
+                "DURAK_ADI": "KOZYATAĞI METRO",
+                "DURAK_ADRES": "İstanbul / Ataşehir / İçerenköy",
+                "DURAK_AKILLI_DURAK_DURUMU": -1,
+                "DURAK_DURAK_KISA_ADI": "-1302",
+                "DURAK_DURAK_KODU": -1302,
+                "DURAK_DURAK_TIPI": 19,
+                "DURAK_ENGELLI_KULLANIM": 0,
+                "DURAK_ENGELLI_RAMPA": 1,
+                "DURAK_GEOLOC": {
+                    "x": 29.1000279798165,
+                    "y": 40.9755660642068
+                },
+                "DURAK_ID": 5251664,
+                "DURAK_YON_BILGISI": "ÜMRANİYE",
+                "ILCELER_ILCEADI": "Ataşehir"
+            }])
+            detail = await client.get_stop_detail("-1302")
+        assert detail is not None
+        assert detail.name == "KOZYATAĞI METRO"
+        assert detail.dcode == "-1302"
+        assert detail.latitude == 40.9755660642068
+        assert detail.longitude == 29.1000279798165
 
     async def test_returns_none_when_not_found(self, client: IettClient) -> None:
         empty_xml = (
