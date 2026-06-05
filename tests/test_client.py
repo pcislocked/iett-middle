@@ -81,15 +81,14 @@ class TestGetRouteBuses:
     async def test_fallback_to_json_when_soap_fails(self, client: IettClient) -> None:
         from app.services.mobiett_client import MOBIETT_SERVICE_URL, MOBIETT_AUTH_URL
         with aioresponses() as m:
+            m.post(FLEET_URL, exception=TimeoutError("SOAP down"))
             m.post(MOBIETT_AUTH_URL, payload={"access_token": "token", "expires_in": 3600})
             
-            # First request is for mainGetRoute (HAT_ID resolution)
-            m.post(MOBIETT_SERVICE_URL, payload=[{"HAT_ID": "123"}])
-            
-            # Second request
             def callback(url, **kwargs):
                 from aioresponses import CallbackResult
                 alias = kwargs["json"]["alias"]
+                if alias == "mainGetRoute":
+                    return CallbackResult(payload=[{"HAT_ID": "290"}])
                 if alias == "ybs":
                     return CallbackResult(payload=[{
                         "H_GOREV_DURAK_GECIS_DURAKID": 1130,
@@ -107,7 +106,7 @@ class TestGetRouteBuses:
                     }])
                 return CallbackResult(payload=[])
             
-            m.post(MOBIETT_SERVICE_URL, callback=callback)
+            m.post(MOBIETT_SERVICE_URL, callback=callback, repeat=True)
                 
             buses = await client.get_route_buses("500T")
         assert len(buses) > 0
@@ -270,9 +269,8 @@ class TestGetStopDetail:
     async def test_fallback_to_json_when_soap_fails(self, client: IettClient) -> None:
         from app.services.mobiett_client import MOBIETT_SERVICE_URL, MOBIETT_AUTH_URL
         with aioresponses() as m:
-            # Mock auth to succeed
+            m.post(HAT_DURAK_URL, exception=TimeoutError("SOAP down"))
             m.post(MOBIETT_AUTH_URL, payload={"access_token": "token", "expires_in": 3600})
-            # Mock json stop detail, let SOAP fail (unmocked)
             m.post(MOBIETT_SERVICE_URL, payload=[{
                 "DURAK_ADI": "KOZYATAĞI METRO",
                 "DURAK_ADRES": "İstanbul / Ataşehir / İçerenköy",
@@ -293,7 +291,9 @@ class TestGetStopDetail:
             detail = await client.get_stop_detail("-1302")
         assert detail is not None
         assert detail.name == "KOZYATAĞI METRO"
+        assert detail.dcode == "-1302"
         assert detail.latitude == 40.9755660642068
+        assert detail.longitude == 29.1000279798165
 
     async def test_returns_none_when_not_found(self, client: IettClient) -> None:
         empty_xml = (
