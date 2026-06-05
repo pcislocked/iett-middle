@@ -7,7 +7,7 @@ from typing import Any, Callable, Awaitable
 
 _store: dict[str, tuple[Any, float]] = {}
 _lock = asyncio.Lock()
-_inflight: dict[str, asyncio.Event] = {}
+_inflight: dict[str, asyncio.Future] = {}
 
 # Track hit/miss stats per namespace (first segment of key before ":")
 _hits: dict[str, int] = {}
@@ -67,36 +67,40 @@ async def cache_get_or_fetch(key: str, ttl: int, fetcher: Callable[[], Awaitable
     
     Prevents cache stampedes by ensuring only one concurrent fetcher runs per key.
     """
-    while True:
-        cached = await cache_get(key)
-        if cached is not None:
-            return cached
+    cached = await cache_get(key)
+    if cached is not None:
+        return cached
 
-        # Use a lock to check/set the inflight event safely
-        async with _lock:
-            if key in _inflight:
-                event = _inflight[key]
-                is_leader = False
-            else:
-                event = asyncio.Event()
-                _inflight[key] = event
-                is_leader = True
+    # Use a lock to check/set the inflight future safely
+    async with _lock:
+        if key in _inflight:
+            fut = _inflight[key]
+            is_leader = False
+        else:
+            fut = asyncio.get_running_loop().create_future()
+            _inflight[key] = fut
+            is_leader = True
 
-        if not is_leader:
-            await event.wait()
-            continue
-            
+    if not is_leader:
         try:
-            value = await fetcher()
-            await cache_set(key, value, ttl)
-            return value
+            return await fut
         except SkipCache as e:
             return e.value
-        finally:
-            async with _lock:
-                if key in _inflight:
-                    _inflight[key].set()
-                    del _inflight[key]
+        
+    try:
+        value = await fetcher()
+        await cache_set(key, value, ttl)
+        fut.set_result(value)
+        return value
+    except Exception as e:
+        fut.set_exception(e)
+        if isinstance(e, SkipCache):
+            return e.value
+        raise
+    finally:
+        async with _lock:
+            if key in _inflight and _inflight[key] is fut:
+                del _inflight[key]
 
 
 async def cache_delete(key: str) -> bool:
@@ -149,11 +153,15 @@ async def sweep_forever(interval: int = 60) -> None:
     """Periodically clean up expired cache entries in the background."""
     while True:
         await asyncio.sleep(interval)
-        async with _lock:
-            now = time.monotonic()
-            expired = [k for k, (_, exp) in _store.items() if now >= exp]
-            for k in expired:
-                _store.pop(k, None)
+        try:
+            async with _lock:
+                now = time.monotonic()
+                expired = [k for k, (_, exp) in _store.items() if now >= exp]
+                for k in expired:
+                    _store.pop(k, None)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error("Error in sweep_forever: %s", e)
 
 
 def get_cache_stats() -> dict[str, Any]:

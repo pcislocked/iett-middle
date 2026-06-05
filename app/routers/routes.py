@@ -79,42 +79,47 @@ async def get_route_buses(hat_kodu: str):
 
     session = get_session()
 
-    # ── primary: ntcapi ybs point-passing ──────────────────────────────────
-    try:
-        # HAT_ID is returned by mainGetLine_basic and cached with route metadata.
-        # Check the metadata cache first to avoid an extra round-trip.
+    key = f"routes:buses:{hat_kodu}"
+    
+    async def _fetch():
+        # ── primary: ntcapi ybs point-passing ──────────────────────────────────
         try:
-            raw_meta = await get_route_metadata(hat_kodu)
-            hat_id = next((m.get("hat_id") for m in raw_meta if m.get("hat_id")), None)
-        except HTTPException as exc:
-            logger.warning("Upstream metadata API failed (HTTP %s): %s", exc.status_code, exc.detail)
-            hat_id = None
-        except Exception as exc:
-            logger.warning("Failed to get route metadata for hat_id: %s", exc)
-            hat_id = None
-        if hat_id is not None:
-            buses = await ntcapi_client.get_route_buses_ybs(hat_id, hat_kodu, session)
+            # HAT_ID is returned by mainGetLine_basic and cached with route metadata.
+            # Check the metadata cache first to avoid an extra round-trip.
+            try:
+                raw_meta = await get_route_metadata(hat_kodu)
+                hat_id = next((m.get("hat_id") for m in raw_meta if m.get("hat_id")), None)
+            except HTTPException as exc:
+                logger.warning("Upstream metadata API failed (HTTP %s): %s", exc.status_code, exc.detail)
+                hat_id = None
+            except Exception as exc:
+                logger.warning("Failed to get route metadata for hat_id: %s", exc)
+                hat_id = None
+            if hat_id is not None:
+                buses = await ntcapi_client.get_route_buses_ybs(hat_id, hat_kodu, session)
+                if buses:
+                    from app.deps import update_fleet
+                    update_fleet(buses, is_full_snapshot=False)
+                    return buses
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ybs point-passing failed for %s, falling back to SOAP: %s", hat_kodu, exc)
+
+        # ── secondary: IETT SOAP GetHatOtoKonum ────────────────────────────────
+        try:
+            client = IettClient(session)
+            buses = await client.get_route_buses(hat_kodu)
             if buses:
                 from app.deps import update_fleet
                 update_fleet(buses, is_full_snapshot=False)
                 return buses
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("ybs point-passing failed for %s, falling back to SOAP: %s", hat_kodu, exc)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("get_route_buses SOAP failed for %s, falling back to fleet: %s", hat_kodu, exc)
 
-    # ── secondary: IETT SOAP GetHatOtoKonum ────────────────────────────────
-    try:
-        client = IettClient(session)
-        buses = await client.get_route_buses(hat_kodu)
-        if buses:
-            from app.deps import update_fleet
-            update_fleet(buses, is_full_snapshot=False)
-            return buses
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("get_route_buses SOAP failed for %s, falling back to fleet: %s", hat_kodu, exc)
+        # ── last resort: in-memory fleet ───────────────────────────────────────
+        await ensure_fleet_fresh()
+        return get_buses_by_route(hat_kodu)
 
-    # ── last resort: in-memory fleet ───────────────────────────────────────
-    await ensure_fleet_fresh()
-    return get_buses_by_route(hat_kodu)
+    return await cache_get_or_fetch(key, 5, _fetch)
 
 
 @router.get("/{hat_kodu}/stops", response_model=list[RouteStop])

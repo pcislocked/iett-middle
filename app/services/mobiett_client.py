@@ -25,7 +25,7 @@ class MobiettClient:
         self._auth_lock = asyncio.Lock()
         
         # Cache for hat_kodu -> hat_id
-        self._hat_id_cache: dict[str, int] = {}
+        self._hat_id_cache: dict[str, int | None] = {}
 
     async def _ensure_token(self) -> str:
         """Fetch and cache OAuth2 token if missing or expired."""
@@ -95,6 +95,7 @@ class MobiettClient:
         )
         
         if not res or not isinstance(res, list):
+            self._hat_id_cache[hat_kodu_upper] = None
             return None
             
         for item in res:
@@ -103,6 +104,7 @@ class MobiettClient:
                 self._hat_id_cache[hat_kodu_upper] = hat_id
                 return hat_id
                 
+        self._hat_id_cache[hat_kodu_upper] = None
         return None
 
     async def get_live_fleet(self, hat_kodu: str) -> list[dict[str, Any]]:
