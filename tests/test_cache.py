@@ -220,3 +220,58 @@ class TestCacheInvalidation:
         assert stats["active_keys"] == 0
         assert stats["hits"] == {}
         assert stats["misses"] == {}
+
+
+# ---------------------------------------------------------------------------
+# cache_get_or_fetch
+# ---------------------------------------------------------------------------
+
+class TestCacheGetOrFetch:
+    def setup_method(self) -> None:
+        _clear()
+
+    @pytest.mark.asyncio
+    async def test_single_flight_concurrency(self) -> None:
+        fetch_count = 0
+        
+        async def slow_fetch():
+            nonlocal fetch_count
+            fetch_count += 1
+            await asyncio.sleep(0.1)
+            return "data"
+            
+        results = await asyncio.gather(*(
+            cache_mod.cache_get_or_fetch("ns:sf", 60, slow_fetch)
+            for _ in range(5)
+        ))
+        
+        assert all(r == "data" for r in results)
+        assert fetch_count == 1
+
+    @pytest.mark.asyncio
+    async def test_exception_fan_out(self) -> None:
+        async def fail_fetch():
+            await asyncio.sleep(0.1)
+            raise ValueError("fetch failed")
+            
+        results = await asyncio.gather(*(
+            cache_mod.cache_get_or_fetch("ns:fail", 60, fail_fetch)
+            for _ in range(3)
+        ), return_exceptions=True)
+        
+        assert all(isinstance(r, ValueError) for r in results)
+        assert all(str(r) == "fetch failed" for r in results)
+
+    @pytest.mark.asyncio
+    async def test_skip_cache_behavior(self) -> None:
+        async def skip_fetch():
+            await asyncio.sleep(0.1)
+            raise cache_mod.SkipCache("fallback_data")
+            
+        results = await asyncio.gather(*(
+            cache_mod.cache_get_or_fetch("ns:skip", 60, skip_fetch)
+            for _ in range(3)
+        ))
+        
+        assert all(r == "fallback_data" for r in results)
+        assert await cache_mod.cache_get("ns:skip") is None

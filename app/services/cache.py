@@ -78,28 +78,29 @@ async def cache_get_or_fetch(key: str, ttl: int, fetcher: Callable[[], Awaitable
             is_leader = False
         else:
             fut = asyncio.get_running_loop().create_future()
+            fut.add_done_callback(lambda f: f.exception() if not f.cancelled() else None)
             _inflight[key] = fut
             is_leader = True
 
     if not is_leader:
-        try:
-            return await fut
-        except SkipCache as e:
-            return e.value
+        return await fut
         
     try:
         value = await fetcher()
         await cache_set(key, value, ttl)
         fut.set_result(value)
         return value
+    except SkipCache as e:
+        fut.set_result(e.value)
+        return e.value
     except Exception as e:
         fut.set_exception(e)
-        if isinstance(e, SkipCache):
-            return e.value
         raise
     finally:
         async with _lock:
             if key in _inflight and _inflight[key] is fut:
+                if not fut.done():
+                    fut.cancel()
                 del _inflight[key]
 
 
@@ -159,9 +160,9 @@ async def sweep_forever(interval: int = 60) -> None:
                 expired = [k for k, (_, exp) in _store.items() if now >= exp]
                 for k in expired:
                     _store.pop(k, None)
-        except Exception as e:
+        except Exception:
             import logging
-            logging.getLogger(__name__).error("Error in sweep_forever: %s", e)
+            logging.getLogger(__name__).exception("Error in sweep_forever")
 
 
 def get_cache_stats() -> dict[str, Any]:

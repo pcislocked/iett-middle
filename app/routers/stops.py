@@ -225,7 +225,10 @@ async def get_stop_detail(dcode: str):
     
     async def _fetch():
         client = IettClient(get_session())
-        detail = await client.get_stop_detail(dcode)
+        try:
+            detail = await client.get_stop_detail(dcode)
+        except IettApiError as exc:
+            raise HTTPException(502, detail=str(exc)) from exc
         if detail is None:
             raise HTTPException(404, detail=f"Stop {dcode!r} not found")
         return detail.model_dump()
