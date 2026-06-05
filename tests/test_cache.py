@@ -50,16 +50,16 @@ class TestCacheGetSet:
         asyncio.run(cache_set("ns:exp", "stale", ttl=0))
         # Force expiry by backdating the entry
         key = "ns:exp"
-        value, _ = cache_mod._store[key]
-        cache_mod._store[key] = (value, time.monotonic() - 1)
+        value, _, _ = cache_mod._store[key]
+        cache_mod._store[key] = (value, time.monotonic() - 1, time.monotonic() - 1)
         result = asyncio.run(cache_get(key))
         assert result is None
 
     def test_expired_key_removed_from_store(self) -> None:
         asyncio.run(cache_set("ns:rm", "bye", ttl=60))
         key = "ns:rm"
-        value, _ = cache_mod._store[key]
-        cache_mod._store[key] = (value, time.monotonic() - 1)
+        value, _, _ = cache_mod._store[key]
+        cache_mod._store[key] = (value, time.monotonic() - 1, time.monotonic() - 1)
         asyncio.run(cache_get(key))
         assert key not in cache_mod._store
 
@@ -121,8 +121,8 @@ class TestCacheStats:
     def test_active_keys_excludes_expired(self) -> None:
         asyncio.run(cache_set("ns:old", "gone", ttl=60))
         key = "ns:old"
-        value, _ = cache_mod._store[key]
-        cache_mod._store[key] = (value, time.monotonic() - 1)
+        value, _, _ = cache_mod._store[key]
+        cache_mod._store[key] = (value, time.monotonic() - 1, time.monotonic() - 1)
         stats = get_cache_stats()
         active_before = stats["active_keys"]
         # add a fresh entry to confirm overall count is correct
@@ -133,8 +133,8 @@ class TestCacheStats:
     def test_total_keys_includes_expired(self) -> None:
         asyncio.run(cache_set("ns:exp2", "stale", ttl=60))
         key = "ns:exp2"
-        value, _ = cache_mod._store[key]
-        cache_mod._store[key] = (value, time.monotonic() - 1)
+        value, _, _ = cache_mod._store[key]
+        cache_mod._store[key] = (value, time.monotonic() - 1, time.monotonic() - 1)
         stats = get_cache_stats()
         # expired entry is still in _store until next get
         assert stats["total_keys"] >= 1
@@ -163,8 +163,8 @@ class TestCacheInvalidation:
 
     def test_cache_delete_expired_key_returns_false(self) -> None:
         asyncio.run(cache_set("ns:exp", "v", ttl=60))
-        value, _ = cache_mod._store["ns:exp"]
-        cache_mod._store["ns:exp"] = (value, time.monotonic() - 1)
+        value, _, _ = cache_mod._store["ns:exp"]
+        cache_mod._store["ns:exp"] = (value, time.monotonic() - 1, time.monotonic() - 1)
 
         removed = asyncio.run(cache_delete("ns:exp"))
         assert removed is False
@@ -188,8 +188,8 @@ class TestCacheInvalidation:
     def test_cache_invalidate_namespace_removed_count_excludes_expired(self) -> None:
         asyncio.run(cache_set("fleet:live", 1, ttl=60))
         asyncio.run(cache_set("fleet:expired", 2, ttl=60))
-        value, _ = cache_mod._store["fleet:expired"]
-        cache_mod._store["fleet:expired"] = (value, time.monotonic() - 1)
+        value, _, _ = cache_mod._store["fleet:expired"]
+        cache_mod._store["fleet:expired"] = (value, time.monotonic() - 1, time.monotonic() - 1)
 
         removed = asyncio.run(cache_invalidate_namespace("fleet"))
         assert removed == 1
@@ -275,3 +275,107 @@ class TestCacheGetOrFetch:
         
         assert all(r == "fallback_data" for r in results)
         assert await cache_mod.cache_get("ns:skip") is None
+
+    @pytest.mark.asyncio
+    async def test_swr_background_fetch(self) -> None:
+        # Set stale but not fully expired
+        await cache_set("ns:swr", "old_data", ttl=0, stale_ttl=60)
+        
+        fetch_count = 0
+        async def background_fetcher():
+            nonlocal fetch_count
+            fetch_count += 1
+            await asyncio.sleep(0.1)
+            return "new_data"
+            
+        # First call should return stale data immediately
+        result = await cache_mod.cache_get_or_fetch("ns:swr", 60, background_fetcher, stale_ttl=60)
+        assert result == "old_data"
+        assert fetch_count == 0  # not finished yet
+        
+        # Wait for background task to finish
+        await asyncio.sleep(0.15)
+        assert fetch_count == 1
+        
+        # Next call should return new data (which is now fresh)
+        result2 = await cache_mod.cache_get_or_fetch("ns:swr", 60, background_fetcher, stale_ttl=60)
+        assert result2 == "new_data"
+
+    @pytest.mark.asyncio
+    async def test_swr_background_fetch_skip_cache(self) -> None:
+        await cache_set("ns:swr_skip", "old", ttl=0, stale_ttl=60)
+        async def skip_fetcher():
+            await asyncio.sleep(0.01)
+            raise cache_mod.SkipCache("fallback")
+        
+        result = await cache_mod.cache_get_or_fetch("ns:swr_skip", 60, skip_fetcher, stale_ttl=60)
+        assert result == "old"
+        await asyncio.sleep(0.05)
+        # It skipped cache, so background task set result but didn't cache. Wait, skipcache doesn't overwrite.
+        result2, _, _ = cache_mod._store.get("ns:swr_skip", (None, 0, 0))
+        assert result2 == "old" # Stale data remains
+
+    @pytest.mark.asyncio
+    async def test_swr_background_fetch_exception(self) -> None:
+        await cache_set("ns:swr_err", "old", ttl=0, stale_ttl=60)
+        async def err_fetcher():
+            await asyncio.sleep(0.01)
+            raise ValueError("fetch err")
+            
+        result = await cache_mod.cache_get_or_fetch("ns:swr_err", 60, err_fetcher, stale_ttl=60)
+        assert result == "old"
+        await asyncio.sleep(0.05)
+        
+    @pytest.mark.asyncio
+    async def test_swr_background_fetch_cancel(self) -> None:
+        await cache_set("ns:swr_cncl", "old", ttl=0, stale_ttl=60)
+        async def cncl_fetcher():
+            await asyncio.sleep(0.1)
+            return "new"
+            
+        # First call triggers background task
+        result = await cache_mod.cache_get_or_fetch("ns:swr_cncl", 60, cncl_fetcher, stale_ttl=60)
+        
+        # Manually cancel the inflight future to trigger cancellation logic in finally block
+        async with cache_mod._lock:
+            cache_mod._inflight["ns:swr_cncl"].cancel()
+        
+        await asyncio.sleep(0.15)
+        assert "ns:swr_cncl" not in cache_mod._inflight
+
+class TestCacheEdgeCases:
+    def setup_method(self) -> None:
+        _clear()
+        
+    @pytest.mark.asyncio
+    async def test_jitter_applied(self) -> None:
+        # Just check that it doesn't crash and modifies the time
+        await cache_set("ns:jitter", "v", ttl=100, stale_ttl=100, jitter=True)
+        assert "ns:jitter" in cache_mod._store
+
+    @pytest.mark.asyncio
+    async def test_eviction_when_max_size_reached(self) -> None:
+        # Temporarily lower max size for the test
+        orig_max = cache_mod.MAX_CACHE_SIZE
+        cache_mod.MAX_CACHE_SIZE = 10
+        try:
+            for i in range(15):
+                await cache_set(f"ns:key{i}", i, ttl=60)
+            assert len(cache_mod._store) <= 10
+        finally:
+            cache_mod.MAX_CACHE_SIZE = orig_max
+
+    @pytest.mark.asyncio
+    async def test_sweep_forever(self) -> None:
+        await cache_set("ns:sweep1", "v", ttl=0)
+        key = "ns:sweep1"
+        value, _, _ = cache_mod._store[key]
+        cache_mod._store[key] = (value, time.monotonic() - 1, time.monotonic() - 1)
+        
+        task = asyncio.create_task(cache_mod.sweep_forever(interval=0.01))
+        await asyncio.sleep(0.05)
+        task.cancel()
+        
+        assert key not in cache_mod._store
+
+
