@@ -269,4 +269,4 @@ async def get_route_announcements(hat_kodu: str):
     route_list = {hat_kodu.upper().strip()}
     return await fetch_filtered_announcements(route_list)
         
-    return await cache_get_or_fetch(key, settings.cache_ttl_announcements, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
+
