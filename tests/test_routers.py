@@ -557,6 +557,50 @@ class TestRoutesAnnouncements:
             resp = client.get("/v1/routes/500T/announcements")
         assert resp.status_code == 200
 
+class TestRoutesBatchAnnouncements:
+    def test_200_with_multiple_routes(self, client: TestClient) -> None:
+        ann1 = Announcement(route_code="500T", route_name="TUZLA", type="G", updated_at="09", message="M1")
+        ann2 = Announcement(route_code="15F", route_name="BEYKOZ", type="G", updated_at="09", message="M2")
+        mock_client = MagicMock()
+        mock_client.get_announcements = AsyncMock(return_value=[ann1, ann2])
+        with (
+            patch("app.routers.routes.cache_get", AsyncMock(return_value=None)),
+            patch("app.routers.routes.cache_set", AsyncMock()),
+            patch("app.routers.routes.get_session", return_value=MagicMock()),
+            patch("app.routers.routes.IettClient", return_value=mock_client),
+        ):
+            resp = client.get("/v1/routes/announcements/batch?routes=500T,15F,15F")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) == 2
+        # Verify deduplication of 15F
+        codes = [a["route_code"] for a in body]
+        assert "500T" in codes
+        assert "15F" in codes
+
+    def test_negative_caching_on_iett_error(self, client: TestClient) -> None:
+        from app.services.iett_client import IettApiError
+        mock_client = MagicMock()
+        mock_client.get_announcements = AsyncMock(side_effect=IettApiError("API Error"))
+        
+        mock_cache_set = AsyncMock()
+        with (
+            patch("app.routers.routes.cache_get", AsyncMock(return_value=None)),
+            patch("app.routers.routes.cache_set", mock_cache_set),
+            patch("app.routers.routes.get_session", return_value=MagicMock()),
+            patch("app.routers.routes.IettClient", return_value=mock_client),
+        ):
+            resp = client.get("/v1/routes/announcements/batch?routes=500T")
+        
+        assert resp.status_code == 200
+        assert resp.json() == []
+        
+        # Verify negative cache was set with 60s TTL
+        mock_cache_set.assert_called_once()
+        args = mock_cache_set.call_args
+        assert args[0][0] == "routes:announcements:global"
+        assert args[0][1] == []
+        assert args[0][2] == 60
 
 # ===========================  /v1/garages  ==================================
 
