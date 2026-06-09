@@ -5,7 +5,7 @@ import asyncio
 import time
 from typing import Any, Callable, Awaitable
 
-_store: dict[str, tuple[Any, float]] = {}
+_store: dict[str, tuple[Any, float, float]] = {}
 _lock = asyncio.Lock()
 _inflight: dict[str, asyncio.Future] = {}
 
@@ -20,30 +20,54 @@ def _namespace(key: str) -> str:
     return key.split(":")[0]
 
 
-async def cache_get(key: str) -> Any | None:
+async def _cache_get_internal(key: str) -> tuple[Any, bool] | None:
     ns = _namespace(key)
-    entry = _store.get(key)
-    if entry is not None:
-        value, expires_at = entry
-        if time.monotonic() < expires_at:
-            if len(_hits) < MAX_STATS_SIZE or ns in _hits:
-                _hits[ns] = _hits.get(ns, 0) + 1
+    async with _lock:
+        entry = _store.get(key)
+        if entry is not None:
+            value, fresh_exp, stale_exp = entry
+            now = time.monotonic()
+            if now < fresh_exp:
+                if len(_hits) < MAX_STATS_SIZE or ns in _hits:
+                    _hits[ns] = _hits.get(ns, 0) + 1
+                return (value, True)
+            elif now < stale_exp:
+                if len(_hits) < MAX_STATS_SIZE or ns in _hits:
+                    _hits[ns] = _hits.get(ns, 0) + 1
+                return (value, False)
+            # Expired
+            _store.pop(key, None)
+        if len(_misses) < MAX_STATS_SIZE or ns in _misses:
+            _misses[ns] = _misses.get(ns, 0) + 1
+        return None
+
+
+async def cache_get(key: str) -> Any | None:
+    result = await _cache_get_internal(key)
+    if result is not None:
+        value, is_fresh = result
+        if is_fresh:
             return value
-        # Expired
-        _store.pop(key, None)
-    if len(_misses) < MAX_STATS_SIZE or ns in _misses:
-        _misses[ns] = _misses.get(ns, 0) + 1
     return None
 
 
-async def cache_set(key: str, value: Any, ttl: int) -> None:
-    if ttl < 0:
+async def cache_set(key: str, value: Any, ttl: int, stale_ttl: int = 0, jitter: bool = False) -> None:
+    if ttl < 0 or stale_ttl < 0:
         raise ValueError("ttl must be >= 0")
+        
+    actual_ttl = float(ttl)
+    actual_stale = float(stale_ttl)
+    if jitter:
+        import random
+        factor = random.uniform(0.85, 1.15)
+        actual_ttl = actual_ttl * factor
+        actual_stale = actual_stale * factor
+
     async with _lock:
         if len(_store) >= MAX_CACHE_SIZE:
             # Sweep expired
             now = time.monotonic()
-            expired = [k for k, (_, exp) in _store.items() if now >= exp]
+            expired = [k for k, (_, _, s_exp) in _store.items() if now >= s_exp]
             for k in expired:
                 _store.pop(k, None)
             
@@ -53,7 +77,8 @@ async def cache_set(key: str, value: Any, ttl: int) -> None:
                 for k in to_remove:
                     _store.pop(k, None)
                     
-        _store[key] = (value, time.monotonic() + ttl)
+        now = time.monotonic()
+        _store[key] = (value, now + actual_ttl, now + actual_ttl + actual_stale)
 
 
 class SkipCache(Exception):
@@ -62,39 +87,88 @@ class SkipCache(Exception):
         self.value = value
 
 
-async def cache_get_or_fetch(key: str, ttl: int, fetcher: Callable[[], Awaitable[Any]]) -> Any | None:
+_bg_tasks: set[asyncio.Task] = set()
+
+async def cache_get_or_fetch(
+    key: str, 
+    ttl: int, 
+    fetcher: Callable[[], Awaitable[Any]], 
+    stale_ttl: int = 0, 
+    jitter: bool = False
+) -> Any | None:
     """Fetch a value from cache, or execute the fetcher if missing/expired.
     
     Prevents cache stampedes by ensuring only one concurrent fetcher runs per key.
+    If data is stale but within stale_ttl, returns stale data and triggers a background fetch.
     """
-    cached = await cache_get(key)
+    cached = await _cache_get_internal(key)
     if cached is not None:
-        return cached
+        value, is_fresh = cached
+        if is_fresh:
+            return value
+            
+        # It's stale. We should return value immediately, but kick off background fetch
+        async with _lock:
+            if key in _inflight:
+                # Already fetching in background
+                return value
+            fut = asyncio.get_running_loop().create_future()
+            _inflight[key] = fut
+            
+        async def background_fetch() -> None:
+            try:
+                new_value = await fetcher()
+                await cache_set(key, new_value, ttl, stale_ttl, jitter)
+                if not fut.done():
+                    fut.set_result(new_value)
+            except SkipCache as e:
+                if not fut.done():
+                    fut.set_result(e.value)
+            except Exception as e:
+                if not fut.done():
+                    fut.set_exception(e)
+            finally:
+                async with _lock:
+                    if key in _inflight and _inflight[key] is fut:
+                        if not fut.done():
+                            fut.cancel()
+                        del _inflight[key]
 
-    # Use a lock to check/set the inflight future safely
+        task = asyncio.create_task(background_fetch())
+        _bg_tasks.add(task)
+        task.add_done_callback(_bg_tasks.discard)
+        return value
+
+    # Normal missing fetch
     async with _lock:
         if key in _inflight:
             fut = _inflight[key]
             is_leader = False
         else:
             fut = asyncio.get_running_loop().create_future()
-            fut.add_done_callback(lambda f: f.exception() if not f.cancelled() else None)
             _inflight[key] = fut
             is_leader = True
 
     if not is_leader:
-        return await fut
+        try:
+            return await asyncio.shield(fut)
+        except asyncio.CancelledError:
+            # If the leader cancelled it (e.g. client disconnect), try again!
+            return await cache_get_or_fetch(key, ttl, fetcher, stale_ttl, jitter)
         
     try:
-        value = await fetcher()
-        await cache_set(key, value, ttl)
-        fut.set_result(value)
-        return value
+        val = await fetcher()
+        await cache_set(key, val, ttl, stale_ttl, jitter)
+        if not fut.done():
+            fut.set_result(val)
+        return val
     except SkipCache as e:
-        fut.set_result(e.value)
+        if not fut.done():
+            fut.set_result(e.value)
         return e.value
     except Exception as e:
-        fut.set_exception(e)
+        if not fut.done():
+            fut.set_exception(e)
         raise
     finally:
         async with _lock:
@@ -113,8 +187,8 @@ async def cache_delete(key: str) -> bool:
         existed = False
         entry = _store.get(key)
         if entry is not None:
-            _, expires_at = entry
-            existed = time.monotonic() < expires_at
+            _, _, stale_exp = entry
+            existed = time.monotonic() < stale_exp
         _store.pop(key, None)
         return existed
 
@@ -130,8 +204,8 @@ async def cache_invalidate_namespace(namespace: str) -> int:
         keys = [k for k in _store if k == namespace or k.startswith(prefix)]
         removed = 0
         for k in keys:
-            _, expires_at = _store[k]
-            if now < expires_at:
+            _, _, stale_exp = _store[k]
+            if now < stale_exp:
                 removed += 1
             _store.pop(k, None)
 
@@ -157,7 +231,7 @@ async def sweep_forever(interval: int = 60) -> None:
         try:
             async with _lock:
                 now = time.monotonic()
-                expired = [k for k, (_, exp) in _store.items() if now >= exp]
+                expired = [k for k, (_, _, s_exp) in _store.items() if now >= s_exp]
                 for k in expired:
                     _store.pop(k, None)
         except Exception:
@@ -167,7 +241,7 @@ async def sweep_forever(interval: int = 60) -> None:
 
 def get_cache_stats() -> dict[str, Any]:
     now = time.monotonic()
-    active = sum(1 for _, (_, exp) in _store.items() if now < exp)
+    active = sum(1 for _, (_, _, s_exp) in _store.items() if now < s_exp)
     return {
         "active_keys": active,
         "total_keys": len(_store),

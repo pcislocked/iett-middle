@@ -44,7 +44,7 @@ async def search_stops(q: str = Query(..., min_length=2)):
             raise HTTPException(502, detail=str(exc)) from exc
         return [r.model_dump() for r in results]
         
-    return await cache_get_or_fetch(key, settings.cache_ttl_search, _fetch)
+    return await cache_get_or_fetch(key, settings.cache_ttl_search, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
 
 
 @router.get("/nearby", response_model=list[NearbyStop])
@@ -146,7 +146,7 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
                     return ""
 
                 try:
-                    name = await cache_get_or_fetch(f"routes:name:{rc}", 86400, _fetch_name)
+                    name = await cache_get_or_fetch(f"routes:name:{rc}", 86400, _fetch_name, stale_ttl=settings.cache_stale_ttl, jitter=True)
                     route_names[rc] = name
                 except Exception as e:
                     logger.warning("Failed to fetch route name for %s: %s", rc, e)
@@ -191,7 +191,7 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
                 
         return arrivals_data
 
-    arrivals_data = await cache_get_or_fetch(key, settings.cache_ttl_arrivals, _fetch)
+    arrivals_data = await cache_get_or_fetch(key, settings.cache_ttl_arrivals, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
 
     # Enrich with plate from in-memory fleet store (free, O(1) by kapino).
     result = []
@@ -215,7 +215,7 @@ async def get_routes_at_stop(dcode: str):
             raise HTTPException(502, detail=str(exc)) from exc
         return sorted(route_codes)
         
-    return await cache_get_or_fetch(key, settings.cache_ttl_search, _fetch)
+    return await cache_get_or_fetch(key, settings.cache_ttl_search, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
 
 
 @router.get("/{dcode}", response_model=StopDetail)
@@ -233,5 +233,5 @@ async def get_stop_detail(dcode: str):
             raise HTTPException(404, detail=f"Stop {dcode!r} not found")
         return detail.model_dump()
         
-    detail_data = await cache_get_or_fetch(key, settings.cache_ttl_stops, _fetch)
+    detail_data = await cache_get_or_fetch(key, settings.cache_ttl_stops, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
     return StopDetail(**detail_data)
