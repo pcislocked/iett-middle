@@ -11,7 +11,7 @@ from app.deps import get_session
 from app.models.bus import BusPosition
 from app.models.route import Announcement, RouteMetadata, RouteSearchResult, ScheduledDeparture
 from app.models.stop import RouteStop
-from app.services.cache import cache_get, cache_set, cache_get_or_fetch
+from app.services.cache import SkipCache, cache_get, cache_get_or_fetch, cache_set
 from app.services.iett_client import IettApiError, IettClient
 from app.services import normalizers, ntcapi_client
 from app.services.ntcapi_client import NtcApiError
@@ -175,7 +175,6 @@ async def get_route_stops(hat_kodu: str):
 
         dumped = [s.model_dump() for s in stops]
         if has_null_coords:
-            from app.services.cache import SkipCache
             raise SkipCache(dumped)
         return dumped
 
@@ -243,7 +242,6 @@ async def fetch_filtered_announcements(route_list: set[str]) -> list[dict]:
         except IettApiError as exc:
             logger.warning("IETT API failed for global announcements, applying 60s negative cache: %s", exc)
             await cache_set(key, [], 60)
-            from app.services.cache import SkipCache
             raise SkipCache([])
         return [a.model_dump() for a in announcements]
         

@@ -23,6 +23,7 @@ from app.models.garage import Garage
 from app.models.route import Announcement, RouteMetadata, RouteSearchResult, ScheduledDeparture
 from app.models.stop import RouteStop, StopDetail, StopSearchResult
 from app.models.traffic import TrafficIndex, TrafficSegment
+from app.services.iett_client import IettApiError
 from app.services.ntcapi_client import NtcApiError
 
 # Convenience: AsyncMock that raises NtcApiError (simulates ntcapi unavailable)
@@ -561,8 +562,9 @@ class TestRoutesBatchAnnouncements:
     def test_200_with_multiple_routes(self, client: TestClient) -> None:
         ann1 = Announcement(route_code="500T", route_name="TUZLA", type="G", updated_at="09", message="M1")
         ann2 = Announcement(route_code="15F", route_name="BEYKOZ", type="G", updated_at="09", message="M2")
+        ann3 = Announcement(route_code="11US", route_name="USKUDAR", type="G", updated_at="09", message="M3")
         mock_client = MagicMock()
-        mock_client.get_announcements = AsyncMock(return_value=[ann1, ann2])
+        mock_client.get_announcements = AsyncMock(return_value=[ann1, ann2, ann3])
         with (
             patch("app.routers.routes.cache_get", AsyncMock(return_value=None)),
             patch("app.routers.routes.cache_set", AsyncMock()),
@@ -573,13 +575,26 @@ class TestRoutesBatchAnnouncements:
         assert resp.status_code == 200
         body = resp.json()
         assert len(body) == 2
-        # Verify deduplication of 15F
+        # Verify deduplication of 15F and exclusion of 11US
         codes = [a["route_code"] for a in body]
         assert "500T" in codes
         assert "15F" in codes
+        assert "11US" not in codes
+
+    def test_empty_whitespace_route_parameter(self, client: TestClient) -> None:
+        mock_client = MagicMock()
+        mock_client.get_announcements = AsyncMock(return_value=[])
+        with (
+            patch("app.routers.routes.cache_get", AsyncMock(return_value=None)),
+            patch("app.routers.routes.cache_set", AsyncMock()),
+            patch("app.routers.routes.get_session", return_value=MagicMock()),
+            patch("app.routers.routes.IettClient", return_value=mock_client),
+        ):
+            resp = client.get("/v1/routes/announcements/batch?routes=,,,")
+        assert resp.status_code == 200
+        assert resp.json() == []
 
     def test_negative_caching_on_iett_error(self, client: TestClient) -> None:
-        from app.services.iett_client import IettApiError
         mock_client = MagicMock()
         mock_client.get_announcements = AsyncMock(side_effect=IettApiError("API Error"))
         
