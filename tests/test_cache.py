@@ -376,6 +376,10 @@ class TestCacheEdgeCases:
         await asyncio.sleep(0.05)
         task.cancel()
         
+        import contextlib
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+            
         assert key not in cache_mod._store
 
 

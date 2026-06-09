@@ -34,7 +34,7 @@ async def search_routes(q: str = Query(..., min_length=1)):
             raise HTTPException(502, detail=str(exc)) from exc
         return [r.model_dump() for r in results]
         
-    return await cache_get_or_fetch(key, settings.cache_ttl_search, _fetch)
+    return await cache_get_or_fetch(key, settings.cache_ttl_search, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
 
 
 @router.get("/{hat_kodu}", response_model=list[RouteMetadata])
@@ -64,7 +64,7 @@ async def get_route_metadata(hat_kodu: str):
             data = [m.model_dump() for m in meta]
         return data
 
-    return await cache_get_or_fetch(key, settings.cache_ttl_search, _fetch)
+    return await cache_get_or_fetch(key, settings.cache_ttl_search, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
 
 
 @router.get("/{hat_kodu}/buses", response_model=list[BusPosition])
@@ -119,7 +119,7 @@ async def get_route_buses(hat_kodu: str):
         await ensure_fleet_fresh()
         return get_buses_by_route(hat_kodu)
 
-    return await cache_get_or_fetch(key, 5, _fetch)
+    return await cache_get_or_fetch(key, 5, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
 
 
 @router.get("/{hat_kodu}/stops", response_model=list[RouteStop])
@@ -178,7 +178,7 @@ async def get_route_stops(hat_kodu: str):
             raise SkipCache(dumped)
         return dumped
 
-    return await cache_get_or_fetch(key, settings.cache_ttl_stops, _fetch)
+    return await cache_get_or_fetch(key, settings.cache_ttl_stops, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
 
 
 @router.get("/{hat_kodu}/schedule", response_model=list[ScheduledDeparture])
@@ -225,7 +225,7 @@ async def get_route_schedule(hat_kodu: str):
             data = [{k: v for k, v in d.items() if k != "_source"} for d in data]
         return data
 
-    return await cache_get_or_fetch(key, settings.cache_ttl_schedule, _fetch)
+    return await cache_get_or_fetch(key, settings.cache_ttl_schedule, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
 
 
 @router.get("/{hat_kodu}/announcements", response_model=list[Announcement])
@@ -241,4 +241,4 @@ async def get_route_announcements(hat_kodu: str):
             raise HTTPException(502, detail=str(exc)) from exc
         return [a.model_dump() for a in announcements]
         
-    return await cache_get_or_fetch(key, settings.cache_ttl_announcements, _fetch)
+    return await cache_get_or_fetch(key, settings.cache_ttl_announcements, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)

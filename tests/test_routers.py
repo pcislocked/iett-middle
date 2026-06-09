@@ -243,7 +243,7 @@ class TestFleetDetailRouter:
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
             patch("app.routers.fleet.get_trail", return_value=[]),
             patch("app.routers.fleet.get_session", return_value=MagicMock()),
-            patch("app.services.cache.cache_get", AsyncMock(return_value=[])),
+            patch("app.services.cache._cache_get_internal", AsyncMock(return_value=([], True))),
             patch("app.services.cache.cache_set", AsyncMock()),
         ):
             resp = client.get("/v1/fleet/A-001/detail")
@@ -262,7 +262,7 @@ class TestFleetDetailRouter:
             patch("app.routers.fleet.get_trail", return_value=[]),
             patch("app.routers.fleet.get_last_route_by_kapino", return_value="15F"),
             patch("app.routers.fleet.get_session", return_value=MagicMock()),
-            patch("app.services.cache.cache_get", AsyncMock(return_value=[])),
+            patch("app.services.cache._cache_get_internal", AsyncMock(return_value=([], True))),
             patch("app.services.cache.cache_set", AsyncMock()),
         ):
             resp = client.get("/v1/fleet/A-001/detail")
@@ -291,7 +291,7 @@ class TestFleetDetailRouter:
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
             patch("app.routers.fleet.get_trail", return_value=[]),
             patch("app.routers.fleet.get_session", return_value=MagicMock()),
-            patch("app.services.cache.cache_get", AsyncMock(return_value=cached_stops)),
+            patch("app.services.cache._cache_get_internal", AsyncMock(return_value=(cached_stops, True))),
             patch("app.services.cache.cache_set", AsyncMock()),
         ):
             resp = client.get("/v1/fleet/A-001/detail")
@@ -307,7 +307,7 @@ class TestFleetDetailRouter:
             patch("app.routers.fleet.get_trail", return_value=[]),
             patch("app.routers.fleet.get_last_route_by_kapino", return_value=None),
             patch("app.routers.fleet.get_session", return_value=MagicMock()),
-            patch("app.services.cache.cache_get", AsyncMock(return_value=None)),
+            patch("app.services.cache._cache_get_internal", AsyncMock(return_value=None)),
             patch("app.services.cache.cache_set", AsyncMock()),
         ):
             resp = client.get("/v1/fleet/A-001/detail")
@@ -867,7 +867,7 @@ class TestFleetDetailFallbacks:
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
             patch("app.routers.fleet.get_trail", return_value=[]),
             patch("app.routers.routes.get_session", return_value=MagicMock()),
-            patch("app.services.cache.cache_get", AsyncMock(return_value=None)),
+            patch("app.services.cache._cache_get_internal", AsyncMock(return_value=None)),
             patch("app.services.cache.cache_set", AsyncMock()),
             patch("app.services.ntcapi_client.get_route_stops", AsyncMock(return_value=[{"raw": "x"}])),
             patch("app.services.normalizers.route_stops.from_ntcapi_route_processed", return_value=processed),
@@ -893,7 +893,7 @@ class TestFleetDetailFallbacks:
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
             patch("app.routers.fleet.get_trail", return_value=[]),
             patch("app.routers.routes.get_session", return_value=MagicMock()),
-            patch("app.services.cache.cache_get", AsyncMock(return_value=None)),
+            patch("app.services.cache._cache_get_internal", AsyncMock(return_value=None)),
             patch("app.services.cache.cache_set", AsyncMock()),
             patch("app.services.ntcapi_client.get_route_stops", AsyncMock(side_effect=NE("down"))),
             patch("app.routers.routes.IettClient", return_value=mock_iett),
@@ -917,7 +917,7 @@ class TestFleetDetailFallbacks:
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
             patch("app.routers.fleet.get_trail", return_value=[]),
             patch("app.routers.routes.get_session", return_value=MagicMock()),
-            patch("app.services.cache.cache_get", AsyncMock(return_value=None)),
+            patch("app.services.cache._cache_get_internal", AsyncMock(return_value=None)),
             patch("app.services.cache.cache_set", AsyncMock()),
             patch("app.services.ntcapi_client.get_route_stops", AsyncMock(side_effect=NE("down"))),
             patch("app.routers.routes.IettClient", return_value=mock_iett),

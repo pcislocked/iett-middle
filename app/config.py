@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     cache_ttl_announcements: int = 300
     cache_ttl_traffic: int = 30
     cache_ttl_search: int = 300
+    cache_stale_ttl: int = 60
 
     # On-demand fleet refresh — stale threshold (seconds)
     fleet_poll_interval: int = 30   # max age before a background refresh is triggered
