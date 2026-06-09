@@ -168,6 +168,7 @@ async def get_route_stops(hat_kodu: str):
                 soap_stops = await client.get_route_stops(hat_kodu)
                 if soap_stops:
                     stops = soap_stops
+                    has_null_coords = any(s.latitude is None or s.longitude is None for s in stops)
             except IettApiError as exc:
                 if not stops:
                     raise HTTPException(502, detail=str(exc)) from exc

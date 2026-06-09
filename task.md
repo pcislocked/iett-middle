@@ -70,3 +70,15 @@ In `_cache_get_internal`, expired items are aggressively purged using `_store.po
 
 **Fix:**
 Let the background `sweep_forever` daemon handle expired key purging, or wrap the pop in `async with _lock:`.
+
+## 5. Stale `has_null_coords` Flag in `get_route_stops` Prevents Caching Valid Fallback
+- [ ] Fix `app/routers/routes.py`: The `has_null_coords` flag is evaluated once against the `ntcapi` response. If true, the code falls back to SOAP but fails to re-evaluate the flag for the new `soap_stops` list. This forces an unconditional `SkipCache` exception at the end of the function, causing cache stampedes and repeated downstream SOAP calls for routes missing `ntcapi` coordinates.
+
+## 6. Unhandled Exception in Stop Indexer Causes 24-Hour Silent Outage
+- [ ] Fix `app/services/stop_indexer.py`: The `except Exception:` block inside the `index_stops_forever` background task only logs the error and falls through to the 24-hour `await asyncio.sleep(_REFRESH_INTERVAL)`. An unexpected exception during startup will leave the service with an empty stop index for an entire day. It must use a short backoff (e.g., `await asyncio.sleep(60)`) and `continue`.
+
+## 7. Haversine Distance Functions Missing Domain Guard
+- [ ] Fix `app/deps.py` (in `get_nearby_stops`) and `app/routers/stops.py` (in `_haversine_m`): The haversine formula calculates `a` and then computes `math.sqrt(1 - a)`. Due to floating-point imprecision, `a` can marginally exceed `1.0`, causing `math.sqrt()` to raise a `ValueError: math domain error` and crash the endpoint. Cap `a` at `1.0` (e.g., `min(1.0, a)`).
+
+## 8. MobiettClient Does Not Invalidate Cached OAuth Tokens on 401
+- [ ] Fix `app/services/mobiett_client.py`: In `_post_service`, the client relies on an explicitly cached expiration time for the OAuth token. If the token is revoked, expired early by the server, or rejected with a 401 response, `_post_service` simply raises an exception and does not clear `self._access_token`. This causes all subsequent requests to fail with 401 for up to an hour. Catch `aiohttp.ClientResponseError` with status 401, clear the token, and retry.

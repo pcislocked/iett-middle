@@ -79,6 +79,10 @@ class MobiettClient:
             ) as resp:
                 resp.raise_for_status()
                 return await resp.json()
+        except aiohttp.ClientResponseError as e:
+            if e.status == 401:
+                self._access_token = None
+            raise MobiettApiError(f"Mobiett API ({alias}) failed: {e}") from e
         except Exception as e:
             raise MobiettApiError(f"Mobiett API ({alias}) failed: {e}") from e
 

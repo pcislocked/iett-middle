@@ -36,6 +36,8 @@ async def index_stops_forever() -> None:
             raise
         except Exception:  # noqa: BLE001
             logger.exception("Unexpected error in stop indexer")
+            await asyncio.sleep(60)
+            continue
 
         # Wait until next daily refresh
         try:
