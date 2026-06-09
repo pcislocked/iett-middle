@@ -230,46 +230,43 @@ async def get_route_schedule(hat_kodu: str):
 
 
 
-@router.get("/announcements/batch", response_model=list[Announcement])
-async def get_batch_announcements(routes: str = Query(..., description="Comma-separated route codes")):
-    """Get active disruption announcements for multiple routes at once.
-    This avoids N+1 queries from the frontend."""
-    route_list = [r.strip() for r in routes.split(",") if r.strip()]
+async def fetch_filtered_announcements(route_list: set[str]) -> list[dict]:
     if not route_list:
         return []
         
-    # We can just call get_route_announcements for each route, which handles its own caching!
-    # Wait, get_route_announcements is a FastAPI dependency/route function. We can just call the cache directly or await them.
-    # To be safe, we'll fetch from the client directly, but wait! The user said "ilgili cache'ından tekrar bakarsın".
-    # So we should call the same cache mechanism.
-    
-    tasks = [get_route_announcements(r) for r in route_list]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    
-    combined = []
-    for r, res in zip(route_list, results):
-        if isinstance(res, Exception):
-            logger.warning("Failed to fetch announcements for %s: %s", r, res)
-        else:
-            for ann in res:
-                ann_dict = ann if isinstance(ann, dict) else ann.model_dump()
-                ann_dict["route_code"] = r
-                combined.append(ann_dict)
-                
-    return combined
-
-@router.get("/{hat_kodu}/announcements", response_model=list[Announcement])
-async def get_route_announcements(hat_kodu: str):
-    """Active disruption announcements for a route."""
-    key = f"routes:announcements:{hat_kodu}"
+    key = "routes:announcements:global"
     
     async def _fetch():
         client = IettClient(get_session())
         try:
-            announcements = await client.get_announcements(hat_kodu)
+            announcements = await client.get_announcements()
         except IettApiError as exc:
-            logger.warning("IETT API failed for announcements %s, returning empty list (negative cache): %s", hat_kodu, exc)
-            return []
+            logger.warning("IETT API failed for global announcements, applying 60s negative cache: %s", exc)
+            await cache_set(key, [], 60)
+            from app.services.cache import SkipCache
+            raise SkipCache([])
         return [a.model_dump() for a in announcements]
+        
+    all_anns = await cache_get_or_fetch(key, settings.cache_ttl_announcements, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
+    
+    combined = []
+    for ann in all_anns:
+        rc = ann.get("route_code", "").upper().strip()
+        if rc in route_list:
+            combined.append(dict(ann))
+            
+    return combined
+
+@router.get("/announcements/batch", response_model=list[Announcement])
+async def get_batch_announcements(routes: str = Query(..., description="Comma-separated route codes")):
+    """Get active disruption announcements for multiple routes at once."""
+    route_list = {r.strip().upper() for r in routes.split(",") if r.strip()}
+    return await fetch_filtered_announcements(route_list)
+
+@router.get("/{hat_kodu}/announcements", response_model=list[Announcement])
+async def get_route_announcements(hat_kodu: str):
+    """Active disruption announcements for a route."""
+    route_list = {hat_kodu.upper().strip()}
+    return await fetch_filtered_announcements(route_list)
         
     return await cache_get_or_fetch(key, settings.cache_ttl_announcements, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
