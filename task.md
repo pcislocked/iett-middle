@@ -1,20 +1,72 @@
-# Backend Architecture Review Tasks
+# Code Review: `feature/backend-swr-jitter`
 
-- [ ] Fix `app/services/cache.py`: `_store` grows unboundedly for one-time cache keys. Implement a background sweep task to reap expired entries, or use an LRU mechanism to bound the dictionary size.
-- [ ] Fix `app/deps.py`: `_fleet`, `_trail`, and `_kapino_last_route` suffer from unbounded memory growth as new `kapino` IDs appear. Add a periodic cleanup for buses that haven't transmitted data within a reasonable timeframe (e.g., 24 hours).
-- [ ] Fix `app/deps.py`: `ensure_fleet_fresh` uses `datetime.now(UTC)` for staleness calculations. If the system clock is adjusted, the cache could freeze or constantly refresh. Replace with `time.monotonic()`.
-- [ ] Fix `app/routers/routes.py` (and `stops.py`): Missing request debouncing for cache misses. Concurrent requests for an expired key will trigger a cache stampede (thundering herd) against downstream ntcapi/IETT APIs. Implement `asyncio.Event` or single-flight per key during rehydration.
-- [ ] Fix `app/services/fleet_poller.py` & `app/deps.py`: Silent failure masking. If `refresh_fleet_once` throws an exception, `get_all_buses()` returns `[]`, which is passed to `update_fleet([])`. This updates `_fleet_updated_at` while leaving data unchanged, freezing the fleet without triggering retries until the cache expires again.
-- [ ] Fix `app/services/iett_client.py`: In `get_route_buses` and `get_stop_detail`, `asyncio.gather(..., return_exceptions=True)` is used. If the primary JSON task raises an exception but the fallback SOAP task returns an empty list, the exception is swallowed and `[]` is returned, hiding the upstream failure.
-- [ ] Fix `app/services/ntcapi_client.py`: `_token_expiry` uses `time.time()` for OAuth token expiration. System clock shifts can cause false cache hits on expired tokens, leading to background task 401 Unauthorized errors. Replace with `time.monotonic()`.
-- [ ] Fix `app/services/cache.py`: `_hits` and `_misses` dictionaries grow without bound if dynamic or malicious prefixes are somehow passed as keys. Validate namespace tracking.
-- [ ] Fix `app/services/cache.py`: Waiter silent failure. If the `fetcher()` in `cache_get_or_fetch` raises an exception, the `finally` block sets the event without storing a value. Waiters wake up, call `cache_get`, and return `None` silently instead of retrying or receiving the exception, leading to `TypeError`s when iterating the result.
-- [ ] Fix `app/routers/routes.py`: Cache stampede on validation. In `get_route_stops`, if `has_null_coords` is true, the invalid cache key is immediately deleted via `await cache_delete(key)`. This causes every subsequent request to bypass the cache and hit the upstream API repeatedly (write-amplification/API abuse). Implement a penalty TTL or handle fallbacks inside `_fetch`.
-- [ ] Fix `app/services/iett_client.py`: NameError in `search_routes`. In the fallback block, `mobiett._post_service` is called without `self.`. This causes a fatal `NameError: name 'mobiett' is not defined` if the primary search fails.
-- [ ] Fix `app/services/ntcapi_client.py`: Time consistency bug in `_ensure_token`. The `expires_in` delta is calculated as `(expire_date / 1000.0) - time.time()`. If the server and client clocks are skewed, `expires_in` can be negative, which immediately expires the token relative to `time.monotonic()` and causes an infinite token refresh loop.
-- [ ] Fix `app/routers/stops.py`: Uncached network call bottleneck. In `get_arrivals`, when a `via` filter is passed, it directly calls `client2.get_routes_at_stop(via)` on every request. This bypasses the cache in `stops:routes:{dcode}`, causing severe network overhead and negating caching benefits.
-- [ ] Fix `app/services/iett_client.py`: Flawed coordinate fallback in `get_stop_detail`. The method prioritizes `soap_res` over `json_res`. If `soap_res` succeeds but lacks coordinates, and `json_res` has coordinates, the valid coordinates are discarded in favor of a null coordinate fallback, degrading data quality.
-- [ ] Fix `app/routers/routes.py`: Duplicate cache bypass and race condition. In `get_route_buses`, if `meta_cached` misses, `ntcapi_client.get_route_metadata` is called directly without `cache_get_or_fetch` and then sets the cache. Concurrent requests will bypass stampede protections, duplicate network fetches, and race to overwrite `routes:meta:{hat_kodu}`.
-- [x] Fix `app/deps.py`: Zombie buses / Memory leak in `update_fleet`. When `is_full_snapshot=True`, the method updates existing buses and appends new ones, but fails to remove buses that are missing from the current snapshot. Offline buses remain in the cache as "zombies" for 24 hours, returning stale data.
-- [x] Fix `app/routers/routes.py`: Cache poisoning in `get_route_stops`. If both `ntcapi` and the SOAP fallback return stops with missing coordinates (`has_null_coords = True`), the method returns the invalid data. `cache_get_or_fetch` unconditionally caches this, poisoning the long-lived cache with coord-less responses. Implement a check to raise an exception or skip caching when valid coordinates cannot be obtained.
-- [x] Fix `app/services/cache.py`: Missing background sweeper. Despite architectural notes claiming its addition, there is no asynchronous background task sweeping expired cache keys. Expired keys remain in memory until `MAX_CACHE_SIZE` is hit and a synchronous, blocking sweep is triggered inside `cache_set`. Implement a periodic background task to reap expired entries without blocking the event loop.
+I have thoroughly reviewed the `feature/backend-swr-jitter` branch (specifically `app/services/cache.py`) and found **4 significant bugs** (memory leaks, exception handling failures, and race conditions).
+
+## 1. Critical Memory Leak / Hang in Background Fetch Tasks
+**Issue:**
+In `app/services/cache.py` -> `cache_get_or_fetch()`, the background task is created like this:
+```python
+asyncio.create_task(background_fetch())
+return value
+```
+No strong reference is kept to the created task. As per official Python 3.7+ behavior, the garbage collector can (and will) silently destroy unreferenced tasks mid-execution ("Task was destroyed but it is pending!"). If this happens, the `finally` block inside `background_fetch` does not execute. Therefore, `del _inflight[key]` is skipped, leaving the future forever pending in `_inflight`. Subsequent requests experiencing a cache miss on this key will join the non-leader queue and wait forever, causing unbounded memory leaks and hanging requests.
+
+**Fix:**
+Create a module-level set to hold strong references to background tasks.
+```python
+_bg_tasks = set()
+# ...
+task = asyncio.create_task(background_fetch())
+_bg_tasks.add(task)
+task.add_done_callback(_bg_tasks.discard)
+```
+
+## 2. "Thundering Herd" Failure on Client Disconnect
+**Issue:**
+In `cache_get_or_fetch`, if multiple concurrent requests ask for a missing cache key, the first becomes the leader (`is_leader = True`) and creates `fut`. The others wait as non-leaders (`return await fut`).
+If the leader client abruptly disconnects (e.g., closing the browser or connection timeout), FastAPI cancels the leader task. The leader's `finally` block runs and calls `fut.cancel()`.
+This forcefully raises `asyncio.CancelledError` for **all other non-leader clients** waiting on `fut`. The framework interprets this as an unhandled error, failing their HTTP requests (500 Internal Server Error) simply because a different client disconnected.
+
+**Fix:**
+Non-leaders should check if `fut` was cancelled and gracefully retry the cache lookup instead of crashing:
+```python
+    if not is_leader:
+        try:
+            return await fut
+        except asyncio.CancelledError:
+            if fut.cancelled():
+                # Leader disconnected and cancelled the future. Retry as new leader.
+                return await cache_get_or_fetch(key, ttl, fetcher, stale_ttl, jitter)
+            raise
+```
+
+## 3. Double `InvalidStateError` Crash in `background_fetch` Exception Handling
+**Issue:**
+In `background_fetch`, if the future `fut` happens to be cancelled (e.g., due to the leader cancellation bug above or manual intervention), executing `fut.set_result(new_value)` raises an `asyncio.InvalidStateError`.
+The exception handler catches this and attempts to call `fut.set_exception(e)`, which immediately throws *another* `InvalidStateError` because the future is already cancelled.
+
+**Fix:**
+Check if the future is already done before setting results or exceptions:
+```python
+        async def background_fetch() -> None:
+            try:
+                new_value = await fetcher()
+                await cache_set(key, new_value, ttl, stale_ttl, jitter)
+                if not fut.done():
+                    fut.set_result(new_value)
+            except SkipCache as e:
+                if not fut.done():
+                    fut.set_result(e.value)
+            except Exception as e:
+                if not fut.done():
+                    fut.set_exception(e)
+            finally:
+                # ...
+```
+
+## 4. Unsafe Concurrent Dictionary Mutation (Minor Race Condition)
+**Issue:**
+In `_cache_get_internal`, expired items are aggressively purged using `_store.pop(key, None)` **without** acquiring `_lock`. While CPython's GIL generally makes dict pops atomic, this breaks the async locking contract used throughout the rest of `cache.py`. It could cause issues if iteration structures change or if deployed on a free-threaded Python 3.13+ runtime.
+
+**Fix:**
+Let the background `sweep_forever` daemon handle expired key purging, or wrap the pop in `async with _lock:`.
