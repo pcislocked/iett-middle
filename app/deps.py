@@ -236,7 +236,7 @@ def get_nearby_stops(lat: float, lon: float, radius_m: float = 500.0) -> list[di
         dphi = phi2 - phi1
         dlam = math.radians(s["longitude"] - lon)
         a = math.sin(dphi / 2) ** 2 + cos_phi1 * math.cos(phi2) * math.sin(dlam / 2) ** 2
-        d = _R_EARTH * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+        d = _R_EARTH * 2 * math.atan2(math.sqrt(a), math.sqrt(max(0.0, 1 - min(1.0, a))))
         if d <= radius_m:
             out.append({**s, "distance_m": round(d, 1)})
     out.sort(key=lambda x: x["distance_m"])

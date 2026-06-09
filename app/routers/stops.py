@@ -28,7 +28,7 @@ def _haversine_m(user_lat: float, user_lon: float, stop_lat: float, stop_lon: fl
     dp = p2 - p1
     dl = _math.radians(stop_lon - user_lon)
     a = _math.sin(dp / 2) ** 2 + _math.cos(p1) * _math.cos(p2) * _math.sin(dl / 2) ** 2
-    return R * 2 * _math.atan2(_math.sqrt(a), _math.sqrt(1 - a))
+    return R * 2 * _math.atan2(_math.sqrt(a), _math.sqrt(max(0.0, 1 - min(1.0, a))))
 
 
 @router.get("/search", response_model=list[StopSearchResult])
