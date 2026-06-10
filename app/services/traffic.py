@@ -1,4 +1,5 @@
 """IBB Traffic API client (trafik.ibb.gov.tr)."""
+
 from __future__ import annotations
 
 import logging
@@ -42,7 +43,9 @@ class TrafficClient:
         data = await self._get_json("TrafficIndex_Sc1_Cont")
         percent = int(data) if isinstance(data, (int, float, str)) else 0
         level = min(7, max(1, round(percent / 16)))
-        return TrafficIndex(percent=percent, description=_CONGESTION_LABELS.get(level, "Unknown"))
+        return TrafficIndex(
+            percent=percent, description=_CONGESTION_LABELS.get(level, "Unknown")
+        )
 
     async def get_traffic_segments(self) -> list[TrafficSegment]:
         """Per-road segment speeds and congestion levels."""

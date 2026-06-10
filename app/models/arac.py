@@ -1,4 +1,5 @@
 """Pydantic models for ARAC session and encrypted-task endpoints."""
+
 from __future__ import annotations
 
 from pydantic import BaseModel, Field

@@ -1,4 +1,5 @@
 """Pydantic response models for route data."""
+
 from __future__ import annotations
 
 from pydantic import BaseModel
@@ -24,14 +25,15 @@ class Announcement(BaseModel):
 
 class RouteMetadata(BaseModel):
     """One variant/direction of a route from GetAllRoute."""
-    direction_name: str        # e.g. "YENİ CAMİİ - KADIKÖY"
-    full_name: str             # e.g. "1991 - YENİ CAMİİ - KADIKÖY - Gidiş"
-    variant_code: str          # e.g. "14M_G_D1991"
-    direction: int             # 0 = outbound, 1 = return (GUZERGAH_YON)
-    depar_no: int              # departure number
+
+    direction_name: str  # e.g. "YENİ CAMİİ - KADIKÖY"
+    full_name: str  # e.g. "1991 - YENİ CAMİİ - KADIKÖY - Gidiş"
+    variant_code: str  # e.g. "14M_G_D1991"
+    direction: int  # 0 = outbound, 1 = return (GUZERGAH_YON)
+    depar_no: int  # departure number
     hat_id: int | None = None  # ntcapi internal numeric route ID (e.g. 497)
 
 
 class RouteSearchResult(BaseModel):
-    hat_kodu: str              # e.g. "500T"
-    name: str                  # e.g. "TUZLA ŞİFA MAHALLESİ - 4. LEVENT METRO"
+    hat_kodu: str  # e.g. "500T"
+    name: str  # e.g. "TUZLA ŞİFA MAHALLESİ - 4. LEVENT METRO"

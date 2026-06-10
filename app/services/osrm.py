@@ -4,6 +4,7 @@ Strategy (per implementation_notes §7c):
   - On-demand only: enrich nearest bus per route, not the whole fleet.
   - Haversine+speed fallback when OSRM is unavailable or rate-limited.
 """
+
 from __future__ import annotations
 
 import logging
@@ -21,7 +22,9 @@ def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     dlat = math.radians(lat2 - lat1)
     dlon = math.radians(lon2 - lon1)
     a = math.sin(dlat / 2) ** 2 + (
-        math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
+        math.cos(math.radians(lat1))
+        * math.cos(math.radians(lat2))
+        * math.sin(dlon / 2) ** 2
     )
     return 2 * math.asin(math.sqrt(a)) * 6371
 
@@ -60,8 +63,7 @@ async def osrm_route(
     Uses overview=full&geometries=geojson — required to get Leaflet-ready coords.
     """
     url = (
-        f"{settings.osrm_base}/route/v1/driving/"
-        f"{from_lon},{from_lat};{to_lon},{to_lat}"
+        f"{settings.osrm_base}/route/v1/driving/{from_lon},{from_lat};{to_lon},{to_lat}"
     )
     try:
         async with session.get(

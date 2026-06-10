@@ -1,4 +1,5 @@
 """ARAC router — /v1/arac (user-session-backed endpoints)."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -18,7 +19,11 @@ from app.models.arac import (
 )
 from app.models.bus import BusPosition
 from app.services.arac_client import AracApiError, AracClient
-from app.utils.coerce import _as_text as _as_str, _to_bool as _as_bool, _to_int as _as_int
+from app.utils.coerce import (
+    _as_text as _as_str,
+    _to_bool as _as_bool,
+    _to_int as _as_int,
+)
 
 router = APIRouter()
 
@@ -163,7 +168,9 @@ async def get_arac_captcha_picture() -> AracCaptchaResponse:
 
 
 @router.post("/session/create", response_model=AracSessionCreateResponse)
-async def create_arac_session(payload: AracSessionCreateRequest) -> AracSessionCreateResponse:
+async def create_arac_session(
+    payload: AracSessionCreateRequest,
+) -> AracSessionCreateResponse:
     client = AracClient(get_session())
     try:
         session = await client.create_session(
@@ -180,7 +187,9 @@ async def create_arac_session(payload: AracSessionCreateRequest) -> AracSessionC
 
 
 @router.post("/session/response", response_model=AracSessionCreateResponse)
-async def respond_arac_captcha(payload: AracSessionCreateRequest) -> AracSessionCreateResponse:
+async def respond_arac_captcha(
+    payload: AracSessionCreateRequest,
+) -> AracSessionCreateResponse:
     """Alias for captcha response submission endpoint."""
     return await create_arac_session(payload)
 
@@ -205,7 +214,9 @@ async def get_arac_bus(
     session_id, session_key = credentials
     client = AracClient(get_session())
     try:
-        return await client.get_vehicle(kapino, session_id=session_id, session_key=session_key)
+        return await client.get_vehicle(
+            kapino, session_id=session_id, session_key=session_key
+        )
     except AracApiError as exc:
         raise HTTPException(_status_from_arac_error(exc), detail=str(exc)) from exc
 
@@ -218,7 +229,9 @@ async def get_arac_missions(
     session_id, session_key = credentials
     client = AracClient(get_session())
     try:
-        raw_missions = await client.get_missions(kapino, session_id=session_id, session_key=session_key)
+        raw_missions = await client.get_missions(
+            kapino, session_id=session_id, session_key=session_key
+        )
     except AracApiError as exc:
         raise HTTPException(_status_from_arac_error(exc), detail=str(exc)) from exc
 
@@ -239,6 +252,8 @@ async def get_arac_route_stops(
     session_id, session_key = credentials
     client = AracClient(get_session())
     try:
-        return await client.get_route_stops(route_id, session_id=session_id, session_key=session_key)
+        return await client.get_route_stops(
+            route_id, session_id=session_id, session_key=session_key
+        )
     except AracApiError as exc:
         raise HTTPException(_status_from_arac_error(exc), detail=str(exc)) from exc

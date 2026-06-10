@@ -1,4 +1,5 @@
 """ARAC API client with captcha/session bootstrap and encrypted task calls."""
+
 from __future__ import annotations
 
 import base64
@@ -94,7 +95,9 @@ class AracClient:
         self._session = session
         self._base_url = settings.arac_base.rstrip("/")
 
-    def _headers(self, session_id: str | None = None, session_key: str | None = None) -> dict[str, str]:
+    def _headers(
+        self, session_id: str | None = None, session_key: str | None = None
+    ) -> dict[str, str]:
         headers = dict(_BASE_HEADERS)
         if session_id and session_key:
             headers["X-Session-Id"] = session_id
@@ -155,7 +158,9 @@ class AracClient:
                         if isinstance(raw_text, str) and _is_html_text(raw_text):
                             detail = f"ARAC {method} {path} failed with status {status_code} (HTML error page)"
                     if not detail:
-                        detail = f"ARAC {method} {path} failed with status {status_code}"
+                        detail = (
+                            f"ARAC {method} {path} failed with status {status_code}"
+                        )
                     raise AracApiError(detail, status_code=status_code, payload=payload)
                 return payload
         except AracApiError:
@@ -205,7 +210,9 @@ class AracClient:
             )
             return aes_key, base64.b64encode(encrypted).decode("utf-8")
         except Exception as exc:  # noqa: BLE001
-            raise AracApiError(f"Failed to prepare ARAC encryption bundle: {exc}") from exc
+            raise AracApiError(
+                f"Failed to prepare ARAC encryption bundle: {exc}"
+            ) from exc
 
     @staticmethod
     def _decrypt_if_needed(aes_key: bytes, payload: Any) -> Any:
@@ -227,7 +234,9 @@ class AracClient:
             plain = aesgcm.decrypt(iv, cipher, None)
             return json.loads(plain.decode("utf-8"))
         except Exception as exc:  # noqa: BLE001
-            raise AracApiError(f"Failed to decrypt ARAC response payload: {exc}") from exc
+            raise AracApiError(
+                f"Failed to decrypt ARAC response payload: {exc}"
+            ) from exc
 
     async def _fetch_encrypted_task(
         self,
@@ -315,7 +324,9 @@ class AracClient:
                 continue
 
             if not isinstance(payload, dict):
-                last_error = AracApiError(f"ARAC captcha response from {path} is not an object")
+                last_error = AracApiError(
+                    f"ARAC captcha response from {path} is not an object"
+                )
                 continue
 
             captcha_id = _as_text(payload.get("captchaId"))
@@ -331,7 +342,9 @@ class AracClient:
             raise last_error
         raise AracApiError("ARAC captcha challenge could not be fetched")
 
-    async def create_session(self, captcha_id: str, captcha_answer: str) -> dict[str, str]:
+    async def create_session(
+        self, captcha_id: str, captcha_answer: str
+    ) -> dict[str, str]:
         payload = await self._request_json(
             "POST",
             "/session/create",
@@ -346,10 +359,14 @@ class AracClient:
         session_id = _as_text(payload.get("sessionId"))
         session_key = _as_text(payload.get("sessionKey"))
         if not session_id or not session_key:
-            raise AracApiError("ARAC session/create response missing sessionId or sessionKey")
+            raise AracApiError(
+                "ARAC session/create response missing sessionId or sessionKey"
+            )
         return {"sessionId": session_id, "sessionKey": session_key}
 
-    async def get_fleet(self, *, session_id: str, session_key: str) -> list[BusPosition]:
+    async def get_fleet(
+        self, *, session_id: str, session_key: str
+    ) -> list[BusPosition]:
         payload = await self._fetch_encrypted_task(
             "/task/bus-fleet/buses",
             session_id=session_id,
@@ -367,7 +384,9 @@ class AracClient:
                 buses.append(normalized)
         return buses
 
-    async def get_vehicle(self, kapino: str, *, session_id: str, session_key: str) -> BusPosition:
+    async def get_vehicle(
+        self, kapino: str, *, session_id: str, session_key: str
+    ) -> BusPosition:
         payload = await self._fetch_encrypted_task(
             f"/task/bus-fleet/buses/{kapino}",
             session_id=session_id,
@@ -395,7 +414,9 @@ class AracClient:
             )
         return normalized
 
-    async def get_missions(self, kapino: str, *, session_id: str, session_key: str) -> list[dict[str, Any]]:
+    async def get_missions(
+        self, kapino: str, *, session_id: str, session_key: str
+    ) -> list[dict[str, Any]]:
         payload = await self._fetch_encrypted_task(
             f"/task/getCarTasks/{kapino}",
             session_id=session_id,

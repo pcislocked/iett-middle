@@ -6,6 +6,7 @@ body, authenticated with a Bearer token obtained via OAuth2 client_credentials.
 Token is cached in-process and refreshed automatically when within 60 s of
 expiry.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -30,7 +31,7 @@ _SERVICE_URL = f"{_NTC_BASE}/service"
 
 # ── in-process token cache ─────────────────────────────────────────────────
 _token: str | None = None
-_token_expiry: float = 0.0          # unix timestamp
+_token_expiry: float = 0.0  # unix timestamp
 _token_lock = LazyLock()
 
 
@@ -73,7 +74,9 @@ async def _ensure_token(session: aiohttp.ClientSession) -> str:
             _token_expiry = time.monotonic() + expires_in
         else:
             _token_expiry = time.monotonic() + 3600
-        logger.debug("ntcapi: new token obtained, expires at monotonic %s", _token_expiry)
+        logger.debug(
+            "ntcapi: new token obtained, expires at monotonic %s", _token_expiry
+        )
         return _token  # type: ignore[return-value]
 
 
@@ -95,11 +98,14 @@ async def _call_service(
     ) as resp:
         if resp.status != 200:
             text = await resp.text()
-            raise NtcApiError(f"Service call '{alias}' failed {resp.status}: {text[:200]}")
+            raise NtcApiError(
+                f"Service call '{alias}' failed {resp.status}: {text[:200]}"
+            )
         return await resp.json()
 
 
 # ── public helpers ─────────────────────────────────────────────────────────
+
 
 class NtcApiError(Exception):
     """Raised when an ntcapi call fails."""
@@ -187,6 +193,7 @@ async def get_route_stops(
     #   1. Variant whose code ends with "_D0"  (base/canonical service pattern)
     #   2. Variant with the most stops         (covers edge cases where _D0 is missing)
     from collections import defaultdict  # noqa: PLC0415
+
     variants: dict[str, list[dict]] = defaultdict(list)
     seen_keys: set[str] = set()
     for item in raw:
@@ -197,16 +204,18 @@ async def get_route_stops(
             continue
         seen_keys.add(key)
         geoloc = item.get("DURAK_GEOLOC") or {}
-        variants[rc].append({
-            "route_code": rc,
-            "stop_code": dcode,
-            "stop_name": item.get("DURAK_ADI") or "",
-            "sequence": item.get("GUZERGAH_SEGMENT_SIRA") or 0,
-            "lat": geoloc.get("y"),
-            "lon": geoloc.get("x"),
-            "district": item.get("ILCELER_ILCEADI"),
-            "direction_letter": direction.upper(),
-        })
+        variants[rc].append(
+            {
+                "route_code": rc,
+                "stop_code": dcode,
+                "stop_name": item.get("DURAK_ADI") or "",
+                "sequence": item.get("GUZERGAH_SEGMENT_SIRA") or 0,
+                "lat": geoloc.get("y"),
+                "lon": geoloc.get("x"),
+                "district": item.get("ILCELER_ILCEADI"),
+                "direction_letter": direction.upper(),
+            }
+        )
 
     if not variants:
         return []
@@ -245,18 +254,25 @@ async def get_route_metadata(
         yon = item.get("GUZERGAH_YON", 119)
         direction_letter = "D" if yon == 120 else "G"
         direction_name = (item.get("GUZERGAH_GUZERGAH_ADI") or "").strip()
-        results.append({
-            "direction_name": direction_name,
-            "full_name": " ".join(filter(None, [
-                str(item.get("GUZERGAH_DEPAR_NO") or ""),
-                direction_name,
-                "Gidiş" if direction_letter == "G" else "Dönüş",
-            ])).strip(),
-            "variant_code": code,
-            "direction": 0 if direction_letter == "G" else 1,
-            "depar_no": item.get("GUZERGAH_DEPAR_NO") or 0,
-            "hat_id": item.get("HAT_ID"),
-        })
+        results.append(
+            {
+                "direction_name": direction_name,
+                "full_name": " ".join(
+                    filter(
+                        None,
+                        [
+                            str(item.get("GUZERGAH_DEPAR_NO") or ""),
+                            direction_name,
+                            "Gidiş" if direction_letter == "G" else "Dönüş",
+                        ],
+                    )
+                ).strip(),
+                "variant_code": code,
+                "direction": 0 if direction_letter == "G" else 1,
+                "depar_no": item.get("GUZERGAH_DEPAR_NO") or 0,
+                "hat_id": item.get("HAT_ID"),
+            }
+        )
     return results
 
 
@@ -299,18 +315,22 @@ async def get_route_buses_ybs(
                 break
         seq = item.get("H_GOREV_DURAK_GECIS_SIRANO")
         try:
-            stop_seq: int | None = int(seq) if seq is not None and str(seq).strip() else None
+            stop_seq: int | None = (
+                int(seq) if seq is not None and str(seq).strip() else None
+            )
         except (ValueError, TypeError):
             stop_seq = None
-        positions.append(BusPosition(
-            kapino=item.get("K_ARAC_KAPINUMARASI") or "",
-            latitude=lat,
-            longitude=lon,
-            last_seen=item.get("SISTEMSAATI") or "",
-            route_code=hat_kodu or None,
-            direction_letter=direction_letter,
-            stop_sequence=stop_seq,
-        ))
+        positions.append(
+            BusPosition(
+                kapino=item.get("K_ARAC_KAPINUMARASI") or "",
+                latitude=lat,
+                longitude=lon,
+                last_seen=item.get("SISTEMSAATI") or "",
+                route_code=hat_kodu or None,
+                direction_letter=direction_letter,
+                stop_sequence=stop_seq,
+            )
+        )
     return positions
 
 
@@ -348,13 +368,15 @@ async def get_nearby_stops(
     stops = []
     for item in raw:
         geoloc = item.get("DURAK_GEOLOC") or {}
-        stops.append({
-            "stop_code": str(item.get("DURAK_DURAK_KODU") or ""),
-            "stop_name": item.get("DURAK_ADI") or "",
-            "lat": geoloc.get("y"),
-            "lon": geoloc.get("x"),
-            "direction": item.get("DURAK_YON_BILGISI"),
-        })
+        stops.append(
+            {
+                "stop_code": str(item.get("DURAK_DURAK_KODU") or ""),
+                "stop_name": item.get("DURAK_ADI") or "",
+                "lat": geoloc.get("y"),
+                "lon": geoloc.get("x"),
+                "direction": item.get("DURAK_YON_BILGISI"),
+            }
+        )
     return stops
 
 

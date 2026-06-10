@@ -6,6 +6,7 @@ background refresh against the IETT all-fleet endpoint; subsequent requests
 return fresh data.  This means the endpoint is only ever called once per 30 s
 regardless of how many clients are connected.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -52,8 +53,7 @@ FleetRefreshResponse = FleetRefreshQueuedResponse | FleetRefreshCooldownResponse
 
 def _snapshot_with_trails() -> list[dict[str, Any]]:
     return [
-        {**b, "trail": get_trail(cast(str, b["kapino"]))}
-        for b in get_fleet_snapshot()
+        {**b, "trail": get_trail(cast(str, b["kapino"]))} for b in get_fleet_snapshot()
     ]
 
 
@@ -64,12 +64,12 @@ async def get_fleet() -> list[dict[str, Any]]:
     Served from the in-memory store.  Triggers a background refresh when data
     is ≥30 s stale (stale-while-revalidate); returns 503 only before the very
     first snapshot is available.
-    
+
     Additionally, fleet is forcibly refreshed at least every 15 minutes to prevent
     stale FILO data (some IBB SOAP responses can be 6+ hours old).
     """
     from app.config import settings  # noqa: PLC0415
-    
+
     await ensure_fleet_fresh()
     snapshot = get_fleet_snapshot()
     if not snapshot:
@@ -84,7 +84,7 @@ async def get_fleet() -> list[dict[str, Any]]:
 async def get_fleet_meta() -> FleetMetaResponse:
     """Lightweight status: bus count + last update timestamp."""
     from app.config import settings  # noqa: PLC0415
-    
+
     await ensure_fleet_fresh()
     updated = get_fleet_updated_at()
     return {
@@ -151,19 +151,25 @@ async def get_bus_detail(kapino: str) -> dict[str, Any]:
     route_stops_data: list[dict[str, Any]] = []
     if route_code:
         from app.routers.routes import get_route_stops
+
         try:
             route_stops_data = await get_route_stops(route_code)
         except Exception as e:
             logger.exception("Failed to fetch route stops for %s", route_code)
 
-    return {**bus, "resolved_route_code": route_code, "route_is_live": route_is_live, "route_stops": route_stops_data}
+    return {
+        **bus,
+        "resolved_route_code": route_code,
+        "route_is_live": route_is_live,
+        "route_stops": route_stops_data,
+    }
 
 
 @router.get("/{kapino}", response_model=BusPositionWithTrail)
 async def get_bus(kapino: str) -> dict[str, Any]:
     """Single bus live position + trail by door number (e.g. C-325)."""
     from app.config import settings  # noqa: PLC0415
-    
+
     await ensure_fleet_fresh()
     snapshot = get_fleet_snapshot()
     match = next((b for b in snapshot if b["kapino"].upper() == kapino.upper()), None)

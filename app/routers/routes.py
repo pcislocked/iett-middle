@@ -1,4 +1,5 @@
 """Routes router — /v1/routes"""
+
 from __future__ import annotations
 
 import asyncio
@@ -9,7 +10,12 @@ from fastapi import APIRouter, HTTPException, Query
 from app.config import settings
 from app.deps import get_session
 from app.models.bus import BusPosition
-from app.models.route import Announcement, RouteMetadata, RouteSearchResult, ScheduledDeparture
+from app.models.route import (
+    Announcement,
+    RouteMetadata,
+    RouteSearchResult,
+    ScheduledDeparture,
+)
 from app.models.stop import RouteStop
 from app.services.cache import SkipCache, cache_get, cache_get_or_fetch, cache_set
 from app.services.iett_client import IettApiError, IettClient
@@ -25,7 +31,7 @@ router = APIRouter()
 async def search_routes(q: str = Query(..., min_length=1)):
     """Search routes by name or code (e.g. '14M', 'kadikoy')."""
     key = f"routes:search:{q.lower()}"
-    
+
     async def _fetch():
         client = IettClient(get_session())
         try:
@@ -33,8 +39,14 @@ async def search_routes(q: str = Query(..., min_length=1)):
         except IettApiError as exc:
             raise HTTPException(502, detail=str(exc)) from exc
         return [r.model_dump() for r in results]
-        
-    return await cache_get_or_fetch(key, settings.cache_ttl_search, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
+
+    return await cache_get_or_fetch(
+        key,
+        settings.cache_ttl_search,
+        _fetch,
+        stale_ttl=settings.cache_stale_ttl,
+        jitter=True,
+    )
 
 
 @router.get("/{hat_kodu}", response_model=list[RouteMetadata])
@@ -46,7 +58,7 @@ async def get_route_metadata(hat_kodu: str):
     is the fallback.
     """
     key = f"routes:meta:{hat_kodu}"
-    
+
     async def _fetch():
         session = get_session()
         data: list[dict] = []
@@ -54,7 +66,11 @@ async def get_route_metadata(hat_kodu: str):
             raw_meta = await ntcapi_client.get_route_metadata(hat_kodu, session)
             data = raw_meta
         except NtcApiError as exc:
-            logger.warning("ntcapi metadata failed for %s, falling back to IETT SOAP: %s", hat_kodu, exc)
+            logger.warning(
+                "ntcapi metadata failed for %s, falling back to IETT SOAP: %s",
+                hat_kodu,
+                exc,
+            )
 
         if not data:
             client = IettClient(session)
@@ -65,7 +81,13 @@ async def get_route_metadata(hat_kodu: str):
             data = [m.model_dump() for m in meta]
         return data
 
-    return await cache_get_or_fetch(key, settings.cache_ttl_search, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
+    return await cache_get_or_fetch(
+        key,
+        settings.cache_ttl_search,
+        _fetch,
+        stale_ttl=settings.cache_stale_ttl,
+        jitter=True,
+    )
 
 
 @router.get("/{hat_kodu}/buses", response_model=list[BusPosition])
@@ -82,7 +104,7 @@ async def get_route_buses(hat_kodu: str):
     session = get_session()
 
     key = f"routes:buses:{hat_kodu}"
-    
+
     async def _fetch():
         # ── primary: ntcapi ybs point-passing ──────────────────────────────────
         try:
@@ -90,21 +112,34 @@ async def get_route_buses(hat_kodu: str):
             # Check the metadata cache first to avoid an extra round-trip.
             try:
                 raw_meta = await get_route_metadata(hat_kodu)
-                hat_id = next((m.get("hat_id") for m in raw_meta if m.get("hat_id")), None)
+                hat_id = next(
+                    (m.get("hat_id") for m in raw_meta if m.get("hat_id")), None
+                )
             except HTTPException as exc:
-                logger.warning("Upstream metadata API failed (HTTP %s): %s", exc.status_code, exc.detail)
+                logger.warning(
+                    "Upstream metadata API failed (HTTP %s): %s",
+                    exc.status_code,
+                    exc.detail,
+                )
                 hat_id = None
             except Exception as exc:
                 logger.warning("Failed to get route metadata for hat_id: %s", exc)
                 hat_id = None
             if hat_id is not None:
-                buses = await ntcapi_client.get_route_buses_ybs(hat_id, hat_kodu, session)
+                buses = await ntcapi_client.get_route_buses_ybs(
+                    hat_id, hat_kodu, session
+                )
                 if buses:
                     from app.deps import update_fleet
+
                     update_fleet(buses, is_full_snapshot=False)
                     return buses
         except Exception as exc:  # noqa: BLE001
-            logger.warning("ybs point-passing failed for %s, falling back to SOAP: %s", hat_kodu, exc)
+            logger.warning(
+                "ybs point-passing failed for %s, falling back to SOAP: %s",
+                hat_kodu,
+                exc,
+            )
 
         # ── secondary: IETT SOAP GetHatOtoKonum ────────────────────────────────
         try:
@@ -112,16 +147,23 @@ async def get_route_buses(hat_kodu: str):
             buses = await client.get_route_buses(hat_kodu)
             if buses:
                 from app.deps import update_fleet
+
                 update_fleet(buses, is_full_snapshot=False)
                 return buses
         except Exception as exc:  # noqa: BLE001
-            logger.warning("get_route_buses SOAP failed for %s, falling back to fleet: %s", hat_kodu, exc)
+            logger.warning(
+                "get_route_buses SOAP failed for %s, falling back to fleet: %s",
+                hat_kodu,
+                exc,
+            )
 
         # ── last resort: in-memory fleet ───────────────────────────────────────
         await ensure_fleet_fresh()
         return get_buses_by_route(hat_kodu)
 
-    return await cache_get_or_fetch(key, 5, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
+    return await cache_get_or_fetch(
+        key, 5, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True
+    )
 
 
 @router.get("/{hat_kodu}/stops", response_model=list[RouteStop])
@@ -133,7 +175,7 @@ async def get_route_stops(hat_kodu: str):
     IETT SOAP ``GetHatDuraklari`` is the fallback.
     """
     key = f"routes:stops:{hat_kodu}"
-    
+
     async def _fetch():
         session = get_session()
         stops: list[RouteStop] = []
@@ -160,18 +202,26 @@ async def get_route_stops(hat_kodu: str):
                 for c in canonical
             ]
         except NtcApiError as exc:
-            logger.warning("ntcapi stops failed for %s, falling back to IETT SOAP: %s", hat_kodu, exc)
+            logger.warning(
+                "ntcapi stops failed for %s, falling back to IETT SOAP: %s",
+                hat_kodu,
+                exc,
+            )
 
         has_null_coords = any(s.latitude is None or s.longitude is None for s in stops)
         if not stops or has_null_coords:
             if has_null_coords:
-                logger.warning("ntcapi stops missing coords for %s, trying SOAP fallback", hat_kodu)
+                logger.warning(
+                    "ntcapi stops missing coords for %s, trying SOAP fallback", hat_kodu
+                )
             client = IettClient(session)
             try:
                 soap_stops = await client.get_route_stops(hat_kodu)
                 if soap_stops:
                     stops = soap_stops
-                    has_null_coords = any(s.latitude is None or s.longitude is None for s in stops)
+                    has_null_coords = any(
+                        s.latitude is None or s.longitude is None for s in stops
+                    )
             except IettApiError as exc:
                 if not stops:
                     raise HTTPException(502, detail=str(exc)) from exc
@@ -181,7 +231,13 @@ async def get_route_stops(hat_kodu: str):
             raise SkipCache(dumped)
         return dumped
 
-    return await cache_get_or_fetch(key, settings.cache_ttl_stops, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
+    return await cache_get_or_fetch(
+        key,
+        settings.cache_ttl_stops,
+        _fetch,
+        stale_ttl=settings.cache_stale_ttl,
+        jitter=True,
+    )
 
 
 @router.get("/{hat_kodu}/schedule", response_model=list[ScheduledDeparture])
@@ -193,7 +249,7 @@ async def get_route_schedule(hat_kodu: str):
     IETT SOAP is the fallback.
     """
     key = f"routes:schedule:{hat_kodu}"
-    
+
     async def _fetch():
         session = get_session()
         data: list[dict] = []
@@ -214,7 +270,11 @@ async def get_route_schedule(hat_kodu: str):
                 if c.get("route_code") and c.get("departure_time")
             ]
         except NtcApiError as exc:
-            logger.warning("ntcapi schedule failed for %s, falling back to IETT SOAP: %s", hat_kodu, exc)
+            logger.warning(
+                "ntcapi schedule failed for %s, falling back to IETT SOAP: %s",
+                hat_kodu,
+                exc,
+            )
 
         if not data:
             client = IettClient(session)
@@ -229,42 +289,60 @@ async def get_route_schedule(hat_kodu: str):
             data = [{k: v for k, v in d.items() if k != "_source"} for d in data]
         return data
 
-    return await cache_get_or_fetch(key, settings.cache_ttl_schedule, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
-
+    return await cache_get_or_fetch(
+        key,
+        settings.cache_ttl_schedule,
+        _fetch,
+        stale_ttl=settings.cache_stale_ttl,
+        jitter=True,
+    )
 
 
 async def fetch_filtered_announcements(route_list: set[str]) -> list[dict]:
     route_list = {r.upper().strip() for r in route_list if r.strip()}
     if not route_list:
         return []
-        
+
     key = "routes:announcements:global"
-    
+
     async def _fetch():
         client = IettClient(get_session())
         try:
             announcements = await client.get_announcements()
         except IettApiError as exc:
-            logger.warning("IETT API failed for global announcements, applying 60s negative cache: %s", exc)
+            logger.warning(
+                "IETT API failed for global announcements, applying 60s negative cache: %s",
+                exc,
+            )
             await cache_set(key, [], 60)
             raise SkipCache([])
         return [a.model_dump() for a in announcements]
-        
-    all_anns = await cache_get_or_fetch(key, settings.cache_ttl_announcements, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
-    
+
+    all_anns = await cache_get_or_fetch(
+        key,
+        settings.cache_ttl_announcements,
+        _fetch,
+        stale_ttl=settings.cache_stale_ttl,
+        jitter=True,
+    )
+
     combined = []
     for ann in all_anns:
         rc = ann.get("route_code", "").upper().strip()
         if rc in route_list:
             combined.append(dict(ann))
-            
+
     return combined
 
+
 @router.get("/announcements/batch", response_model=list[Announcement])
-async def get_batch_announcements(routes: str = Query(..., description="Comma-separated route codes")):
+async def get_batch_announcements(
+    routes: str = Query(..., description="Comma-separated route codes"),
+):
     """Get active disruption announcements for multiple routes at once."""
     route_list = {r.strip().upper() for r in routes.split(",") if r.strip()}
     return await fetch_filtered_announcements(route_list)
+
 
 @router.get("/{hat_kodu}/announcements", response_model=list[Announcement])
 async def get_route_announcements(hat_kodu: str):
@@ -272,5 +350,3 @@ async def get_route_announcements(hat_kodu: str):
     """Active disruption announcements for a route."""
     route_list = {hat_kodu}
     return await fetch_filtered_announcements(route_list)
-        
-

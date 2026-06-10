@@ -1,4 +1,5 @@
 """Garages router — /v1/garages"""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException

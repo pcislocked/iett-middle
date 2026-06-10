@@ -2,6 +2,7 @@
 
 Runs once immediately, then refreshes every 24 h (stops change rarely).
 """
+
 from __future__ import annotations
 
 import asyncio

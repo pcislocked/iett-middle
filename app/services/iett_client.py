@@ -3,6 +3,7 @@
 Each public method returns parsed model objects.
 Raises IettApiError on any HTTP or parsing failure.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -14,7 +15,12 @@ import aiohttp
 from app.config import settings
 from app.models.bus import Arrival, BusPosition
 from app.models.garage import Garage
-from app.models.route import Announcement, RouteMetadata, RouteSearchResult, ScheduledDeparture
+from app.models.route import (
+    Announcement,
+    RouteMetadata,
+    RouteSearchResult,
+    ScheduledDeparture,
+)
 from app.models.stop import NearbyStop, RouteStop, StopDetail, StopSearchResult
 from app.services.iett_parser import (
     parse_all_fleet_xml,
@@ -49,12 +55,14 @@ class IettApiError(Exception):
 
 _global_mobiett: Any = None
 
+
 class IettClient:
     def __init__(self, session: aiohttp.ClientSession) -> None:
         global _global_mobiett
         self._session = session
         if _global_mobiett is None or _global_mobiett._session.closed:
             from app.services.mobiett_client import MobiettClient
+
             _global_mobiett = MobiettClient(self._session)
         self.mobiett = _global_mobiett
 
@@ -92,7 +100,9 @@ class IettClient:
         except Exception as exc:
             raise IettApiError(f"GET {url} failed: {exc}") from exc
 
-    async def _get_json(self, url: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def _get_json(
+        self, url: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         try:
             async with self._session.get(
                 url,
@@ -120,7 +130,7 @@ class IettClient:
     async def get_route_buses(self, hat_kodu: str) -> list[BusPosition]:
         """Live positions of all buses on a specific route."""
         from app.services.iett_parser import parse_mobiett_buses
-        
+
         async def fetch_soap():
             xml = await self._soap_post(
                 f"{settings.iett_soap_base}/FiloDurum/SeferGerceklesme.asmx",
@@ -128,37 +138,39 @@ class IettClient:
                 '"http://tempuri.org/GetHatOtoKonum_json"',
             )
             return parse_route_fleet_xml(xml)
-            
+
         async def fetch_json():
             data = await self.mobiett.get_live_fleet(hat_kodu)
             return parse_mobiett_buses(data)
-            
+
         soap_task = asyncio.create_task(fetch_soap())
         json_task = asyncio.create_task(fetch_json())
-        
+
         results = await asyncio.gather(soap_task, json_task, return_exceptions=True)
         soap_res = results[0]
         json_res = results[1]
-        
+
         buses: dict[str, BusPosition] = {}
-        
+
         if not isinstance(json_res, Exception):
             for b in json_res:
                 if b.kapino:
                     buses[b.kapino] = b
-                
+
         if not isinstance(soap_res, Exception):
             for b in soap_res:
                 if not b.kapino:
                     continue
                 if b.kapino in buses:
-                    buses[b.kapino] = buses[b.kapino].model_copy(update={"plate": b.plate})
+                    buses[b.kapino] = buses[b.kapino].model_copy(
+                        update={"plate": b.plate}
+                    )
                 else:
                     buses[b.kapino] = b
-                    
+
         if isinstance(json_res, Exception) and isinstance(soap_res, Exception):
             raise json_res
-            
+
         return list(buses.values())
 
     # ------------------------------------------------------------------
@@ -198,24 +210,23 @@ class IettClient:
         query = query.upper()
         if not query.endswith("%"):
             query = query + "%"
-            
+
         res = await self.mobiett._post_service(
-            "mainGetBusStop_basic_search", 
-            {"HATYONETIM.DURAK.ADI": query}
+            "mainGetBusStop_basic_search", {"HATYONETIM.DURAK.ADI": query}
         )
         if not isinstance(res, list) or not res:
             res = await self.mobiett._post_service(
-                "mainGetBusStop_basic_search", 
-                {"HATYONETIM.DURAK.DURAK_KODU": query}
+                "mainGetBusStop_basic_search", {"HATYONETIM.DURAK.DURAK_KODU": query}
             )
         if not isinstance(res, list):
             res = []
-            
+
         return [
             StopSearchResult(
-                dcode=str(r.get("DURAK_DURAK_KODU", "")), 
-                name=r.get("DURAK_ADI", "")
-            ) for r in res if r.get("DURAK_DURAK_KODU")
+                dcode=str(r.get("DURAK_DURAK_KODU", "")), name=r.get("DURAK_ADI", "")
+            )
+            for r in res
+            if r.get("DURAK_DURAK_KODU")
         ]
 
     async def get_stop_detail(self, dcode: str) -> StopDetail | None:
@@ -226,7 +237,7 @@ class IettClient:
         """
         from app.deps import get_stop_coords  # noqa: PLC0415
         from app.services.iett_parser import parse_mobiett_stop
-        
+
         async def fetch_soap():
             xml = await self._soap_post(
                 f"{settings.iett_soap_base}/UlasimAnaVeri/HatDurakGuzergah.asmx",
@@ -234,27 +245,33 @@ class IettClient:
                 '"http://tempuri.org/GetDurak_json"',
             )
             return parse_stop_detail_xml(xml, dcode)
-            
+
         async def fetch_json():
             data = await self.mobiett.get_stop_detail(dcode)
             if data:
                 return parse_mobiett_stop(data)
             return None
-            
+
         soap_task = asyncio.create_task(fetch_soap())
         json_task = asyncio.create_task(fetch_json())
-        
+
         results = await asyncio.gather(soap_task, json_task, return_exceptions=True)
         soap_res = results[0]
         json_res = results[1]
-        
+
         soap_valid = not isinstance(soap_res, Exception) and soap_res
         json_valid = not isinstance(json_res, Exception) and json_res
-        
+
         detail = None
         if soap_valid and json_valid:
-            soap_has_coords = soap_res.latitude not in (None, 0.0) and soap_res.longitude not in (None, 0.0)
-            json_has_coords = json_res.latitude not in (None, 0.0) and json_res.longitude not in (None, 0.0)
+            soap_has_coords = soap_res.latitude not in (
+                None,
+                0.0,
+            ) and soap_res.longitude not in (None, 0.0)
+            json_has_coords = json_res.latitude not in (
+                None,
+                0.0,
+            ) and json_res.longitude not in (None, 0.0)
             if json_has_coords and not soap_has_coords:
                 detail = json_res
             else:
@@ -263,10 +280,14 @@ class IettClient:
             detail = soap_res
         elif json_valid:
             detail = json_res
-            
+
         if isinstance(json_res, Exception) and isinstance(soap_res, Exception):
-            logger.error(f"get_stop_detail failed for {dcode}: SOAP={soap_res}, JSON={json_res}")
-            raise IettApiError(f"Both SOAP and JSON failed for stop {dcode}") from json_res
+            logger.error(
+                f"get_stop_detail failed for {dcode}: SOAP={soap_res}, JSON={json_res}"
+            )
+            raise IettApiError(
+                f"Both SOAP and JSON failed for stop {dcode}"
+            ) from json_res
 
         if detail is not None and (
             detail.latitude in (None, 0.0) or detail.longitude in (None, 0.0)
@@ -301,24 +322,23 @@ class IettClient:
         query = query.upper()
         if not query.endswith("%"):
             query = query + "%"
-            
+
         res = await self.mobiett._post_service(
-            "mainGetLine_basic_search", 
-            {"HATYONETIM.HAT.HAT_KODU": query}
+            "mainGetLine_basic_search", {"HATYONETIM.HAT.HAT_KODU": query}
         )
         if not isinstance(res, list) or not res:
             res = await self.mobiett._post_service(
-                "mainGetLine_basic_search", 
-                {"HATYONETIM.HAT.HAT_ADI": query}
+                "mainGetLine_basic_search", {"HATYONETIM.HAT.HAT_ADI": query}
             )
         if not isinstance(res, list):
             res = []
-            
+
         return [
             RouteSearchResult(
-                hat_kodu=r.get("HAT_HAT_KODU", ""), 
-                name=r.get("HAT_HAT_ADI", "")
-            ) for r in res if r.get("HAT_HAT_KODU")
+                hat_kodu=r.get("HAT_HAT_KODU", ""), name=r.get("HAT_HAT_ADI", "")
+            )
+            for r in res
+            if r.get("HAT_HAT_KODU")
         ]
 
     async def get_route_metadata(self, hat_kodu: str) -> list[RouteMetadata]:
@@ -370,7 +390,9 @@ class IettClient:
         )
         return parse_route_schedule_xml(xml)
 
-    async def get_announcements(self, hat_kodu: str | None = None) -> list[Announcement]:
+    async def get_announcements(
+        self, hat_kodu: str | None = None
+    ) -> list[Announcement]:
         """Active disruption announcements. Optionally filter by route."""
         xml = await self._soap_post(
             f"{settings.iett_soap_base}/UlasimDinamikVeri/Duyurular.asmx",
@@ -380,5 +402,7 @@ class IettClient:
         announcements = parse_announcements_xml(xml)
         if hat_kodu:
             hat_upper = hat_kodu.upper().strip()
-            announcements = [a for a in announcements if a.route_code.upper().strip() == hat_upper]
+            announcements = [
+                a for a in announcements if a.route_code.upper().strip() == hat_upper
+            ]
         return announcements

@@ -4,6 +4,7 @@ Sources:
   ntcapi ybs          — ``from_ntcapi_ybs(item)``
   IETT HTML scrape    — ``from_iett_html(item)``  (item is Arrival.model_dump())
 """
+
 from __future__ import annotations
 
 import re
@@ -75,6 +76,7 @@ def from_iett_html(item: dict[str, Any]) -> CanonicalArrival:
 # ---------------------------------------------------------------------------
 # Helpers (module-private)
 # ---------------------------------------------------------------------------
+
 
 def _safe_int(value: Any) -> int | None:
     try:

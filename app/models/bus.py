@@ -1,4 +1,5 @@
 """Pydantic response models for bus and arrival data."""
+
 from __future__ import annotations
 
 from pydantic import BaseModel
@@ -23,10 +24,10 @@ class BusPosition(BaseModel):
     last_seen: str
     route_code: str | None = None
     route_name: str | None = None
-    direction: str | None = None          # terminal name, e.g. "YENİ CAMİİ"
-    direction_letter: str | None = None   # "G" or "D", derived from guzergahkodu
+    direction: str | None = None  # terminal name, e.g. "YENİ CAMİİ"
+    direction_letter: str | None = None  # "G" or "D", derived from guzergahkodu
     nearest_stop: str | None = None
-    stop_sequence: int | None = None      # current stop index along the route
+    stop_sequence: int | None = None  # current stop index along the route
     # Optional ARAC enrichments. Kept nullable for backward compatibility.
     operator_id: int | None = None
     operator_name: str | None = None
@@ -47,6 +48,7 @@ class BusPosition(BaseModel):
 
 class BusPositionWithTrail(BusPosition):
     """BusPosition extended with a rolling position history."""
+
     trail: list[TrailPoint] = []
 
 
@@ -62,6 +64,7 @@ class BusDetail(BusPositionWithTrail):
     ``route_stops`` is the ordered stop list for both directions — client draws
     the direction that matches ``direction_letter``.
     """
+
     resolved_route_code: str | None = None
     route_is_live: bool = False
     route_stops: list[RouteStop] = []

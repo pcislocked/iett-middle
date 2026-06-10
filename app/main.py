@@ -1,4 +1,5 @@
 """iett-middle — main FastAPI application entry point."""
+
 from __future__ import annotations
 
 import logging
@@ -20,6 +21,7 @@ _outgoing.setLevel(logging.INFO)
 # ---------------------------------------------------------------------------
 # aiohttp trace hooks — prints every outgoing IETT request in the terminal
 # ---------------------------------------------------------------------------
+
 
 async def _on_request_start(
     session: aiohttp.ClientSession,
@@ -44,7 +46,11 @@ async def _on_request_end(
     color = "\033[32m" if status < 400 else "\033[31m"
     _outgoing.info(
         "%s←\033[0m %s %s%s  \033[2m%.0fms\033[0m",
-        color, status, params.url, size_str, elapsed_ms,
+        color,
+        status,
+        params.url,
+        size_str,
+        elapsed_ms,
     )
 
 
@@ -56,7 +62,10 @@ async def _on_request_exception(
     elapsed_ms = (time.monotonic() - getattr(ctx, "start_ts", time.monotonic())) * 1000
     _outgoing.warning(
         "\033[31m✗\033[0m %s %s  \033[2m%.0fms\033[0m  %s",
-        params.method, params.url, elapsed_ms, params.exception,
+        params.method,
+        params.url,
+        elapsed_ms,
+        params.exception,
     )
 
 
@@ -82,11 +91,13 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
         limit=50,
     )
     trace_configs = [_make_trace_config()] if settings.enable_outgoing_trace else []
-    set_session(aiohttp.ClientSession(
-        connector=connector,
-        trace_configs=trace_configs,
-        headers={"User-Agent": "iett-middle/1.0 (+https://github.com/pcislocked)"},
-    ))
+    set_session(
+        aiohttp.ClientSession(
+            connector=connector,
+            trace_configs=trace_configs,
+            headers={"User-Agent": "iett-middle/1.0 (+https://github.com/pcislocked)"},
+        )
+    )
     logger.info("HTTP session started")
 
     # Keep fleet refreshed in the background. The cadence is derived from the

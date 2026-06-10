@@ -2,6 +2,7 @@
 
 All functions take raw text (XML/HTML string) and return typed lists.
 """
+
 from __future__ import annotations
 
 import json
@@ -20,7 +21,7 @@ _TEMPURI = "http://tempuri.org/"
 
 # Kapı no (internal bus ID) pattern: one or more capital letters, dash, one or more digits.
 # Covers all observed formats: A-001, C-325, C-123456, M-999, etc. (not vehicle license plates)
-_KAPINO_RE = re.compile(r'\b[A-Z]+-\d+\b')
+_KAPINO_RE = re.compile(r"\b[A-Z]+-\d+\b")
 
 
 def _extract_soap_json(xml_text: str, result_tag: str) -> list[dict[str, Any]]:
@@ -39,6 +40,7 @@ def _extract_soap_json(xml_text: str, result_tag: str) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 # 1. Fleet parsers
 # ---------------------------------------------------------------------------
+
 
 def parse_all_fleet_xml(xml_text: str) -> list[BusPosition]:
     """Parse GetFiloAracKonum_json SOAP response.
@@ -113,6 +115,7 @@ def parse_route_fleet_xml(xml_text: str) -> list[BusPosition]:
 # 2. Stop arrivals (HTML)
 # ---------------------------------------------------------------------------
 
+
 def parse_stop_arrivals_html(html: str) -> list[Arrival]:
     """Parse GetStationInfo HTML fragment into Arrival list."""
     soup = BeautifulSoup(html, "html.parser")
@@ -141,6 +144,7 @@ def parse_stop_arrivals_html(html: str) -> list[Arrival]:
 # 3. Routes through a stop (HTML)
 # ---------------------------------------------------------------------------
 
+
 def parse_routes_from_html(html: str) -> set[str]:
     """Parse GetRouteByStation HTML fragment — returns set of route codes."""
     soup = BeautifulSoup(html, "html.parser")
@@ -155,11 +159,17 @@ def parse_routes_from_html(html: str) -> set[str]:
 # 4. Schedule
 # ---------------------------------------------------------------------------
 
+
 def parse_route_schedule_xml(xml_text: str) -> list[ScheduledDeparture]:
     """Parse GetPlanlananSeferSaati_json SOAP response."""
     records = _extract_soap_json(xml_text, "GetPlanlananSeferSaati_jsonResult")
     result: list[ScheduledDeparture] = []
-    _day_norm = {"I": "H", "\u0130": "H", "i": "H", "\u0131": "H"}  # İş günü → H (Hafta içi)
+    _day_norm = {
+        "I": "H",
+        "\u0130": "H",
+        "i": "H",
+        "\u0131": "H",
+    }  # İş günü → H (Hafta içi)
     for r in records:
         try:
             raw_day: str = str(r.get("SGUNTIPI") or "")
@@ -182,6 +192,7 @@ def parse_route_schedule_xml(xml_text: str) -> list[ScheduledDeparture]:
 # ---------------------------------------------------------------------------
 # 5. Announcements
 # ---------------------------------------------------------------------------
+
 
 def parse_announcements_xml(xml_text: str) -> list[Announcement]:
     """Parse GetDuyurular_json SOAP response."""
@@ -206,6 +217,7 @@ def parse_announcements_xml(xml_text: str) -> list[Announcement]:
 # ---------------------------------------------------------------------------
 # 6. Route stops (pure XML — NOT soap-wrapped JSON)
 # ---------------------------------------------------------------------------
+
 
 def _findtext_multi(el: ET.Element, *candidates: str) -> str | None:
     """Return the first non-empty text from a list of candidate tag names (tries bare and ns-prefixed)."""
@@ -233,8 +245,8 @@ def parse_route_stops_xml(xml_text: str) -> list[RouteStop]:
     result: list[RouteStop] = []
     for table in tables:
         try:
-            x = _findtext_multi(table, "XKOORDINATI", "XKOORT", "CX")   # longitude
-            y = _findtext_multi(table, "YKOORDINATI", "YKOORT", "CY")   # latitude
+            x = _findtext_multi(table, "XKOORDINATI", "XKOORT", "CX")  # longitude
+            y = _findtext_multi(table, "YKOORDINATI", "YKOORT", "CY")  # latitude
             if not x or not y:
                 continue
             result.append(
@@ -257,6 +269,7 @@ def parse_route_stops_xml(xml_text: str) -> list[RouteStop]:
 # ---------------------------------------------------------------------------
 # 6.5. Route stops (HTML — GetStationForRoute)
 # ---------------------------------------------------------------------------
+
 
 def parse_route_stops_html(html: str, hat_kodu: str = "") -> list[dict[str, Any]]:
     """Parse GetStationForRoute HTML fragment.
@@ -314,6 +327,7 @@ def parse_route_stops_html(html: str, hat_kodu: str = "") -> list[dict[str, Any]
 # 7. Stop search (JSON — already dict from caller)
 # ---------------------------------------------------------------------------
 
+
 def parse_search_results(raw: dict[str, Any]) -> list[dict[str, Any]]:
     """Parse GetSearchItems JSON response — returns stops only."""
     return [
@@ -343,10 +357,12 @@ def parse_route_search_results(raw: dict[str, Any]) -> list[dict[str, Any]]:
         # Code may contain HTML for stops but is plain text for routes
         if "<" in hat_kodu:
             continue
-        results.append({
-            "hat_kodu": hat_kodu,
-            "name": item.get("Name", ""),
-        })
+        results.append(
+            {
+                "hat_kodu": hat_kodu,
+                "name": item.get("Name", ""),
+            }
+        )
     return results
 
 
@@ -358,13 +374,14 @@ def parse_route_search_results(raw: dict[str, Any]) -> list[dict[str, Any]]:
 # 9. Garages (GetGaraj_json — HatDurakGuzergah.asmx)
 # ---------------------------------------------------------------------------
 
+
 def _coord_float(el: dict[str, Any], *keys: str) -> float | None:
     """Try multiple key names and return first parseable float."""
     for k in keys:
         raw = el.get(k)
         if raw is not None:
             try:
-                v = float(str(raw).replace(',', '.'))
+                v = float(str(raw).replace(",", "."))
                 if v != 0.0:
                     return v
             except ValueError:
@@ -380,14 +397,15 @@ def parse_garages_xml(xml_text: str) -> list[Garage]:
         try:
             # Try various name key conventions
             name = (
-                r.get("GarajAdi") or r.get("GarajAd") or r.get("GARAJ_ADI")
-                or r.get("Adi") or ""
+                r.get("GarajAdi")
+                or r.get("GarajAd")
+                or r.get("GARAJ_ADI")
+                or r.get("Adi")
+                or ""
             ).strip()
             if not name:
                 continue
-            code = (
-                r.get("GarajKodu") or r.get("GarajNo") or r.get("GARAJ_KODU") or None
-            )
+            code = r.get("GarajKodu") or r.get("GarajNo") or r.get("GARAJ_KODU") or None
             if code:
                 code = str(code).strip() or None
             # Coordinates: IETT sometimes uses Boylam/Enlem, sometimes KoordinatX/Y
@@ -406,6 +424,7 @@ def parse_garages_xml(xml_text: str) -> list[Garage]:
 # 10. Stop detail (GetDurak_json — HatDurakGuzergah.asmx)
 # ---------------------------------------------------------------------------
 
+
 def parse_stop_detail_xml(xml_text: str, dcode: str) -> StopDetail | None:
     """Parse GetDurak_json SOAP response into a StopDetail."""
     records = _extract_soap_json(xml_text, "GetDurak_jsonResult")
@@ -414,8 +433,11 @@ def parse_stop_detail_xml(xml_text: str, dcode: str) -> StopDetail | None:
     r = records[0]
     try:
         name = (
-            r.get("DurakAdi") or r.get("DURAK_ADI") or r.get("Ad")
-            or r.get("SDURAKADI") or ""
+            r.get("DurakAdi")
+            or r.get("DURAK_ADI")
+            or r.get("Ad")
+            or r.get("SDURAKADI")
+            or ""
         ).strip()
         if not name:
             return None
@@ -488,6 +510,7 @@ def parse_all_stops_json(xml_text: str) -> list[NearbyStop]:
 # 12. Route metadata (GetAllRoute — JSON list)
 # ---------------------------------------------------------------------------
 
+
 def parse_route_metadata_json(raw: list[Any] | dict[str, Any]) -> list[dict[str, Any]]:
     """Parse GetAllRoute JSON response.
 
@@ -501,13 +524,15 @@ def parse_route_metadata_json(raw: list[Any] | dict[str, Any]) -> list[dict[str,
     results: list[dict[str, Any]] = []
     for r in raw:
         try:
-            results.append({
-                "direction_name": (r.get("GUZERGAH_GUZERGAH_ADI") or "").strip(),
-                "full_name": (r.get("GUZERGAH_ADI") or "").strip(),
-                "variant_code": r.get("GUZERGAH_GUZERGAH_KODU") or "",
-                "direction": int(r.get("GUZERGAH_YON") or 0),
-                "depar_no": int(r.get("GUZERGAH_DEPAR_NO") or 0),
-            })
+            results.append(
+                {
+                    "direction_name": (r.get("GUZERGAH_GUZERGAH_ADI") or "").strip(),
+                    "full_name": (r.get("GUZERGAH_ADI") or "").strip(),
+                    "variant_code": r.get("GUZERGAH_GUZERGAH_KODU") or "",
+                    "direction": int(r.get("GUZERGAH_YON") or 0),
+                    "depar_no": int(r.get("GUZERGAH_DEPAR_NO") or 0),
+                }
+            )
         except (TypeError, ValueError):
             continue
     return results
@@ -516,6 +541,7 @@ def parse_route_metadata_json(raw: list[Any] | dict[str, Any]) -> list[dict[str,
 # ---------------------------------------------------------------------------
 # 13. Mobiett JSON API Parsers
 # ---------------------------------------------------------------------------
+
 
 def parse_mobiett_buses(raw: list[dict[str, Any]]) -> list[BusPosition]:
     """Parse 'ybs' point-passing live fleet data into BusPosition models."""
@@ -530,7 +556,7 @@ def parse_mobiett_buses(raw: list[dict[str, Any]]) -> list[BusPosition]:
                 route_code = parts[0]
             if len(parts) > 1 and parts[1] in ("G", "D"):
                 direction_letter = parts[1]
-                
+
             result.append(
                 BusPosition(
                     kapino=r.get("K_ARAC_KAPINUMARASI", ""),
@@ -545,6 +571,7 @@ def parse_mobiett_buses(raw: list[dict[str, Any]]) -> list[BusPosition]:
         except (TypeError, ValueError):
             continue
     return result
+
 
 def parse_mobiett_stop(raw: dict[str, Any]) -> StopDetail | None:
     """Parse 'mainGetBusStop' JSON response into StopDetail."""

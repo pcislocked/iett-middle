@@ -1,4 +1,5 @@
 """Tests for app.services.stop_indexer — background stop-catalogue loader."""
+
 from __future__ import annotations
 
 import asyncio
@@ -128,4 +129,5 @@ class TestIndexStopsForever:
 async def _run() -> None:
     """Helper: import and run index_stops_forever inside current event loop."""
     from app.services.stop_indexer import index_stops_forever
+
     await index_stops_forever()

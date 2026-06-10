@@ -10,6 +10,7 @@ with DIFFERENT key casing:
   Route-fleet → lowercase   (kapino, enlem, boylam, son_konum_zamani)
 Both normalise into the same CanonicalBusPosition shape.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -72,7 +73,9 @@ def from_iett_soap_route_fleet(item: dict[str, Any]) -> CanonicalBusPosition:
         last_seen=str(item.get("son_konum_zamani") or ""),
         route_code=item.get("hatkodu") or None,
         direction=item.get("yon") or None,
-        nearest_stop_code=str(item.get("yakinDurakKodu")) if item.get("yakinDurakKodu") else None,
+        nearest_stop_code=str(item.get("yakinDurakKodu"))
+        if item.get("yakinDurakKodu")
+        else None,
         _source="iett_soap_route_fleet",
     )
 
@@ -80,6 +83,7 @@ def from_iett_soap_route_fleet(item: dict[str, Any]) -> CanonicalBusPosition:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _safe_int(value: Any) -> int | None:
     try:

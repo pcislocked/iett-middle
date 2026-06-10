@@ -1,4 +1,5 @@
 """Tests for app.services.fleet_poller."""
+
 from __future__ import annotations
 
 import asyncio

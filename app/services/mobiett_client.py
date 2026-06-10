@@ -1,4 +1,5 @@
 """New JSON Mobiett Client for iett-middle."""
+
 import asyncio
 import logging
 from typing import Any
@@ -29,32 +30,40 @@ class MobiettClient:
 
     async def _ensure_token(self) -> str:
         """Fetch and cache OAuth2 token if missing or expired."""
-        if MobiettClient._access_token and time.monotonic() < MobiettClient._token_expires_at:
+        if (
+            MobiettClient._access_token
+            and time.monotonic() < MobiettClient._token_expires_at
+        ):
             return MobiettClient._access_token
 
         async with MobiettClient._auth_lock:
             # Check again inside lock
-            if MobiettClient._access_token and time.monotonic() < MobiettClient._token_expires_at:
+            if (
+                MobiettClient._access_token
+                and time.monotonic() < MobiettClient._token_expires_at
+            ):
                 return MobiettClient._access_token
 
             payload = {
                 "client_id": settings.ntcapi_client_id,
                 "client_secret": settings.ntcapi_client_secret,
                 "grant_type": "client_credentials",
-                "scope": settings.ntcapi_scope
+                "scope": settings.ntcapi_scope,
             }
             try:
                 async with self._session.post(
                     MOBIETT_AUTH_URL,
                     json=payload,
-                    timeout=aiohttp.ClientTimeout(total=10)
+                    timeout=aiohttp.ClientTimeout(total=10),
                 ) as resp:
                     resp.raise_for_status()
                     data = await resp.json()
                     MobiettClient._access_token = data["access_token"]
                     # Token expires in 3600 seconds, refresh a bit early (3500)
                     expires_in = data.get("expires_in", 3600)
-                    MobiettClient._token_expires_at = time.monotonic() + (expires_in - 100)
+                    MobiettClient._token_expires_at = time.monotonic() + (
+                        expires_in - 100
+                    )
                     return MobiettClient._access_token
             except Exception as e:
                 raise MobiettApiError(f"OAuth2 failed: {e}") from e
@@ -75,7 +84,7 @@ class MobiettClient:
                 MOBIETT_SERVICE_URL,
                 json=payload,
                 headers=headers,
-                timeout=aiohttp.ClientTimeout(total=15)
+                timeout=aiohttp.ClientTimeout(total=15),
             ) as resp:
                 resp.raise_for_status()
                 return await resp.json()
@@ -98,20 +107,23 @@ class MobiettClient:
 
         # Use mainGetRoute to find the HAT_ID
         res = await self._post_service(
-            "mainGetRoute", 
-            {"HATYONETIM.GUZERGAH.YON": "119", "HATYONETIM.HAT.HAT_KODU": hat_kodu_upper}
+            "mainGetRoute",
+            {
+                "HATYONETIM.GUZERGAH.YON": "119",
+                "HATYONETIM.HAT.HAT_KODU": hat_kodu_upper,
+            },
         )
-        
+
         if not res or not isinstance(res, list):
             self._hat_id_cache[hat_kodu_upper] = None
             return None
-            
+
         for item in res:
             if "HAT_ID" in item and item["HAT_ID"]:
                 hat_id = int(item["HAT_ID"])
                 MobiettClient._hat_id_cache[hat_kodu_upper] = hat_id
                 return hat_id
-                
+
         MobiettClient._hat_id_cache[hat_kodu_upper] = None
         return None
 
@@ -129,23 +141,22 @@ class MobiettClient:
                 "path": ["real-time-information", "point-passing", str(hat_id)],
                 "data": {
                     "password": settings.ntcapi_ybs_password,
-                    "username": settings.ntcapi_ybs_username
-                }
-            }
+                    "username": settings.ntcapi_ybs_username,
+                },
+            },
         )
-        
+
         return res if isinstance(res, list) else []
 
     async def get_stop_detail(self, dcode: str) -> dict[str, Any] | None:
         """Get stop details (name, coordinates) using mainGetBusStop."""
         res = await self._post_service(
-            "mainGetBusStop", 
-            {"HATYONETIM.DURAK.DURAK_KODU": dcode}
+            "mainGetBusStop", {"HATYONETIM.DURAK.DURAK_KODU": dcode}
         )
-        
+
         if not res or not isinstance(res, list):
             return None
-            
+
         return res[0]
 
     async def get_stop_announcements(self, dcode: str) -> list[dict[str, Any]]:
@@ -157,14 +168,13 @@ class MobiettClient:
                 "path": ["real-time-information", "stop-status", str(dcode)],
                 "data": {
                     "password": settings.ntcapi_ybs_password,
-                    "username": settings.ntcapi_ybs_username
-                }
-            }
+                    "username": settings.ntcapi_ybs_username,
+                },
+            },
         )
-        
+
         if not res or not isinstance(res, dict):
             return []
-            
+
         data = res.get(str(dcode), {})
         return data.get("duyuru") or []
-

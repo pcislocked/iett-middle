@@ -1,4 +1,5 @@
 """Application configuration via environment variables / .env file."""
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,10 +22,14 @@ class Settings(BaseSettings):
     cache_stale_ttl: int = 60
 
     # On-demand fleet refresh — stale threshold (seconds)
-    fleet_poll_interval: int = 30   # max age before a background refresh is triggered
-    fleet_cache_max_age: int = 900  # force refresh every 15 min to prevent 6h+ stale FILO data
-    fleet_manual_refresh_cooldown: int = 10  # minimum gap between POST /v1/fleet/refresh calls
-    fleet_trail_minutes: int = 5    # how many minutes of trail to keep per bus
+    fleet_poll_interval: int = 30  # max age before a background refresh is triggered
+    fleet_cache_max_age: int = (
+        900  # force refresh every 15 min to prevent 6h+ stale FILO data
+    )
+    fleet_manual_refresh_cooldown: int = (
+        10  # minimum gap between POST /v1/fleet/refresh calls
+    )
+    fleet_trail_minutes: int = 5  # how many minutes of trail to keep per bus
 
     # ntcapi.iett.istanbul — private IETT API
     ntcapi_client_id: str = "pLwqtobYHTBshBWRrEZdSWsngOywQvHa"

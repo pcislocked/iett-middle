@@ -1,4 +1,5 @@
 """Tests for app.services.cache — in-memory TTL store."""
+
 from __future__ import annotations
 
 import asyncio
@@ -21,6 +22,7 @@ from app.services.cache import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _clear() -> None:
     """Wipe state between tests."""
     cache_mod._store.clear()
@@ -31,6 +33,7 @@ def _clear() -> None:
 # ---------------------------------------------------------------------------
 # cache_get / cache_set
 # ---------------------------------------------------------------------------
+
 
 class TestCacheGetSet:
     def setup_method(self) -> None:
@@ -97,6 +100,7 @@ class TestCacheGetSet:
 # Hit / miss tracking
 # ---------------------------------------------------------------------------
 
+
 class TestCacheStats:
     def setup_method(self) -> None:
         _clear()
@@ -151,6 +155,7 @@ class TestCacheStats:
 # Invalidation helpers
 # ---------------------------------------------------------------------------
 
+
 class TestCacheInvalidation:
     def setup_method(self) -> None:
         _clear()
@@ -189,7 +194,11 @@ class TestCacheInvalidation:
         asyncio.run(cache_set("fleet:live", 1, ttl=60))
         asyncio.run(cache_set("fleet:expired", 2, ttl=60))
         value, _, _ = cache_mod._store["fleet:expired"]
-        cache_mod._store["fleet:expired"] = (value, time.monotonic() - 1, time.monotonic() - 1)
+        cache_mod._store["fleet:expired"] = (
+            value,
+            time.monotonic() - 1,
+            time.monotonic() - 1,
+        )
 
         removed = asyncio.run(cache_invalidate_namespace("fleet"))
         assert removed == 1
@@ -226,6 +235,7 @@ class TestCacheInvalidation:
 # cache_get_or_fetch
 # ---------------------------------------------------------------------------
 
+
 class TestCacheGetOrFetch:
     def setup_method(self) -> None:
         _clear()
@@ -233,18 +243,17 @@ class TestCacheGetOrFetch:
     @pytest.mark.asyncio
     async def test_single_flight_concurrency(self) -> None:
         fetch_count = 0
-        
+
         async def slow_fetch():
             nonlocal fetch_count
             fetch_count += 1
             await asyncio.sleep(0.1)
             return "data"
-            
-        results = await asyncio.gather(*(
-            cache_mod.cache_get_or_fetch("ns:sf", 60, slow_fetch)
-            for _ in range(5)
-        ))
-        
+
+        results = await asyncio.gather(
+            *(cache_mod.cache_get_or_fetch("ns:sf", 60, slow_fetch) for _ in range(5))
+        )
+
         assert all(r == "data" for r in results)
         assert fetch_count == 1
 
@@ -253,12 +262,15 @@ class TestCacheGetOrFetch:
         async def fail_fetch():
             await asyncio.sleep(0.1)
             raise ValueError("fetch failed")
-            
-        results = await asyncio.gather(*(
-            cache_mod.cache_get_or_fetch("ns:fail", 60, fail_fetch)
-            for _ in range(3)
-        ), return_exceptions=True)
-        
+
+        results = await asyncio.gather(
+            *(
+                cache_mod.cache_get_or_fetch("ns:fail", 60, fail_fetch)
+                for _ in range(3)
+            ),
+            return_exceptions=True,
+        )
+
         assert all(isinstance(r, ValueError) for r in results)
         assert all(str(r) == "fetch failed" for r in results)
 
@@ -267,12 +279,11 @@ class TestCacheGetOrFetch:
         async def skip_fetch():
             await asyncio.sleep(0.1)
             raise cache_mod.SkipCache("fallback_data")
-            
-        results = await asyncio.gather(*(
-            cache_mod.cache_get_or_fetch("ns:skip", 60, skip_fetch)
-            for _ in range(3)
-        ))
-        
+
+        results = await asyncio.gather(
+            *(cache_mod.cache_get_or_fetch("ns:skip", 60, skip_fetch) for _ in range(3))
+        )
+
         assert all(r == "fallback_data" for r in results)
         assert await cache_mod.cache_get("ns:skip") is None
 
@@ -280,73 +291,88 @@ class TestCacheGetOrFetch:
     async def test_swr_background_fetch(self) -> None:
         # Set stale but not fully expired
         await cache_set("ns:swr", "old_data", ttl=0, stale_ttl=60)
-        
+
         fetch_count = 0
+
         async def background_fetcher():
             nonlocal fetch_count
             fetch_count += 1
             await asyncio.sleep(0.1)
             return "new_data"
-            
+
         # First call should return stale data immediately
-        result = await cache_mod.cache_get_or_fetch("ns:swr", 60, background_fetcher, stale_ttl=60)
+        result = await cache_mod.cache_get_or_fetch(
+            "ns:swr", 60, background_fetcher, stale_ttl=60
+        )
         assert result == "old_data"
         assert fetch_count == 0  # not finished yet
-        
+
         # Wait for background task to finish
         await asyncio.sleep(0.15)
         assert fetch_count == 1
-        
+
         # Next call should return new data (which is now fresh)
-        result2 = await cache_mod.cache_get_or_fetch("ns:swr", 60, background_fetcher, stale_ttl=60)
+        result2 = await cache_mod.cache_get_or_fetch(
+            "ns:swr", 60, background_fetcher, stale_ttl=60
+        )
         assert result2 == "new_data"
 
     @pytest.mark.asyncio
     async def test_swr_background_fetch_skip_cache(self) -> None:
         await cache_set("ns:swr_skip", "old", ttl=0, stale_ttl=60)
+
         async def skip_fetcher():
             await asyncio.sleep(0.01)
             raise cache_mod.SkipCache("fallback")
-        
-        result = await cache_mod.cache_get_or_fetch("ns:swr_skip", 60, skip_fetcher, stale_ttl=60)
+
+        result = await cache_mod.cache_get_or_fetch(
+            "ns:swr_skip", 60, skip_fetcher, stale_ttl=60
+        )
         assert result == "old"
         await asyncio.sleep(0.05)
         # It skipped cache, so background task set result but didn't cache. Wait, skipcache doesn't overwrite.
         result2, _, _ = cache_mod._store.get("ns:swr_skip", (None, 0, 0))
-        assert result2 == "old" # Stale data remains
+        assert result2 == "old"  # Stale data remains
 
     @pytest.mark.asyncio
     async def test_swr_background_fetch_exception(self) -> None:
         await cache_set("ns:swr_err", "old", ttl=0, stale_ttl=60)
+
         async def err_fetcher():
             await asyncio.sleep(0.01)
             raise ValueError("fetch err")
-            
-        result = await cache_mod.cache_get_or_fetch("ns:swr_err", 60, err_fetcher, stale_ttl=60)
+
+        result = await cache_mod.cache_get_or_fetch(
+            "ns:swr_err", 60, err_fetcher, stale_ttl=60
+        )
         assert result == "old"
         await asyncio.sleep(0.05)
-        
+
     @pytest.mark.asyncio
     async def test_swr_background_fetch_cancel(self) -> None:
         await cache_set("ns:swr_cncl", "old", ttl=0, stale_ttl=60)
+
         async def cncl_fetcher():
             await asyncio.sleep(0.1)
             return "new"
-            
+
         # First call triggers background task
-        result = await cache_mod.cache_get_or_fetch("ns:swr_cncl", 60, cncl_fetcher, stale_ttl=60)
-        
+        result = await cache_mod.cache_get_or_fetch(
+            "ns:swr_cncl", 60, cncl_fetcher, stale_ttl=60
+        )
+
         # Manually cancel the inflight future to trigger cancellation logic in finally block
         async with cache_mod._lock:
             cache_mod._inflight["ns:swr_cncl"].cancel()
-        
+
         await asyncio.sleep(0.15)
         assert "ns:swr_cncl" not in cache_mod._inflight
+
 
 class TestCacheEdgeCases:
     def setup_method(self) -> None:
         _clear()
-        
+
     @pytest.mark.asyncio
     async def test_jitter_applied(self) -> None:
         # Just check that it doesn't crash and modifies the time
@@ -371,15 +397,14 @@ class TestCacheEdgeCases:
         key = "ns:sweep1"
         value, _, _ = cache_mod._store[key]
         cache_mod._store[key] = (value, time.monotonic() - 1, time.monotonic() - 1)
-        
+
         task = asyncio.create_task(cache_mod.sweep_forever(interval=0.01))
         await asyncio.sleep(0.05)
         task.cancel()
-        
+
         import contextlib
+
         with contextlib.suppress(asyncio.CancelledError):
             await task
-            
+
         assert key not in cache_mod._store
-
-

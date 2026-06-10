@@ -2,6 +2,7 @@
 
 Fixture data is derived from real API captures; no network calls are made.
 """
+
 from __future__ import annotations
 
 from app.services.normalizers import arrivals, positions, route_stops, schedule, stops
@@ -10,6 +11,7 @@ from app.services.normalizers import arrivals, positions, route_stops, schedule,
 # ===========================================================================
 # arrivals
 # ===========================================================================
+
 
 class TestArrivalsFromNtcapiYbs:
     """from_ntcapi_ybs maps raw ybs dict → CanonicalArrival."""
@@ -21,7 +23,7 @@ class TestArrivalsFromNtcapiYbs:
         "dakika": "3",
         "saat": "3 dk",
         "kapino": "C-325",
-        "son_konum": "29.0109,41.0819",   # LON,LAT — must be swapped!
+        "son_konum": "29.0109,41.0819",  # LON,LAT — must be swapped!
         "son_hiz": "25",
         "son_konum_saati": "2026-03-01 14:22:00",
         "usb": "1",
@@ -66,7 +68,7 @@ class TestArrivalsFromNtcapiYbs:
         assert am["usb"] is True
         assert am["wifi"] is False
         assert am["ac"] is True
-        assert am["accessible"] is None   # None input → None
+        assert am["accessible"] is None  # None input → None
 
     def test_invalid_amenity_flags_map_to_none(self) -> None:
         item = {**self.ITEM, "usb": "x", "wifi": "?", "klima": "-", "engelli": "nan"}
@@ -153,6 +155,7 @@ class TestArrivalsFromIettHtml:
 # positions
 # ===========================================================================
 
+
 class TestPositionsFromIettSoapFleet:
     """from_iett_soap_fleet maps CAPITALISED fleet keys → CanonicalBusPosition."""
 
@@ -180,7 +183,7 @@ class TestPositionsFromIettSoapFleet:
         """Hız (with dotless ı) must also be recognised."""
         item = {**self.ITEM}
         del item["Hiz"]
-        item["H\u0131z"] = "45"    # Hız
+        item["H\u0131z"] = "45"  # Hız
         result = positions.from_iett_soap_fleet(item)
         assert result["speed_kmh"] == 45
 
@@ -231,6 +234,7 @@ class TestPositionsFromIettSoapRouteFleet:
 # ===========================================================================
 # route_stops
 # ===========================================================================
+
 
 class TestRouteStopsFromNtcapiRouteRaw:
     """from_ntcapi_route maps raw mainGetRoute dict (GUZERGAH_* keys)."""
@@ -303,6 +307,7 @@ class TestRouteStopsFromNtcapiRouteProcessed:
 # schedule
 # ===========================================================================
 
+
 class TestScheduleFromNtcapiTimetable:
     """from_ntcapi_timetable maps raw K_ORER_* keys."""
 
@@ -319,7 +324,7 @@ class TestScheduleFromNtcapiTimetable:
     def test_basic_fields(self) -> None:
         result = schedule.from_ntcapi_timetable(self.ITEM)
         assert result["route_code"] == "14M"
-        assert result["route_name"] == "14M"   # no separate name — route_code reused
+        assert result["route_name"] == "14M"  # no separate name — route_code reused
         assert result["route_variant"] == "14M_G_D0"
         assert result["direction"] == "G"
         assert result["service_type"] == "OAŞ"
@@ -339,7 +344,7 @@ class TestScheduleFromNtcapiTimetable:
 
     def test_day_type_dotted_I_normalised_to_H(self) -> None:
         """Turkish capital İ (U+0130) must also normalise to 'H'."""
-        item = {**self.ITEM, "K_ORER_SGUNTIPI": "\u0130"}   # İ
+        item = {**self.ITEM, "K_ORER_SGUNTIPI": "\u0130"}  # İ
         result = schedule.from_ntcapi_timetable(item)
         assert result["day_type"] == "H"
 
@@ -385,6 +390,7 @@ class TestScheduleFromIettSoapSchedule:
 # ===========================================================================
 # stops
 # ===========================================================================
+
 
 class TestStopsFromNtcapiNearbyRaw:
     """from_ntcapi_nearby maps raw mainGetBusStopNearby dicts (DURAK_GEOLOC nested)."""

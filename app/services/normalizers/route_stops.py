@@ -4,6 +4,7 @@ Sources:
   ntcapi  mainGetRoute                → ``from_ntcapi_route(item)``
   IETT HTML route-stop scrape         → ``from_iett_html_route_stops(item)``
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -95,6 +96,7 @@ def from_iett_html_route_stops(item: dict[str, Any]) -> CanonicalRouteStop:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _safe_int(value: Any) -> int | None:
     try:

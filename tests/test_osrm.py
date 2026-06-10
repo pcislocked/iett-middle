@@ -1,4 +1,5 @@
 """Tests for OSRM helper and haversine utility."""
+
 from __future__ import annotations
 
 import sys
@@ -61,11 +62,13 @@ class TestOsrmRoute:
 
         url = f"{settings.osrm_base}/route/v1/driving/29.0,41.0;29.01,41.01?overview=full&geometries=geojson"
         payload = {
-            "routes": [{
-                "distance": 5000,
-                "duration": 600,
-                "geometry": {"coordinates": [[29.0, 41.0], [29.01, 41.01]]},
-            }]
+            "routes": [
+                {
+                    "distance": 5000,
+                    "duration": 600,
+                    "geometry": {"coordinates": [[29.0, 41.0], [29.01, 41.01]]},
+                }
+            ]
         }
         with aioresponses() as m:
             m.get(url, payload=payload)  # type: ignore[reportUnknownMemberType]
@@ -88,7 +91,9 @@ class TestOsrmRoute:
 
         assert result is None
 
-    async def test_network_exception_returns_none(self, session: aiohttp.ClientSession) -> None:
+    async def test_network_exception_returns_none(
+        self, session: aiohttp.ClientSession
+    ) -> None:
         from app.config import settings
 
         url = f"{settings.osrm_base}/route/v1/driving/29.0,41.0;29.01,41.01?overview=full&geometries=geojson"

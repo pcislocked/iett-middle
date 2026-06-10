@@ -1,4 +1,5 @@
 """Tests for shared in-memory stores and helper functions in app.deps."""
+
 from __future__ import annotations
 
 import asyncio
@@ -14,7 +15,14 @@ from app.models.stop import NearbyStop
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _bus(kapino: str, lat: float, lon: float, route_code: str = "500T", nearest: str = "301341") -> BusPosition:
+
+def _bus(
+    kapino: str,
+    lat: float,
+    lon: float,
+    route_code: str = "500T",
+    nearest: str = "301341",
+) -> BusPosition:
     return BusPosition(
         kapino=kapino,
         plate="34 HO 1000",
@@ -41,6 +49,7 @@ def _stop(code: str, lat: float, lon: float) -> NearbyStop:
 # ---------------------------------------------------------------------------
 # Fleet store
 # ---------------------------------------------------------------------------
+
 
 class TestFleetStore:
     def setup_method(self) -> None:
@@ -133,6 +142,7 @@ class TestFleetStore:
 # Stop spatial index
 # ---------------------------------------------------------------------------
 
+
 class TestStopIndex:
     def setup_method(self) -> None:
         """Reset stop index before each test."""
@@ -165,11 +175,13 @@ class TestStopIndex:
 
     def test_nearby_results_sorted_by_distance(self) -> None:
         lat, lon = 41.0, 29.0
-        deps.update_stop_index([
-            _stop("MID", lat + 0.003, lon),   # ~333 m
-            _stop("NEAR", lat + 0.001, lon),  # ~111 m
-            _stop("FAR", lat + 0.004, lon),   # ~444 m
-        ])
+        deps.update_stop_index(
+            [
+                _stop("MID", lat + 0.003, lon),  # ~333 m
+                _stop("NEAR", lat + 0.001, lon),  # ~111 m
+                _stop("FAR", lat + 0.004, lon),  # ~444 m
+            ]
+        )
         results = deps.get_nearby_stops(lat, lon, radius_m=600.0)
         codes = [r["stop_code"] for r in results]
         assert codes == ["NEAR", "MID", "FAR"]
@@ -199,6 +211,7 @@ class TestStopIndex:
 # HTTP session management
 # ---------------------------------------------------------------------------
 
+
 class TestSessionManagement:
     def setup_method(self) -> None:
         deps._session = None  # type: ignore[assignment]
@@ -212,6 +225,7 @@ class TestSessionManagement:
 
     def test_set_and_get_session(self) -> None:
         import aiohttp
+
         mock_session = object.__new__(aiohttp.ClientSession)
         deps.set_session(mock_session)  # type: ignore[arg-type]
         assert deps.get_session() is mock_session
@@ -238,6 +252,7 @@ class TestFleetRefreshTaskLifecycle:
 # ---------------------------------------------------------------------------
 # get_buses_by_route — prefix-tolerant route matching
 # ---------------------------------------------------------------------------
+
 
 class TestGetBusesByRoute:
     def setup_method(self) -> None:
@@ -277,9 +292,11 @@ class TestGetBusesByRoute:
         assert result == []
 
     def test_multiple_buses_same_route(self) -> None:
-        deps.update_fleet([
-            _bus("A-001", 41.0, 29.0, route_code="500T"),
-            _bus("B-002", 41.1, 29.1, route_code="500T"),
-        ])
+        deps.update_fleet(
+            [
+                _bus("A-001", 41.0, 29.0, route_code="500T"),
+                _bus("B-002", 41.1, 29.1, route_code="500T"),
+            ]
+        )
         result = deps.get_buses_by_route("500T")
         assert len(result) == 2

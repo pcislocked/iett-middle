@@ -1,4 +1,5 @@
 """Traffic router — /v1/traffic"""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException

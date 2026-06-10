@@ -7,6 +7,7 @@ None/empty collections in the returned structures.
 Import style:
     from app.services.normalizers import arrivals, positions, route_stops, schedule, stops
 """
+
 from app.services.normalizers import arrivals, positions, route_stops, schedule, stops
 
 __all__ = ["arrivals", "positions", "route_stops", "schedule", "stops"]

@@ -1,4 +1,5 @@
 """Pydantic response models for stop data."""
+
 from __future__ import annotations
 
 from pydantic import BaseModel
@@ -12,6 +13,7 @@ class StopSearchResult(BaseModel):
 
 class StopDetail(BaseModel):
     """Stop name + optional coordinates (for map pin)."""
+
     dcode: str
     name: str
     latitude: float | None = None
@@ -32,6 +34,7 @@ class RouteStop(BaseModel):
 
 class NearbyStop(BaseModel):
     """A stop with its distance from a query point."""
+
     stop_code: str
     stop_name: str
     latitude: float

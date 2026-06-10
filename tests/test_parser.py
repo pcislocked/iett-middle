@@ -1,4 +1,5 @@
 """Pure parser unit tests — no HTTP, no HA required."""
+
 from __future__ import annotations
 
 from tests.conftest import (
@@ -39,6 +40,7 @@ from app.services.iett_parser import (
 # ---------------------------------------------------------------------------
 # Fleet parsers
 # ---------------------------------------------------------------------------
+
 
 class TestParseAllFleet:
     def test_returns_list(self):
@@ -88,6 +90,7 @@ class TestParseRouteFleet:
 # Arrivals HTML
 # ---------------------------------------------------------------------------
 
+
 class TestParseArrivals:
     def test_returns_two_arrivals(self):
         arrivals = parse_stop_arrivals_html(ARRIVALS_HTML)
@@ -123,6 +126,7 @@ class TestParseArrivals:
 # Routes from stop HTML
 # ---------------------------------------------------------------------------
 
+
 class TestParseRoutesFromHtml:
     def test_returns_set(self):
         routes = parse_routes_from_html(ROUTES_BY_STATION_HTML)
@@ -136,6 +140,7 @@ class TestParseRoutesFromHtml:
 # ---------------------------------------------------------------------------
 # Schedule
 # ---------------------------------------------------------------------------
+
 
 class TestParseSchedule:
     def test_basic(self):
@@ -152,6 +157,7 @@ class TestParseSchedule:
 # Announcements
 # ---------------------------------------------------------------------------
 
+
 class TestParseAnnouncements:
     def test_basic(self):
         anns = parse_announcements_xml(ANNOUNCEMENTS_XML)
@@ -164,6 +170,7 @@ class TestParseAnnouncements:
 # ---------------------------------------------------------------------------
 # Route stops (pure XML — not soap-json)
 # ---------------------------------------------------------------------------
+
 
 class TestParseRouteStops:
     def test_basic(self):
@@ -184,6 +191,7 @@ class TestParseRouteStops:
 # Search results
 # ---------------------------------------------------------------------------
 
+
 class TestParseSearchResults:
     def test_filters_to_stops_only(self):
         results = parse_search_results(SEARCH_JSON)
@@ -198,6 +206,7 @@ class TestParseSearchResults:
 # ---------------------------------------------------------------------------
 # Route search results
 # ---------------------------------------------------------------------------
+
 
 class TestParseRouteSearchResults:
     def test_filters_to_routes_only(self):
@@ -217,6 +226,7 @@ class TestParseRouteSearchResults:
 # ---------------------------------------------------------------------------
 # Route metadata
 # ---------------------------------------------------------------------------
+
 
 class TestParseRouteMetadata:
     def test_returns_both_directions(self):
@@ -241,6 +251,7 @@ class TestParseRouteMetadata:
 # ---------------------------------------------------------------------------
 # Garages
 # ---------------------------------------------------------------------------
+
 
 class TestParseGarages:
     def test_returns_both_garages(self):
@@ -277,6 +288,7 @@ class TestParseGarages:
 # Stop detail (single stop)
 # ---------------------------------------------------------------------------
 
+
 class TestParseStopDetail:
     def test_returns_stop(self):
         detail = parse_stop_detail_xml(STOP_DETAIL_XML, "220602")
@@ -311,6 +323,7 @@ class TestParseStopDetail:
 # ---------------------------------------------------------------------------
 # All stops bulk dump
 # ---------------------------------------------------------------------------
+
 
 class TestParseAllStops:
     def test_returns_all_three(self):
@@ -356,6 +369,7 @@ class TestParseAllStops:
 # Schedule day_type normalisation
 # ---------------------------------------------------------------------------
 
+
 class TestScheduleDayTypeNorm:
     def test_i_normalised_to_h(self):
         xml = (
@@ -381,6 +395,7 @@ class TestScheduleDayTypeNorm:
 # ---------------------------------------------------------------------------
 # Route stops HTML (GetStationForRoute)
 # ---------------------------------------------------------------------------
+
 
 class TestParseRouteStopsHtml:
     def test_returns_both_directions(self):

@@ -1,4 +1,5 @@
 """Tests for app.services.ntcapi_client."""
+
 from __future__ import annotations
 
 import sys
@@ -58,6 +59,7 @@ def _mock_token(m: aioresponses) -> None:
 # _safe_int / _parse_son_konum — pure helpers
 # ---------------------------------------------------------------------------
 
+
 class TestSafeInt:
     def test_valid_int(self) -> None:
         assert _safe_int(42) == 42
@@ -100,6 +102,7 @@ class TestParseSonKonum:
 # Token cache
 # ---------------------------------------------------------------------------
 
+
 class TestEnsureToken:
     async def test_fetches_token_on_cold_start(
         self, session: aiohttp.ClientSession
@@ -123,7 +126,9 @@ class TestEnsureToken:
         # Token endpoint was NOT called — still the cached value
         assert _ntc_mod._token == "cached-token"
 
-    async def test_token_fetch_failure_raises(self, session: aiohttp.ClientSession) -> None:
+    async def test_token_fetch_failure_raises(
+        self, session: aiohttp.ClientSession
+    ) -> None:
         with aioresponses() as m:
             m.post(_TOKEN_URL, status=401, payload={"error": "unauthorized"})  # type: ignore[reportUnknownMemberType]
             with pytest.raises(NtcApiError, match="Token fetch failed 401"):
@@ -139,12 +144,15 @@ class TestEnsureToken:
             m.post(_SERVICE_URL, payload=[])  # type: ignore[reportUnknownMemberType]
             await get_stop_arrivals("301341", session)
         assert _ntc_mod._token == "tok2"
-        assert _ntc_mod._token_expiry == pytest.approx(time.monotonic() + 7200, rel=1e-3)
+        assert _ntc_mod._token_expiry == pytest.approx(
+            time.monotonic() + 7200, rel=1e-3
+        )
 
 
 # ---------------------------------------------------------------------------
 # _call_service — error path
 # ---------------------------------------------------------------------------
+
 
 class TestCallService:
     async def test_non_200_service_raises(self, session: aiohttp.ClientSession) -> None:
@@ -159,11 +167,12 @@ class TestCallService:
 # get_stop_arrivals
 # ---------------------------------------------------------------------------
 
+
 class TestGetStopArrivals:
     async def test_returns_valid_items(self, session: aiohttp.ClientSession) -> None:
         raw = [
             {"hatkodu": "500T", "saat": "10:05"},
-            {"hatkodu": "14M",  "saat": "10:07"},
+            {"hatkodu": "14M", "saat": "10:07"},
         ]
         with aioresponses() as m:
             _mock_token(m)
@@ -194,16 +203,19 @@ class TestGetStopArrivals:
 # get_bus_location
 # ---------------------------------------------------------------------------
 
+
 class TestGetBusLocation:
     async def test_found_returns_dict(self, session: aiohttp.ClientSession) -> None:
-        raw = [{
-            "K_ARAC_KAPINUMARASI": "A-001",
-            "K_ARAC_PLAKA": "34HO1000",
-            "H_OTOBUSKONUM_ENLEM": "41.107",
-            "H_OTOBUSKONUM_BOYLAM": "29.015",
-            "H_OTOBUSKONUM_HIZ": "0",
-            "H_OTOBUSKONUM_KAYITZAMANI": "2026-03-02T00:00:00",
-        }]
+        raw = [
+            {
+                "K_ARAC_KAPINUMARASI": "A-001",
+                "K_ARAC_PLAKA": "34HO1000",
+                "H_OTOBUSKONUM_ENLEM": "41.107",
+                "H_OTOBUSKONUM_BOYLAM": "29.015",
+                "H_OTOBUSKONUM_HIZ": "0",
+                "H_OTOBUSKONUM_KAYITZAMANI": "2026-03-02T00:00:00",
+            }
+        ]
         with aioresponses() as m:
             _mock_token(m)
             m.post(_SERVICE_URL, payload=raw)  # type: ignore[reportUnknownMemberType]
@@ -212,7 +224,9 @@ class TestGetBusLocation:
         assert result["kapino"] == "A-001"
         assert result["plate"] == "34HO1000"
 
-    async def test_empty_response_returns_none(self, session: aiohttp.ClientSession) -> None:
+    async def test_empty_response_returns_none(
+        self, session: aiohttp.ClientSession
+    ) -> None:
         with aioresponses() as m:
             _mock_token(m)
             m.post(_SERVICE_URL, payload=[])  # type: ignore[reportUnknownMemberType]
@@ -224,15 +238,33 @@ class TestGetBusLocation:
 # get_route_metadata
 # ---------------------------------------------------------------------------
 
+
 class TestGetRouteMetadata:
-    async def test_deduplicates_variant_codes(self, session: aiohttp.ClientSession) -> None:
+    async def test_deduplicates_variant_codes(
+        self, session: aiohttp.ClientSession
+    ) -> None:
         raw = [
-            {"GUZERGAH_GUZERGAH_KODU": "500T_G_D0", "GUZERGAH_YON": 119,
-             "GUZERGAH_GUZERGAH_ADI": "TUZLA", "GUZERGAH_DEPAR_NO": 1, "HAT_ID": 42},
-            {"GUZERGAH_GUZERGAH_KODU": "500T_G_D0", "GUZERGAH_YON": 119,
-             "GUZERGAH_GUZERGAH_ADI": "TUZLA", "GUZERGAH_DEPAR_NO": 1, "HAT_ID": 42},
-            {"GUZERGAH_GUZERGAH_KODU": "500T_D_D0", "GUZERGAH_YON": 120,
-             "GUZERGAH_GUZERGAH_ADI": "LEVENT", "GUZERGAH_DEPAR_NO": 2, "HAT_ID": 42},
+            {
+                "GUZERGAH_GUZERGAH_KODU": "500T_G_D0",
+                "GUZERGAH_YON": 119,
+                "GUZERGAH_GUZERGAH_ADI": "TUZLA",
+                "GUZERGAH_DEPAR_NO": 1,
+                "HAT_ID": 42,
+            },
+            {
+                "GUZERGAH_GUZERGAH_KODU": "500T_G_D0",
+                "GUZERGAH_YON": 119,
+                "GUZERGAH_GUZERGAH_ADI": "TUZLA",
+                "GUZERGAH_DEPAR_NO": 1,
+                "HAT_ID": 42,
+            },
+            {
+                "GUZERGAH_GUZERGAH_KODU": "500T_D_D0",
+                "GUZERGAH_YON": 120,
+                "GUZERGAH_GUZERGAH_ADI": "LEVENT",
+                "GUZERGAH_DEPAR_NO": 2,
+                "HAT_ID": 42,
+            },
         ]
         with aioresponses() as m:
             _mock_token(m)
@@ -248,25 +280,38 @@ class TestGetRouteMetadata:
 # get_route_stops
 # ---------------------------------------------------------------------------
 
+
 class TestGetRouteStops:
     async def test_returns_sorted_stops(self, session: aiohttp.ClientSession) -> None:
         raw = [
-            {"GUZERGAH_GUZERGAH_KODU": "500T_G_D0", "DURAK_DURAK_KODU": "111",
-             "DURAK_ADI": "STOP_A", "GUZERGAH_SEGMENT_SIRA": 2,
-             "DURAK_GEOLOC": {"y": 41.1, "x": 29.0}, "ILCELER_ILCEADI": "Kadikoy"},
-            {"GUZERGAH_GUZERGAH_KODU": "500T_G_D0", "DURAK_DURAK_KODU": "222",
-             "DURAK_ADI": "STOP_B", "GUZERGAH_SEGMENT_SIRA": 1,
-             "DURAK_GEOLOC": {"y": 41.0, "x": 29.0}, "ILCELER_ILCEADI": "Atasehir"},
+            {
+                "GUZERGAH_GUZERGAH_KODU": "500T_G_D0",
+                "DURAK_DURAK_KODU": "111",
+                "DURAK_ADI": "STOP_A",
+                "GUZERGAH_SEGMENT_SIRA": 2,
+                "DURAK_GEOLOC": {"y": 41.1, "x": 29.0},
+                "ILCELER_ILCEADI": "Kadikoy",
+            },
+            {
+                "GUZERGAH_GUZERGAH_KODU": "500T_G_D0",
+                "DURAK_DURAK_KODU": "222",
+                "DURAK_ADI": "STOP_B",
+                "GUZERGAH_SEGMENT_SIRA": 1,
+                "DURAK_GEOLOC": {"y": 41.0, "x": 29.0},
+                "ILCELER_ILCEADI": "Atasehir",
+            },
         ]
         with aioresponses() as m:
             _mock_token(m)
             m.post(_SERVICE_URL, payload=raw)  # type: ignore[reportUnknownMemberType]
             result = await get_route_stops("500T", "G", session)
         assert len(result) == 2
-        assert result[0]["stop_code"] == "222"   # sequence 1 comes first
+        assert result[0]["stop_code"] == "222"  # sequence 1 comes first
         assert result[1]["stop_code"] == "111"
 
-    async def test_yon_letter_mapped_to_number(self, session: aiohttp.ClientSession) -> None:
+    async def test_yon_letter_mapped_to_number(
+        self, session: aiohttp.ClientSession
+    ) -> None:
         """'D' direction letter maps to yon '120' in the payload."""
         captured: list[dict] = []
 
@@ -279,7 +324,9 @@ class TestGetRouteStops:
 
         assert captured[0]["HATYONETIM.GUZERGAH.YON"] == "120"
 
-    async def test_empty_raw_returns_empty_list(self, session: aiohttp.ClientSession) -> None:
+    async def test_empty_raw_returns_empty_list(
+        self, session: aiohttp.ClientSession
+    ) -> None:
         with aioresponses() as m:
             _mock_token(m)
             m.post(_SERVICE_URL, payload=[])  # type: ignore[reportUnknownMemberType]
@@ -290,15 +337,30 @@ class TestGetRouteStops:
         self, session: aiohttp.ClientSession
     ) -> None:
         raw = [
-            {"GUZERGAH_GUZERGAH_KODU": "500T_G_D1", "DURAK_DURAK_KODU": "A",
-             "DURAK_ADI": "X", "GUZERGAH_SEGMENT_SIRA": 1,
-             "DURAK_GEOLOC": {}, "ILCELER_ILCEADI": None},
-            {"GUZERGAH_GUZERGAH_KODU": "500T_G_D2", "DURAK_DURAK_KODU": "B",
-             "DURAK_ADI": "Y", "GUZERGAH_SEGMENT_SIRA": 1,
-             "DURAK_GEOLOC": {}, "ILCELER_ILCEADI": None},
-            {"GUZERGAH_GUZERGAH_KODU": "500T_G_D2", "DURAK_DURAK_KODU": "C",
-             "DURAK_ADI": "Z", "GUZERGAH_SEGMENT_SIRA": 2,
-             "DURAK_GEOLOC": {}, "ILCELER_ILCEADI": None},
+            {
+                "GUZERGAH_GUZERGAH_KODU": "500T_G_D1",
+                "DURAK_DURAK_KODU": "A",
+                "DURAK_ADI": "X",
+                "GUZERGAH_SEGMENT_SIRA": 1,
+                "DURAK_GEOLOC": {},
+                "ILCELER_ILCEADI": None,
+            },
+            {
+                "GUZERGAH_GUZERGAH_KODU": "500T_G_D2",
+                "DURAK_DURAK_KODU": "B",
+                "DURAK_ADI": "Y",
+                "GUZERGAH_SEGMENT_SIRA": 1,
+                "DURAK_GEOLOC": {},
+                "ILCELER_ILCEADI": None,
+            },
+            {
+                "GUZERGAH_GUZERGAH_KODU": "500T_G_D2",
+                "DURAK_DURAK_KODU": "C",
+                "DURAK_ADI": "Z",
+                "GUZERGAH_SEGMENT_SIRA": 2,
+                "DURAK_GEOLOC": {},
+                "ILCELER_ILCEADI": None,
+            },
         ]
         with aioresponses() as m:
             _mock_token(m)
@@ -312,15 +374,26 @@ class TestGetRouteStops:
 # get_route_buses_ybs
 # ---------------------------------------------------------------------------
 
+
 class TestGetRouteBusesYbs:
     async def test_parses_positions(self, session: aiohttp.ClientSession) -> None:
         raw = [
-            {"K_ARAC_KAPINUMARASI": "A-001", "ENLEM": "41.106", "BOYLAM": "29.015",
-             "SISTEMSAATI": "00:01:00", "K_GUZERGAH_GUZERGAHKODU": "500T_G_D0",
-             "H_GOREV_DURAK_GECIS_SIRANO": "5"},
-            {"K_ARAC_KAPINUMARASI": "B-002", "ENLEM": "41.090", "BOYLAM": "29.010",
-             "SISTEMSAATI": "00:02:00", "K_GUZERGAH_GUZERGAHKODU": "500T_D_D0",
-             "H_GOREV_DURAK_GECIS_SIRANO": None},
+            {
+                "K_ARAC_KAPINUMARASI": "A-001",
+                "ENLEM": "41.106",
+                "BOYLAM": "29.015",
+                "SISTEMSAATI": "00:01:00",
+                "K_GUZERGAH_GUZERGAHKODU": "500T_G_D0",
+                "H_GOREV_DURAK_GECIS_SIRANO": "5",
+            },
+            {
+                "K_ARAC_KAPINUMARASI": "B-002",
+                "ENLEM": "41.090",
+                "BOYLAM": "29.010",
+                "SISTEMSAATI": "00:02:00",
+                "K_GUZERGAH_GUZERGAHKODU": "500T_D_D0",
+                "H_GOREV_DURAK_GECIS_SIRANO": None,
+            },
         ]
         with aioresponses() as m:
             _mock_token(m)
@@ -332,7 +405,9 @@ class TestGetRouteBusesYbs:
         assert result[0].stop_sequence == 5
         assert result[1].stop_sequence is None
 
-    async def test_skips_items_without_lat_lon(self, session: aiohttp.ClientSession) -> None:
+    async def test_skips_items_without_lat_lon(
+        self, session: aiohttp.ClientSession
+    ) -> None:
         raw = [
             {"K_ARAC_KAPINUMARASI": "X-999"},  # no ENLEM/BOYLAM
         ]
@@ -346,6 +421,7 @@ class TestGetRouteBusesYbs:
 # ---------------------------------------------------------------------------
 # get_timetable
 # ---------------------------------------------------------------------------
+
 
 class TestGetTimetable:
     async def test_returns_raw_list(self, session: aiohttp.ClientSession) -> None:
@@ -361,11 +437,16 @@ class TestGetTimetable:
 # get_nearby_stops
 # ---------------------------------------------------------------------------
 
+
 class TestGetNearbyStops:
     async def test_parses_stop_list(self, session: aiohttp.ClientSession) -> None:
         raw = [
-            {"DURAK_DURAK_KODU": "301341", "DURAK_ADI": "LEVENT",
-             "DURAK_GEOLOC": {"y": 41.08, "x": 29.01}, "DURAK_YON_BILGISI": "G"},
+            {
+                "DURAK_DURAK_KODU": "301341",
+                "DURAK_ADI": "LEVENT",
+                "DURAK_GEOLOC": {"y": 41.08, "x": 29.01},
+                "DURAK_YON_BILGISI": "G",
+            },
         ]
         with aioresponses() as m:
             _mock_token(m)

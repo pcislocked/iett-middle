@@ -4,6 +4,7 @@ Sources:
   ntcapi  akyolbilGetTimeTable        → ``from_ntcapi_timetable(item)``
   IETT SOAP schedule                  → ``from_iett_soap_schedule(item)``
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -72,6 +73,7 @@ def from_iett_soap_schedule(item: dict[str, Any]) -> CanonicalScheduledDeparture
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _extract_hhmm(raw: str) -> str | None:
     """Extract HH:MM from a "YYYY-MM-DD HH:MM:SS" datetime string."""

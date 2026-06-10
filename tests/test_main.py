@@ -1,4 +1,5 @@
 """Tests for app.main — health/root endpoints and aiohttp trace hooks."""
+
 from __future__ import annotations
 
 import time
@@ -13,6 +14,7 @@ from app.main import app
 # Shared fixture
 # ---------------------------------------------------------------------------
 
+
 def _client() -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
@@ -20,6 +22,7 @@ def _client() -> TestClient:
 # ---------------------------------------------------------------------------
 # Endpoint tests
 # ---------------------------------------------------------------------------
+
 
 class TestEndpoints:
     def test_health_returns_ok(self) -> None:
@@ -41,6 +44,7 @@ class TestEndpoints:
 # _make_trace_config
 # ---------------------------------------------------------------------------
 
+
 class TestMakeTraceConfig:
     def test_returns_aiohttp_trace_config(self) -> None:
         import aiohttp
@@ -56,6 +60,7 @@ class TestMakeTraceConfig:
 # ---------------------------------------------------------------------------
 # Trace hook functions
 # ---------------------------------------------------------------------------
+
 
 class TestOnRequestStart:
     async def test_sets_start_ts_on_ctx(self) -> None:
@@ -104,7 +109,7 @@ class TestOnRequestEnd:
         ctx.start_ts = time.monotonic()
         params = MagicMock()
         params.response.status = 500
-        params.response.content_length = 0   # falsy — exercises the no-size branch
+        params.response.content_length = 0  # falsy — exercises the no-size branch
         params.url = "https://ws.iett.gov.tr"
 
         await _on_request_end(MagicMock(), ctx, params)

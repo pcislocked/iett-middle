@@ -1,4 +1,5 @@
 """Simple async-safe in-memory TTL cache."""
+
 from __future__ import annotations
 
 import asyncio
@@ -17,6 +18,7 @@ _misses: dict[str, int] = {}
 
 MAX_CACHE_SIZE = 10000
 MAX_STATS_SIZE = 1000
+
 
 def _namespace(key: str) -> str:
     return key.split(":")[0]
@@ -53,14 +55,17 @@ async def cache_get(key: str) -> Any | None:
     return None
 
 
-async def cache_set(key: str, value: Any, ttl: int, stale_ttl: int = 0, jitter: bool = False) -> None:
+async def cache_set(
+    key: str, value: Any, ttl: int, stale_ttl: int = 0, jitter: bool = False
+) -> None:
     if ttl < 0 or stale_ttl < 0:
         raise ValueError("ttl must be >= 0")
-        
+
     actual_ttl = float(ttl)
     actual_stale = float(stale_ttl)
     if jitter:
         import random
+
         factor = random.uniform(0.85, 1.15)
         actual_ttl = actual_ttl * factor
         actual_stale = actual_stale * factor
@@ -72,14 +77,15 @@ async def cache_set(key: str, value: Any, ttl: int, stale_ttl: int = 0, jitter: 
             expired = [k for k, (_, _, s_exp) in _store.items() if now >= s_exp]
             for k in expired:
                 _store.pop(k, None)
-            
+
             # If still too large, forcefully remove some elements in O(N) instead of O(N log N)
             if len(_store) >= MAX_CACHE_SIZE:
                 import itertools
+
                 to_remove = list(itertools.islice(_store.keys(), MAX_CACHE_SIZE // 10))
                 for k in to_remove:
                     _store.pop(k, None)
-                    
+
         now = time.monotonic()
         _store.pop(key, None)
         _store[key] = (value, now + actual_ttl, now + actual_ttl + actual_stale)
@@ -87,21 +93,23 @@ async def cache_set(key: str, value: Any, ttl: int, stale_ttl: int = 0, jitter: 
 
 class SkipCache(Exception):
     """Raise from a fetcher to return a value without caching it."""
+
     def __init__(self, value: Any):
         self.value = value
 
 
 _bg_tasks: set[asyncio.Task] = set()
 
+
 async def cache_get_or_fetch(
-    key: str, 
-    ttl: int, 
-    fetcher: Callable[[], Awaitable[Any]], 
-    stale_ttl: int = 0, 
-    jitter: bool = False
+    key: str,
+    ttl: int,
+    fetcher: Callable[[], Awaitable[Any]],
+    stale_ttl: int = 0,
+    jitter: bool = False,
 ) -> Any | None:
     """Fetch a value from cache, or execute the fetcher if missing/expired.
-    
+
     Prevents cache stampedes by ensuring only one concurrent fetcher runs per key.
     If data is stale but within stale_ttl, returns stale data and triggers a background fetch.
     """
@@ -110,7 +118,7 @@ async def cache_get_or_fetch(
         value, is_fresh = cached
         if is_fresh:
             return value
-            
+
         # It's stale. We should return value immediately, but kick off background fetch
         async with _lock:
             if key in _inflight:
@@ -118,7 +126,7 @@ async def cache_get_or_fetch(
                 return value
             fut = asyncio.get_running_loop().create_future()
             _inflight[key] = fut
-            
+
         async def background_fetch() -> None:
             try:
                 new_value = await fetcher()
@@ -161,7 +169,7 @@ async def cache_get_or_fetch(
             if fut.cancelled():
                 return await cache_get_or_fetch(key, ttl, fetcher, stale_ttl, jitter)
             raise
-        
+
     try:
         val = await fetcher()
         await cache_set(key, val, ttl, stale_ttl, jitter)
@@ -242,6 +250,7 @@ async def sweep_forever(interval: int = 60) -> None:
                     _store.pop(k, None)
         except Exception:
             import logging
+
             logging.getLogger(__name__).exception("Error in sweep_forever")
 
 

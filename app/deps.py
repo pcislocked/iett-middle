@@ -2,6 +2,7 @@
 
 Import from here, never from main.py, to avoid circular imports.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -108,6 +109,7 @@ async def ensure_fleet_fresh(max_age_seconds: int = 30) -> None:
         return
 
     from app.services.fleet_poller import refresh_fleet_once  # noqa: PLC0415
+
     _fleet_refresh_task = asyncio.create_task(refresh_fleet_once())
 
 
@@ -162,7 +164,11 @@ def update_fleet(buses: list[BusPosition], is_full_snapshot: bool = True) -> Non
             if k not in _trail:
                 _trail[k] = deque(maxlen=max_entries)
             _trail[k].append(
-                {"lat": prev["latitude"], "lon": prev["longitude"], "ts": prev["last_seen"]}
+                {
+                    "lat": prev["latitude"],
+                    "lon": prev["longitude"],
+                    "ts": prev["last_seen"],
+                }
             )
         elif k not in _trail:
             _trail[k] = deque(maxlen=max_entries)
@@ -170,7 +176,7 @@ def update_fleet(buses: list[BusPosition], is_full_snapshot: bool = True) -> Non
         # Persist last known route even when bus later goes offline / parks
         if b.route_code:
             _kapino_last_route[k.upper()] = b.route_code.strip().upper()
-            
+
         _kapino_updated_at[k] = time.monotonic()
 
     # Evict buses not seen in 24 hours (86400 seconds)
@@ -187,7 +193,7 @@ def update_fleet(buses: list[BusPosition], is_full_snapshot: bool = True) -> Non
         for k in list(_fleet.keys()):
             if k not in current_kapinos:
                 _fleet.pop(k, None)
-                
+
         _fleet_updated_at = datetime.now(UTC)
         _fleet_updated_at_mono = now
 
@@ -223,7 +229,9 @@ def get_stop_coords(stop_code: str) -> tuple[float, float] | None:
     return s["latitude"], s["longitude"]
 
 
-def get_nearby_stops(lat: float, lon: float, radius_m: float = 500.0) -> list[dict[str, Any]]:
+def get_nearby_stops(
+    lat: float, lon: float, radius_m: float = 500.0
+) -> list[dict[str, Any]]:
     """Return stops within *radius_m* metres sorted by ascending distance.
 
     Uses full haversine — accurate enough for Istanbul-scale distances.
@@ -235,8 +243,15 @@ def get_nearby_stops(lat: float, lon: float, radius_m: float = 500.0) -> list[di
         phi2 = math.radians(s["latitude"])
         dphi = phi2 - phi1
         dlam = math.radians(s["longitude"] - lon)
-        a = math.sin(dphi / 2) ** 2 + cos_phi1 * math.cos(phi2) * math.sin(dlam / 2) ** 2
-        d = _R_EARTH * 2 * math.atan2(math.sqrt(a), math.sqrt(max(0.0, 1 - min(1.0, a))))
+        a = (
+            math.sin(dphi / 2) ** 2
+            + cos_phi1 * math.cos(phi2) * math.sin(dlam / 2) ** 2
+        )
+        d = (
+            _R_EARTH
+            * 2
+            * math.atan2(math.sqrt(a), math.sqrt(max(0.0, 1 - min(1.0, a))))
+        )
         if d <= radius_m:
             out.append({**s, "distance_m": round(d, 1)})
     out.sort(key=lambda x: x["distance_m"])

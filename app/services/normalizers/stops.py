@@ -3,6 +3,7 @@
 Sources:
   ntcapi  nearbyStops    → ``from_ntcapi_nearby(item)``
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -52,8 +53,8 @@ def from_ntcapi_nearby_processed(item: dict[str, Any]) -> CanonicalStop:
         lat=_safe_float(item.get("lat")),
         lon=_safe_float(item.get("lon")),
         direction=item.get("direction") or None,
-        district=None,      # not present in pre-processed format
-        distance_m=None,    # not returned by this endpoint
+        district=None,  # not present in pre-processed format
+        distance_m=None,  # not returned by this endpoint
         _source="ntcapi_nearby",
     )
 
@@ -61,6 +62,7 @@ def from_ntcapi_nearby_processed(item: dict[str, Any]) -> CanonicalStop:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _safe_float(value: Any) -> float | None:
     try:

@@ -1,4 +1,5 @@
 """Stops router â€” /v1/stops"""
+
 from __future__ import annotations
 
 import asyncio
@@ -22,7 +23,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _haversine_m(user_lat: float, user_lon: float, stop_lat: float, stop_lon: float) -> float:
+def _haversine_m(
+    user_lat: float, user_lon: float, stop_lat: float, stop_lon: float
+) -> float:
     """Haversine distance in metres."""
     R = 6_371_000.0
     p1, p2 = _math.radians(user_lat), _math.radians(stop_lat)
@@ -36,7 +39,7 @@ def _haversine_m(user_lat: float, user_lon: float, stop_lat: float, stop_lon: fl
 async def search_stops(q: str = Query(..., min_length=2)):
     """Search stops by name."""
     key = f"stops:search:{q.lower()}"
-    
+
     async def _fetch():
         client = IettClient(get_session())
         try:
@@ -44,8 +47,14 @@ async def search_stops(q: str = Query(..., min_length=2)):
         except IettApiError as exc:
             raise HTTPException(502, detail=str(exc)) from exc
         return [r.model_dump() for r in results]
-        
-    return await cache_get_or_fetch(key, settings.cache_ttl_search, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
+
+    return await cache_get_or_fetch(
+        key,
+        settings.cache_ttl_search,
+        _fetch,
+        stale_ttl=settings.cache_stale_ttl,
+        jitter=True,
+    )
 
 
 @router.get("/nearby", response_model=list[NearbyStop])
@@ -64,15 +73,22 @@ async def nearby_stops(
 
     # â”€â”€ primary: ntcapi mainGetBusStopNearby â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     try:
-        raw_stops = await ntcapi_client.get_nearby_stops(lat, lon, radius / 1000, session)
-        canonical = [normalizers.stops.from_ntcapi_nearby_processed(r) for r in raw_stops]
+        raw_stops = await ntcapi_client.get_nearby_stops(
+            lat, lon, radius / 1000, session
+        )
+        canonical = [
+            normalizers.stops.from_ntcapi_nearby_processed(r) for r in raw_stops
+        ]
         nearby_results: list[NearbyStop] = []
         for c in canonical[:30]:
             try:
                 latitude = float(c["lat"])  # type: ignore[arg-type]
                 longitude = float(c["lon"])  # type: ignore[arg-type]
             except (KeyError, TypeError, ValueError):
-                logger.warning("Skipping nearby stop with invalid coordinates: %s", c.get("stop_code"))
+                logger.warning(
+                    "Skipping nearby stop with invalid coordinates: %s",
+                    c.get("stop_code"),
+                )
                 continue
             nearby_results.append(
                 NearbyStop(
@@ -82,18 +98,27 @@ async def nearby_stops(
                     longitude=longitude,
                     district=c.get("district"),
                     direction=c.get("direction"),
-                    distance_m=c.get("distance_m") if c.get("distance_m") is not None else _haversine_m(lat, lon, latitude, longitude),
+                    distance_m=c.get("distance_m")
+                    if c.get("distance_m") is not None
+                    else _haversine_m(lat, lon, latitude, longitude),
                 )
             )
         return nearby_results
     except NtcApiError as exc:
-        logger.warning("ntcapi nearby stops failed (lat=%s lon=%s), falling back to index: %s", lat, lon, exc)
+        logger.warning(
+            "ntcapi nearby stops failed (lat=%s lon=%s), falling back to index: %s",
+            lat,
+            lon,
+            exc,
+        )
 
     # â”€â”€ fallback: in-memory spatial index â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     from app.deps import get_nearby_stops as _get_nearby, get_stop_index_updated_at  # noqa: PLC0415
 
     if get_stop_index_updated_at() is None:
-        raise HTTPException(503, detail="Stop index not ready yet â€” try again in a moment")
+        raise HTTPException(
+            503, detail="Stop index not ready yet â€” try again in a moment"
+        )
     results = _get_nearby(lat, lon, radius)
     return results[:30]
 
@@ -111,6 +136,7 @@ async def get_arrivals_raw(dcode: str):
     except IettApiError as exc:
         raise HTTPException(502, detail=str(exc)) from exc
     from fastapi.responses import PlainTextResponse  # noqa: PLC0415
+
     return PlainTextResponse(content=html)
 
 
@@ -124,7 +150,7 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
     canonical data layer.
     """
     key = f"stops:arrivals:{dcode}" + (f":via:{via}" if via else "")
-    
+
     async def _fetch():
         session = get_session()
         arrivals_data = []
@@ -133,13 +159,19 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
         try:
             raw_items = await ntcapi_client.get_stop_arrivals(dcode, session)
             canonical = [normalizers.arrivals.from_ntcapi_ybs(r) for r in raw_items]
-            
+
             # Enrich empty destinations via route search fallback
             # Resolve missing destinations per-route to avoid cache stampede
-            missing_routes = list({a["route_code"] for a in canonical if not a.get("destination") and a.get("route_code")})
+            missing_routes = list(
+                {
+                    a["route_code"]
+                    for a in canonical
+                    if not a.get("destination") and a.get("route_code")
+                }
+            )
             route_names: dict[str, str] = {}
             client = IettClient(session)
-            
+
             async def _resolve_route(rc: str):
                 async def _fetch_name() -> str:
                     res = await client.search_routes(rc)
@@ -149,11 +181,17 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
                     return ""
 
                 try:
-                    name = await cache_get_or_fetch(f"routes:name:{rc}", 86400, _fetch_name, stale_ttl=settings.cache_stale_ttl, jitter=True)
+                    name = await cache_get_or_fetch(
+                        f"routes:name:{rc}",
+                        86400,
+                        _fetch_name,
+                        stale_ttl=settings.cache_stale_ttl,
+                        jitter=True,
+                    )
                     route_names[rc] = name
                 except Exception as e:
                     logger.warning("Failed to fetch route name for %s: %s", rc, e)
-            
+
             if missing_routes:
                 await asyncio.gather(*[_resolve_route(rc) for rc in missing_routes])
                 for a in canonical:
@@ -161,11 +199,15 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
                         a["destination"] = route_names[a["route_code"]]
 
             canonical.sort(
-                key=lambda a: a.get("eta_minutes") if a.get("eta_minutes") is not None else 9999
+                key=lambda a: (
+                    a.get("eta_minutes") if a.get("eta_minutes") is not None else 9999
+                )
             )
             arrivals_data = list(canonical)
         except NtcApiError as exc:
-            logger.warning("ntcapi arrivals failed for %s, falling back to HTML: %s", dcode, exc)
+            logger.warning(
+                "ntcapi arrivals failed for %s, falling back to HTML: %s", dcode, exc
+            )
 
         # â”€â”€ fallback: legacy IETT HTML (no kapino, no location) â”€â”€â”€â”€â”€â”€â”€
         if not arrivals_data:
@@ -178,7 +220,8 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
             except IettApiError as exc:
                 raise HTTPException(502, detail=str(exc)) from exc
             arrivals_data = [
-                normalizers.arrivals.from_iett_html(a.model_dump()) for a in iett_arrivals
+                normalizers.arrivals.from_iett_html(a.model_dump())
+                for a in iett_arrivals
             ]
 
         # â”€â”€ via filter (applied after ntcapi fetch if needed) â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -186,23 +229,40 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
             try:
                 routes_via = await get_routes_at_stop(via)
                 routes_via_upper = {r.upper() for r in routes_via}
-                arrivals_data = [a for a in arrivals_data if a.get("route_code", "").upper() in routes_via_upper]
+                arrivals_data = [
+                    a
+                    for a in arrivals_data
+                    if a.get("route_code", "").upper() in routes_via_upper
+                ]
             except Exception as exc:
                 logger.warning(
                     "via-filter lookup failed for stop %s via %s â€” returning unfiltered arrivals: %s",
-                    dcode, via, exc,
+                    dcode,
+                    via,
+                    exc,
                 )
-                
+
         return arrivals_data
 
-    arrivals_data = await cache_get_or_fetch(key, settings.cache_ttl_arrivals, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
+    arrivals_data = await cache_get_or_fetch(
+        key,
+        settings.cache_ttl_arrivals,
+        _fetch,
+        stale_ttl=settings.cache_stale_ttl,
+        jitter=True,
+    )
 
     # Enrich with plate from in-memory fleet store (free, O(1) by kapino).
     result = []
     for a in arrivals_data:
         kapino = a.get("kapino")
         plate = a.get("plate") or (get_plate_by_kapino(kapino) if kapino else None)
-        result.append(Arrival(**{k: v for k, v in a.items() if k not in ("_source", "plate")}, plate=plate))
+        result.append(
+            Arrival(
+                **{k: v for k, v in a.items() if k not in ("_source", "plate")},
+                plate=plate,
+            )
+        )
     return result
 
 
@@ -211,7 +271,7 @@ async def get_routes_at_stop(dcode: str):
     dcode = dcode.strip()
     """All route codes that pass through a stop."""
     key = f"stops:routes:{dcode}"
-    
+
     async def _fetch():
         client = IettClient(get_session())
         try:
@@ -219,8 +279,14 @@ async def get_routes_at_stop(dcode: str):
         except IettApiError as exc:
             raise HTTPException(502, detail=str(exc)) from exc
         return sorted(route_codes)
-        
-    return await cache_get_or_fetch(key, settings.cache_ttl_search, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
+
+    return await cache_get_or_fetch(
+        key,
+        settings.cache_ttl_search,
+        _fetch,
+        stale_ttl=settings.cache_stale_ttl,
+        jitter=True,
+    )
 
 
 @router.get("/{dcode}", response_model=StopDetail)
@@ -228,7 +294,7 @@ async def get_stop_detail(dcode: str):
     dcode = dcode.strip()
     """Stop name and coordinates (from search + route stop lookup). Long-cached."""
     key = f"stops:detail:{dcode}"
-    
+
     async def _fetch():
         client = IettClient(get_session())
         try:
@@ -238,8 +304,14 @@ async def get_stop_detail(dcode: str):
         if detail is None:
             raise HTTPException(404, detail=f"Stop {dcode!r} not found")
         return detail.model_dump()
-        
-    detail_data = await cache_get_or_fetch(key, settings.cache_ttl_stops, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
+
+    detail_data = await cache_get_or_fetch(
+        key,
+        settings.cache_ttl_stops,
+        _fetch,
+        stale_ttl=settings.cache_stale_ttl,
+        jitter=True,
+    )
     return StopDetail(**detail_data)
 
 
@@ -253,13 +325,13 @@ async def get_stop_announcements(dcode: str):
       2) Stop-specific real-time traffic notices from MobiETT ybs stop-status.
     """
     key = f"stops:announcements:{dcode}"
-    
+
     async def _fetch():
         from app.routers.routes import fetch_filtered_announcements
         from app.services.mobiett_client import MobiettClient
-        
+
         session = get_session()
-        
+
         # 1. Fetch all routes passing through this stop
         try:
             route_codes = await get_routes_at_stop(dcode)
@@ -269,27 +341,33 @@ async def get_stop_announcements(dcode: str):
         except Exception as exc:
             logger.warning(f"Unexpected error fetching routes for stop {dcode}: {exc}")
             route_codes = []
-            
+
         # 2. Fetch global route announcements concurrently with stop-specific announcements
         mobiett_client = MobiettClient(session)
         try:
             global_task = fetch_filtered_announcements(set(route_codes))
             stop_status_task = mobiett_client.get_stop_announcements(dcode)
-            
-            global_anns, stop_anns = await asyncio.gather(global_task, stop_status_task, return_exceptions=True)
-            
+
+            global_anns, stop_anns = await asyncio.gather(
+                global_task, stop_status_task, return_exceptions=True
+            )
+
             if isinstance(global_anns, Exception):
-                logger.warning(f"Global announcements failed for stop {dcode}: {global_anns}")
+                logger.warning(
+                    f"Global announcements failed for stop {dcode}: {global_anns}"
+                )
                 global_anns = []
             elif not global_anns:
                 global_anns = []
-                
+
             if isinstance(stop_anns, Exception):
-                logger.warning(f"Stop announcements failed for stop {dcode}: {stop_anns}")
+                logger.warning(
+                    f"Stop announcements failed for stop {dcode}: {stop_anns}"
+                )
                 stop_anns = []
             elif not stop_anns:
                 stop_anns = []
-                
+
         except Exception as e:
             logger.error(f"Error fetching combined announcements for stop {dcode}: {e}")
             global_anns, stop_anns = [], []
@@ -297,7 +375,7 @@ async def get_stop_announcements(dcode: str):
         # 3. Merge and deduplicate
         combined: list[dict] = []
         seen = set()
-        
+
         # Add global announcements
         for ann in global_anns:
             msg = (ann.get("message") or "").strip()
@@ -308,7 +386,7 @@ async def get_stop_announcements(dcode: str):
                 ann_copy["route_code"] = route_code
                 combined.append(ann_copy)
                 seen.add(key)
-                
+
         # Add stop-specific announcements
         for ann in stop_anns:
             if not isinstance(ann, dict):
@@ -317,18 +395,20 @@ async def get_stop_announcements(dcode: str):
             route_code = (ann.get("HAT") or "").strip().upper()
             key = (route_code, msg)
             if msg and key not in seen:
-                combined.append({
-                    "route_code": route_code,
-                    "route_name": "",
-                    "type": "Trafik",
-                    "updated_at": "",
-                    "message": msg
-                })
+                combined.append(
+                    {
+                        "route_code": route_code,
+                        "route_name": "",
+                        "type": "Trafik",
+                        "updated_at": "",
+                        "message": msg,
+                    }
+                )
                 seen.add(key)
-                
+
         return combined
 
-    announcements_data = await cache_get_or_fetch(key, 300, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
+    announcements_data = await cache_get_or_fetch(
+        key, 300, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True
+    )
     return [Announcement(**a) for a in announcements_data]
-
-

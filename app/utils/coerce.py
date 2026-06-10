@@ -1,4 +1,5 @@
 """Shared type-coercion helpers used by ARAC client and router."""
+
 from __future__ import annotations
 
 from typing import Any
