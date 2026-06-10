@@ -1529,3 +1529,107 @@ class TestAracRouterHelpers:
         resp4 = client.get(f"/v1/arac/routes/{'1' * 11}/stops", headers=_HEADERS)
         assert resp4.status_code == 422
 
+
+class TestStopAnnouncements:
+    def test_stop_announcements_success(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def mock_get_routes(*args, **kwargs):
+            return ["135T"]
+        
+        async def mock_fetch_filtered(*args, **kwargs):
+            return [{"route_code": "135T", "route_name": "", "type": "Trafik", "updated_at": "", "message": "Global Delay"}]
+            
+        async def mock_get_stop_anns(*args, **kwargs):
+            return [{"HAT": "135T", "BILGI": "Local Delay"}]
+            
+        monkeypatch.setattr("app.routers.stops.get_routes_at_stop", mock_get_routes)
+        monkeypatch.setattr("app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered)
+        monkeypatch.setattr("app.services.mobiett_client.MobiettClient.get_stop_announcements", mock_get_stop_anns)
+        monkeypatch.setattr("app.routers.stops.get_session", lambda: None)
+        
+        from app.services.cache import cache_delete
+        import asyncio
+        asyncio.run(cache_delete("stops:announcements:260211"))
+        
+        r = client.get("/v1/stops/260211/announcements")
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) == 2
+        messages = [d["message"] for d in data]
+        assert "Global Delay" in messages
+        assert "Local Delay" in messages
+
+    def test_stop_announcements_deduplication(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def mock_get_routes(*args, **kwargs):
+            return ["135T"]
+        
+        async def mock_fetch_filtered(*args, **kwargs):
+            return [{"route_code": "135T", "route_name": "", "type": "Trafik", "updated_at": "", "message": "Duplicate Delay"}]
+            
+        async def mock_get_stop_anns(*args, **kwargs):
+            return [{"HAT": "135T", "BILGI": "Duplicate Delay"}]
+            
+        monkeypatch.setattr("app.routers.stops.get_routes_at_stop", mock_get_routes)
+        monkeypatch.setattr("app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered)
+        monkeypatch.setattr("app.services.mobiett_client.MobiettClient.get_stop_announcements", mock_get_stop_anns)
+        monkeypatch.setattr("app.routers.stops.get_session", lambda: None)
+        
+        from app.services.cache import cache_delete
+        import asyncio
+        asyncio.run(cache_delete("stops:announcements:260211"))
+        
+        r = client.get("/v1/stops/260211/announcements")
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) == 1
+        assert data[0]["message"] == "Duplicate Delay"
+
+    def test_stop_announcements_ybs_fallback(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def mock_get_routes(*args, **kwargs):
+            return ["135T"]
+        
+        async def mock_fetch_filtered(*args, **kwargs):
+            return [{"route_code": "135T", "route_name": "", "type": "Trafik", "updated_at": "", "message": "Global Only"}]
+            
+        async def mock_get_stop_anns(*args, **kwargs):
+            raise Exception("ybs is down")
+            
+        monkeypatch.setattr("app.routers.stops.get_routes_at_stop", mock_get_routes)
+        monkeypatch.setattr("app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered)
+        monkeypatch.setattr("app.services.mobiett_client.MobiettClient.get_stop_announcements", mock_get_stop_anns)
+        monkeypatch.setattr("app.routers.stops.get_session", lambda: None)
+        
+        from app.services.cache import cache_delete
+        import asyncio
+        asyncio.run(cache_delete("stops:announcements:260211"))
+        
+        r = client.get("/v1/stops/260211/announcements")
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) == 1
+        assert data[0]["message"] == "Global Only"
+
+    def test_stop_announcements_routes_fallback(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def mock_get_routes(*args, **kwargs):
+            raise Exception("soap is down")
+        
+        async def mock_fetch_filtered(*args, **kwargs):
+            return []
+            
+        async def mock_get_stop_anns(*args, **kwargs):
+            return [{"HAT": "135T", "BILGI": "Local Only"}]
+            
+        monkeypatch.setattr("app.routers.stops.get_routes_at_stop", mock_get_routes)
+        monkeypatch.setattr("app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered)
+        monkeypatch.setattr("app.services.mobiett_client.MobiettClient.get_stop_announcements", mock_get_stop_anns)
+        monkeypatch.setattr("app.routers.stops.get_session", lambda: None)
+        
+        from app.services.cache import cache_delete
+        import asyncio
+        asyncio.run(cache_delete("stops:announcements:260211"))
+        
+        r = client.get("/v1/stops/260211/announcements")
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) == 1
+        assert data[0]["message"] == "Local Only"
+
