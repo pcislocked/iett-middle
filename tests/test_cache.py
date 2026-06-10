@@ -357,7 +357,7 @@ class TestCacheGetOrFetch:
             return "new"
 
         # First call triggers background task
-        result = await cache_mod.cache_get_or_fetch(
+        await cache_mod.cache_get_or_fetch(
             "ns:swr_cncl", 60, cncl_fetcher, stale_ttl=60
         )
 
