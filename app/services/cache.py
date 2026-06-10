@@ -81,6 +81,7 @@ async def cache_set(key: str, value: Any, ttl: int, stale_ttl: int = 0, jitter: 
                     _store.pop(k, None)
                     
         now = time.monotonic()
+        _store.pop(key, None)
         _store[key] = (value, now + actual_ttl, now + actual_ttl + actual_stale)
 
 

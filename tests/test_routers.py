@@ -1546,9 +1546,8 @@ class TestStopAnnouncements:
         monkeypatch.setattr("app.services.mobiett_client.MobiettClient.get_stop_announcements", mock_get_stop_anns)
         monkeypatch.setattr("app.routers.stops.get_session", lambda: None)
         
-        from app.services.cache import cache_delete
-        import asyncio
-        asyncio.run(cache_delete("stops:announcements:260211"))
+        from app.services.cache import _store
+        _store.clear()
         
         r = client.get("/v1/stops/260211/announcements")
         assert r.status_code == 200
@@ -1573,9 +1572,8 @@ class TestStopAnnouncements:
         monkeypatch.setattr("app.services.mobiett_client.MobiettClient.get_stop_announcements", mock_get_stop_anns)
         monkeypatch.setattr("app.routers.stops.get_session", lambda: None)
         
-        from app.services.cache import cache_delete
-        import asyncio
-        asyncio.run(cache_delete("stops:announcements:260211"))
+        from app.services.cache import _store
+        _store.clear()
         
         r = client.get("/v1/stops/260211/announcements")
         assert r.status_code == 200
@@ -1598,9 +1596,8 @@ class TestStopAnnouncements:
         monkeypatch.setattr("app.services.mobiett_client.MobiettClient.get_stop_announcements", mock_get_stop_anns)
         monkeypatch.setattr("app.routers.stops.get_session", lambda: None)
         
-        from app.services.cache import cache_delete
-        import asyncio
-        asyncio.run(cache_delete("stops:announcements:260211"))
+        from app.services.cache import _store
+        _store.clear()
         
         r = client.get("/v1/stops/260211/announcements")
         assert r.status_code == 200
@@ -1623,9 +1620,8 @@ class TestStopAnnouncements:
         monkeypatch.setattr("app.services.mobiett_client.MobiettClient.get_stop_announcements", mock_get_stop_anns)
         monkeypatch.setattr("app.routers.stops.get_session", lambda: None)
         
-        from app.services.cache import cache_delete
-        import asyncio
-        asyncio.run(cache_delete("stops:announcements:260211"))
+        from app.services.cache import _store
+        _store.clear()
         
         r = client.get("/v1/stops/260211/announcements")
         assert r.status_code == 200
@@ -1649,9 +1645,8 @@ class TestStopAnnouncements:
         monkeypatch.setattr("app.services.mobiett_client.MobiettClient.get_stop_announcements", mock_get_stop_anns)
         monkeypatch.setattr("app.routers.stops.get_session", lambda: None)
         
-        from app.services.cache import cache_delete
-        import asyncio
-        asyncio.run(cache_delete("stops:announcements:260211"))
+        from app.services.cache import _store
+        _store.clear()
         
         r = client.get("/v1/stops/260211/announcements")
         assert r.status_code == 200
@@ -1676,9 +1671,8 @@ class TestStopAnnouncements:
         monkeypatch.setattr("app.services.mobiett_client.MobiettClient.get_stop_announcements", mock_get_stop_anns)
         monkeypatch.setattr("app.routers.stops.get_session", lambda: None)
         
-        from app.services.cache import cache_delete
-        import asyncio
-        asyncio.run(cache_delete("stops:announcements:260211"))
+        from app.services.cache import _store
+        _store.clear()
         
         r = client.get("/v1/stops/260211/announcements")
         assert r.status_code == 200
@@ -1699,33 +1693,12 @@ class TestStopAnnouncements:
         monkeypatch.setattr("app.services.mobiett_client.MobiettClient.get_stop_announcements", mock_get_stop_anns)
         monkeypatch.setattr("app.routers.stops.get_session", lambda: None)
         
-        from app.services.cache import cache_delete
-        import asyncio
-        asyncio.run(cache_delete("stops:announcements:260211"))
+        from app.services.cache import _store
+        _store.clear()
         
         r = client.get("/v1/stops/260211/announcements")
         assert r.status_code == 200
         assert r.json() == []
-    def test_stop_announcements_get_routes_fails(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-        async def mock_get_routes(*args, **kwargs):
-            from fastapi import HTTPException
-            raise HTTPException(status_code=404, detail="Stop not found")
-        
-        async def mock_fetch_filtered(*args, **kwargs):
-            return [{"route_code": "135T", "message": "Global Only"}]
-            
-        async def mock_get_stop_anns(*args, **kwargs):
-            return [{"HAT": "135T", "BILGI": "Local Only"}]
-            
-        monkeypatch.setattr("app.routers.stops.get_routes_at_stop", mock_get_routes)
-        monkeypatch.setattr("app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered)
-        monkeypatch.setattr("app.services.mobiett_client.MobiettClient.get_stop_announcements", mock_get_stop_anns)
-        monkeypatch.setattr("app.routers.stops.get_session", lambda: None)
-        
-        from app.services.cache import cache_delete
-        import asyncio
-        asyncio.run(cache_delete("stops:announcements:260211"))
-        
     def test_stop_announcements_get_routes_fails(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
         async def mock_get_routes(*args, **kwargs):
             from fastapi import HTTPException
@@ -1748,9 +1721,8 @@ class TestStopAnnouncements:
         monkeypatch.setattr("app.services.mobiett_client.MobiettClient.get_stop_announcements", mock_get_stop_anns)
         monkeypatch.setattr("app.routers.stops.get_session", lambda: None)
         
-        from app.services.cache import cache_delete
-        import asyncio
-        asyncio.run(cache_delete("stops:announcements:260211"))
+        from app.services.cache import _store
+        _store.clear()
         
         r = client.get("/v1/stops/260211/announcements")
         assert r.status_code == 200
