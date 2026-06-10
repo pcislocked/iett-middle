@@ -6,6 +6,7 @@ import time
 
 import aiohttp
 from app.config import settings
+from app.utils.lock import LazyLock
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ class MobiettApiError(Exception):
 class MobiettClient:
     _access_token: str | None = None
     _token_expires_at: float = 0.0
-    _auth_lock = asyncio.Lock()
+    _auth_lock = LazyLock()
     _hat_id_cache: dict[str, int | None] = {}
 
     def __init__(self, session: aiohttp.ClientSession) -> None:
@@ -90,6 +91,10 @@ class MobiettClient:
         hat_kodu_upper = hat_kodu.upper().strip()
         if hat_kodu_upper in MobiettClient._hat_id_cache:
             return MobiettClient._hat_id_cache[hat_kodu_upper]
+
+        # Bound cache size to prevent memory leak
+        if len(MobiettClient._hat_id_cache) >= 2000:
+            MobiettClient._hat_id_cache.pop(next(iter(MobiettClient._hat_id_cache)))
 
         # Use mainGetRoute to find the HAT_ID
         res = await self._post_service(

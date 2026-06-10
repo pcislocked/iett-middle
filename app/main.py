@@ -1,4 +1,4 @@
-﻿"""iett-middle â€” main FastAPI application entry point."""
+"""iett-middle — main FastAPI application entry point."""
 from __future__ import annotations
 
 import logging
@@ -18,7 +18,7 @@ _outgoing = logging.getLogger("iett.outgoing")
 _outgoing.setLevel(logging.INFO)
 
 # ---------------------------------------------------------------------------
-# aiohttp trace hooks â€” prints every outgoing IETT request in the terminal
+# aiohttp trace hooks — prints every outgoing IETT request in the terminal
 # ---------------------------------------------------------------------------
 
 async def _on_request_start(
@@ -29,7 +29,7 @@ async def _on_request_start(
     ctx.start_ts = time.monotonic()  # type: ignore[attr-defined]
     action = params.headers.get("SOAPAction", "")
     suffix = f"  {action}" if action else ""
-    _outgoing.info("\033[36mâ†’\033[0m %s %s%s", params.method, params.url, suffix)
+    _outgoing.info("\033[36m→\033[0m %s %s%s", params.method, params.url, suffix)
 
 
 async def _on_request_end(
@@ -43,7 +43,7 @@ async def _on_request_end(
     size_str = f" {size_kb / 1024:.1f}kb" if size_kb else ""
     color = "\033[32m" if status < 400 else "\033[31m"
     _outgoing.info(
-        "%sâ†\033[0m %s %s%s  \033[2m%.0fms\033[0m",
+        "%s←\033[0m %s %s%s  \033[2m%.0fms\033[0m",
         color, status, params.url, size_str, elapsed_ms,
     )
 
@@ -55,7 +55,7 @@ async def _on_request_exception(
 ) -> None:
     elapsed_ms = (time.monotonic() - getattr(ctx, "start_ts", time.monotonic())) * 1000
     _outgoing.warning(
-        "\033[31mâœ—\033[0m %s %s  \033[2m%.0fms\033[0m  %s",
+        "\033[31m✗\033[0m %s %s  \033[2m%.0fms\033[0m  %s",
         params.method, params.url, elapsed_ms, params.exception,
     )
 

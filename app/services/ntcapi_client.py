@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 import aiohttp
 
 from app.config import settings
+from app.utils.lock import LazyLock
 
 if TYPE_CHECKING:
     from app.models.bus import BusPosition
@@ -30,7 +31,7 @@ _SERVICE_URL = f"{_NTC_BASE}/service"
 # ── in-process token cache ─────────────────────────────────────────────────
 _token: str | None = None
 _token_expiry: float = 0.0          # unix timestamp
-_token_lock = asyncio.Lock()
+_token_lock = LazyLock()
 
 
 async def _ensure_token(session: aiohttp.ClientSession) -> str:

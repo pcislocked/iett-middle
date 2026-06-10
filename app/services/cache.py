@@ -5,8 +5,10 @@ import asyncio
 import time
 from typing import Any, Callable, Awaitable
 
+from app.utils.lock import LazyLock
+
 _store: dict[str, tuple[Any, float, float]] = {}
-_lock = asyncio.Lock()
+_lock = LazyLock()
 _inflight: dict[str, asyncio.Future] = {}
 
 # Track hit/miss stats per namespace (first segment of key before ":")
@@ -71,9 +73,10 @@ async def cache_set(key: str, value: Any, ttl: int, stale_ttl: int = 0, jitter: 
             for k in expired:
                 _store.pop(k, None)
             
-            # If still too large, forcefully remove some elements
+            # If still too large, forcefully remove some elements in O(N) instead of O(N log N)
             if len(_store) >= MAX_CACHE_SIZE:
-                to_remove = sorted(_store.keys(), key=lambda k: _store[k][2])[: MAX_CACHE_SIZE // 10]
+                import itertools
+                to_remove = list(itertools.islice(_store.keys(), MAX_CACHE_SIZE // 10))
                 for k in to_remove:
                     _store.pop(k, None)
                     

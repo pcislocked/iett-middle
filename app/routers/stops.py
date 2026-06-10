@@ -110,8 +110,8 @@ async def get_arrivals_raw(dcode: str):
         )
     except IettApiError as exc:
         raise HTTPException(502, detail=str(exc)) from exc
-    from fastapi.responses import HTMLResponse  # noqa: PLC0415
-    return HTMLResponse(content=html)
+    from fastapi.responses import PlainTextResponse  # noqa: PLC0415
+    return PlainTextResponse(content=html)
 
 
 @router.get("/{dcode}/arrivals", response_model=list[Arrival])

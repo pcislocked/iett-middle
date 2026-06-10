@@ -1,4 +1,4 @@
-"""Router integration tests using FastAPI TestClient + dependency overrides.
+﻿"""Router integration tests using FastAPI TestClient + dependency overrides.
 
 All external I/O is patched (IettClient methods, deps store functions).
 """
@@ -15,7 +15,7 @@ from app.main import app
 
 
 # ---------------------------------------------------------------------------
-# Helpers — build minimal model dicts that routers will serialise
+# Helpers â€” build minimal model dicts that routers will serialise
 # ---------------------------------------------------------------------------
 
 from app.models.bus import Arrival, BusPosition
@@ -58,7 +58,7 @@ def _arrival(route_code: str = "500T", eta: int = 3) -> Arrival:
 
 
 def _stop_search() -> StopSearchResult:
-    return StopSearchResult(dcode="220602", name="AHMET MİTHAT EFENDİ", path=None)
+    return StopSearchResult(dcode="220602", name="AHMET MÄ°THAT EFENDÄ°", path=None)
 
 
 def _nearby_stop() -> dict[str, Any]:
@@ -67,15 +67,15 @@ def _nearby_stop() -> dict[str, Any]:
         "stop_name": "4.LEVENT METRO",
         "latitude": 41.0842,
         "longitude": 29.0073,
-        "district": "Şişli",
+        "district": "ÅžiÅŸli",
         "distance_m": 120.0,
     }
 
 
 def _route_meta() -> RouteMetadata:
     return RouteMetadata(
-        direction_name="KADIKÖY - TAKSİM",
-        full_name="500T - KADIKÖY - TAKSİM - Gidiş",
+        direction_name="KADIKÃ–Y - TAKSÄ°M",
+        full_name="500T - KADIKÃ–Y - TAKSÄ°M - GidiÅŸ",
         variant_code="500T_D_D0",
         direction=0,
         depar_no=1,
@@ -85,7 +85,7 @@ def _route_meta() -> RouteMetadata:
 def _stop_detail() -> StopDetail:
     return StopDetail(
         dcode="220602",
-        name="AHMET MİTHAT EFENDİ",
+        name="AHMET MÄ°THAT EFENDÄ°",
         latitude=41.1234,
         longitude=29.0871,
     )
@@ -300,7 +300,7 @@ class TestFleetDetailRouter:
         assert resp.json()["route_stops"] == cached_stops
 
     def test_200_no_route_code_returns_empty_stops(self, client: TestClient) -> None:
-        """Bus with no live or last-known route_code → route_stops is empty, route_is_live False."""
+        """Bus with no live or last-known route_code â†’ route_stops is empty, route_is_live False."""
         bus = _bus("A-001", None)  # type: ignore[arg-type]
         with (
             patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
@@ -341,7 +341,7 @@ class TestStopsSearch:
 
 class TestStopsNearby:
     def test_503_when_index_not_ready(self, client: TestClient) -> None:
-        # ntcapi fails → fallback to index → index not ready → 503
+        # ntcapi fails â†’ fallback to index â†’ index not ready â†’ 503
         with (
             patch("app.routers.stops.ntcapi_client.get_nearby_stops", _NTCAPI_DOWN),
             patch("app.routers.stops.get_session", return_value=MagicMock()),
@@ -352,7 +352,7 @@ class TestStopsNearby:
 
     def test_200_when_index_ready(self, client: TestClient) -> None:
         now = datetime.now(timezone.utc)
-        # ntcapi fails → fallback to in-memory index → returns results
+        # ntcapi fails â†’ fallback to in-memory index â†’ returns results
         with (
             patch("app.routers.stops.ntcapi_client.get_nearby_stops", _NTCAPI_DOWN),
             patch("app.routers.stops.get_session", return_value=MagicMock()),
@@ -374,7 +374,7 @@ class TestStopsNearby:
             "stop_name": "4.LEVENT METRO",
             "lat": 41.0842,
             "lon": 29.0073,
-            "district": "Şişli",
+            "district": "ÅžiÅŸli",
             "direction": None,
             "distance_m": None,  # ntcapi didn't provide distance
         }
@@ -404,7 +404,7 @@ class TestHaversine:
         assert d == pytest.approx(0.0, abs=0.01)
 
     def test_known_distance_roughly_correct(self) -> None:
-        """0.004° north at Istanbul latitude ≈ 445 m."""
+        """0.004Â° north at Istanbul latitude â‰ˆ 445 m."""
         from app.routers.stops import _haversine_m
         d = _haversine_m(41.0, 29.0, 41.004, 29.0)
         assert 400 < d < 500, f"Expected ~445 m, got {d:.1f} m"
@@ -412,7 +412,7 @@ class TestHaversine:
 
 class TestStopArrivals:
     def test_200_with_arrivals(self, client: TestClient) -> None:
-        # ntcapi down → fallback to IETT HTML
+        # ntcapi down â†’ fallback to IETT HTML
         mock_client = MagicMock()
         mock_client.get_stop_arrivals = AsyncMock(return_value=[_arrival()])
         with (
@@ -427,7 +427,7 @@ class TestStopArrivals:
         assert resp.status_code == 200
 
     def test_empty_list_on_empty_arrivals(self, client: TestClient) -> None:
-        # ntcapi down → fallback to IETT HTML → empty
+        # ntcapi down â†’ fallback to IETT HTML â†’ empty
         mock_client = MagicMock()
         mock_client.get_stop_arrivals = AsyncMock(return_value=[])
         with (
@@ -491,7 +491,7 @@ class TestRoutesSearch:
 
 class TestRoutesMeta:
     def test_200_with_metadata(self, client: TestClient) -> None:
-        # ntcapi down → fallback to IETT SOAP
+        # ntcapi down â†’ fallback to IETT SOAP
         mock_client = MagicMock()
         mock_client.get_route_metadata = AsyncMock(return_value=[_route_meta()])
         with (
@@ -525,9 +525,9 @@ class TestRoutesSchedule:
         dep = ScheduledDeparture(
             route_code="500T", route_name="TUZLA - LEVENT",
             route_variant="500T_D_D0", direction="D",
-            day_type="H", service_type="ÖHO", departure_time="05:55",
+            day_type="H", service_type="Ã–HO", departure_time="05:55",
         )
-        # ntcapi down → fallback to IETT SOAP
+        # ntcapi down â†’ fallback to IETT SOAP
         mock_client = MagicMock()
         mock_client.get_route_schedule = AsyncMock(return_value=[dep])
         with (
@@ -545,7 +545,7 @@ class TestRoutesAnnouncements:
     def test_200_with_announcements(self, client: TestClient) -> None:
         ann = Announcement(
             route_code="500T", route_name="TUZLA - LEVENT",
-            type="Günlük", updated_at="09:00", message="Test",
+            type="GÃ¼nlÃ¼k", updated_at="09:00", message="Test",
         )
         mock_client = MagicMock()
         mock_client.get_announcements = AsyncMock(return_value=[ann])
@@ -747,7 +747,7 @@ class TestRoutesBusesFallbacks:
         assert resp.json()[0]["kapino"] == "A-001"
 
     def test_200_fleet_fallback_when_all_external_fail(self, client: TestClient) -> None:
-        """Both ntcapi and SOAP fail → falls back to in-memory fleet."""
+        """Both ntcapi and SOAP fail â†’ falls back to in-memory fleet."""
         from app.services.iett_client import IettApiError
         mock_client = MagicMock()
         mock_client.get_route_buses = AsyncMock(side_effect=IettApiError("soap down"))
@@ -817,7 +817,7 @@ class TestStopsExtra:
     def test_nearby_returns_from_ntcapi_when_available(self, client: TestClient) -> None:
         processed = [
             {"stop_code": "301341", "stop_name": "LEVENT", "lat": 41.0842,
-             "lon": 29.0073, "district": "Şişli", "direction": None, "distance_m": 120.0}
+             "lon": 29.0073, "district": "ÅžiÅŸli", "direction": None, "distance_m": 120.0}
         ]
         with (
             patch("app.routers.stops.ntcapi_client.get_nearby_stops", AsyncMock(return_value=[{"raw": "stop"}])),
@@ -960,12 +960,12 @@ class TestFleetDetailFallbacks:
             resp = client.get("/v1/fleet/A-001/detail")
         assert resp.status_code == 200
         body = resp.json()
-        # Fell back to IETT SOAP → should still return route_stops
+        # Fell back to IETT SOAP â†’ should still return route_stops
         assert len(body["route_stops"]) == 1
         assert body["route_stops"][0]["stop_code"] == "301341"
 
     def test_detail_returns_empty_stops_when_all_sources_fail(self, client: TestClient) -> None:
-        """Both ntcapi and IETT SOAP fail → 200 with empty route_stops list."""
+        """Both ntcapi and IETT SOAP fail â†’ 200 with empty route_stops list."""
         from app.services.ntcapi_client import NtcApiError as NE
         from app.services.iett_client import IettApiError
         bus = _bus("A-001", "500T")
@@ -995,7 +995,7 @@ class TestStopsViaFilter:
     instantiation is the via-stop route-code lookup (client2).
     """
 
-    # Two normalised arrival dicts — one per route — returned by ntcapi mock
+    # Two normalised arrival dicts â€” one per route â€” returned by ntcapi mock
     _ARRIVALS_RAW = [{"raw": "a"}, {"raw": "b"}]
     _CANONICAL_500T = {"route_code": "500T", "destination": "LEVENT", "eta_minutes": 3,
                        "eta_raw": "3 dk", "plate": None, "kapino": None,
@@ -1005,7 +1005,7 @@ class TestStopsViaFilter:
                        "lat": None, "lon": None, "speed_kmh": None, "last_seen_ts": None, "amenities": None}
 
     def test_via_filter_narrows_arrivals_to_routes_at_via_stop(self, client: TestClient) -> None:
-        """?via= supplied and via-stop lookup succeeds → only matching routes returned."""
+        """?via= supplied and via-stop lookup succeeds â†’ only matching routes returned."""
         mock_via = MagicMock()
         mock_via.get_routes_at_stop = AsyncMock(return_value=["500T"])
         with (
@@ -1028,7 +1028,7 @@ class TestStopsViaFilter:
     def test_via_filter_failure_returns_unfiltered_and_logs_warning(
         self, client: TestClient, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """IettApiError on via-stop lookup → arrivals returned unfiltered; warning logged."""
+        """IettApiError on via-stop lookup â†’ arrivals returned unfiltered; warning logged."""
         import logging
         from app.services.iett_client import IettApiError
         mock_via = MagicMock()
@@ -1706,3 +1706,55 @@ class TestStopAnnouncements:
         r = client.get("/v1/stops/260211/announcements")
         assert r.status_code == 200
         assert r.json() == []
+    def test_stop_announcements_get_routes_fails(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def mock_get_routes(*args, **kwargs):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Stop not found")
+        
+        async def mock_fetch_filtered(*args, **kwargs):
+            return [{"route_code": "135T", "message": "Global Only"}]
+            
+        async def mock_get_stop_anns(*args, **kwargs):
+            return [{"HAT": "135T", "BILGI": "Local Only"}]
+            
+        monkeypatch.setattr("app.routers.stops.get_routes_at_stop", mock_get_routes)
+        monkeypatch.setattr("app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered)
+        monkeypatch.setattr("app.services.mobiett_client.MobiettClient.get_stop_announcements", mock_get_stop_anns)
+        monkeypatch.setattr("app.routers.stops.get_session", lambda: None)
+        
+        from app.services.cache import cache_delete
+        import asyncio
+        asyncio.run(cache_delete("stops:announcements:260211"))
+        
+    def test_stop_announcements_get_routes_fails(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def mock_get_routes(*args, **kwargs):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Stop not found")
+        
+        async def mock_fetch_filtered(*args, **kwargs):
+            return [{
+                "route_code": "135T", 
+                "message": "Global Only",
+                "route_name": "",
+                "type": "Trafik",
+                "updated_at": "2026-06-10T12:00:00Z"
+            }]
+            
+        async def mock_get_stop_anns(*args, **kwargs):
+            return [{"HAT": "135T", "BILGI": "Local Only"}]
+            
+        monkeypatch.setattr("app.routers.stops.get_routes_at_stop", mock_get_routes)
+        monkeypatch.setattr("app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered)
+        monkeypatch.setattr("app.services.mobiett_client.MobiettClient.get_stop_announcements", mock_get_stop_anns)
+        monkeypatch.setattr("app.routers.stops.get_session", lambda: None)
+        
+        from app.services.cache import cache_delete
+        import asyncio
+        asyncio.run(cache_delete("stops:announcements:260211"))
+        
+        r = client.get("/v1/stops/260211/announcements")
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) == 2
+        assert "Global Only" in [d["message"] for d in data]
+        assert "Local Only" in [d["message"] for d in data]
