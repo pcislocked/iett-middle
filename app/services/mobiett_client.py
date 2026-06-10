@@ -1,4 +1,4 @@
-﻿"""New JSON Mobiett Client for iett-middle."""
+"""New JSON Mobiett Client for iett-middle."""
 import asyncio
 import logging
 from typing import Any
@@ -18,24 +18,23 @@ class MobiettApiError(Exception):
 
 
 class MobiettClient:
+    _access_token: str | None = None
+    _token_expires_at: float = 0.0
+    _auth_lock = asyncio.Lock()
+    _hat_id_cache: dict[str, int | None] = {}
+
     def __init__(self, session: aiohttp.ClientSession) -> None:
         self._session = session
-        self._access_token: str | None = None
-        self._token_expires_at: float = 0.0
-        self._auth_lock = asyncio.Lock()
-        
-        # Cache for hat_kodu -> hat_id
-        self._hat_id_cache: dict[str, int | None] = {}
 
     async def _ensure_token(self) -> str:
         """Fetch and cache OAuth2 token if missing or expired."""
-        if self._access_token and time.monotonic() < self._token_expires_at:
-            return self._access_token
+        if MobiettClient._access_token and time.monotonic() < MobiettClient._token_expires_at:
+            return MobiettClient._access_token
 
-        async with self._auth_lock:
+        async with MobiettClient._auth_lock:
             # Check again inside lock
-            if self._access_token and time.monotonic() < self._token_expires_at:
-                return self._access_token
+            if MobiettClient._access_token and time.monotonic() < MobiettClient._token_expires_at:
+                return MobiettClient._access_token
 
             payload = {
                 "client_id": settings.ntcapi_client_id,
@@ -51,11 +50,11 @@ class MobiettClient:
                 ) as resp:
                     resp.raise_for_status()
                     data = await resp.json()
-                    self._access_token = data["access_token"]
+                    MobiettClient._access_token = data["access_token"]
                     # Token expires in 3600 seconds, refresh a bit early (3500)
                     expires_in = data.get("expires_in", 3600)
-                    self._token_expires_at = time.monotonic() + (expires_in - 100)
-                    return self._access_token
+                    MobiettClient._token_expires_at = time.monotonic() + (expires_in - 100)
+                    return MobiettClient._access_token
             except Exception as e:
                 raise MobiettApiError(f"OAuth2 failed: {e}") from e
 
@@ -81,7 +80,7 @@ class MobiettClient:
                 return await resp.json()
         except aiohttp.ClientResponseError as e:
             if e.status == 401:
-                self._access_token = None
+                MobiettClient._access_token = None
             raise MobiettApiError(f"Mobiett API ({alias}) failed: {e}") from e
         except Exception as e:
             raise MobiettApiError(f"Mobiett API ({alias}) failed: {e}") from e
@@ -89,8 +88,8 @@ class MobiettClient:
     async def get_hat_id(self, hat_kodu: str) -> int | None:
         """Get the numeric HAT_ID for a route (e.g. 14M -> 497)."""
         hat_kodu_upper = hat_kodu.upper().strip()
-        if hat_kodu_upper in self._hat_id_cache:
-            return self._hat_id_cache[hat_kodu_upper]
+        if hat_kodu_upper in MobiettClient._hat_id_cache:
+            return MobiettClient._hat_id_cache[hat_kodu_upper]
 
         # Use mainGetRoute to find the HAT_ID
         res = await self._post_service(
@@ -105,10 +104,10 @@ class MobiettClient:
         for item in res:
             if "HAT_ID" in item and item["HAT_ID"]:
                 hat_id = int(item["HAT_ID"])
-                self._hat_id_cache[hat_kodu_upper] = hat_id
+                MobiettClient._hat_id_cache[hat_kodu_upper] = hat_id
                 return hat_id
                 
-        self._hat_id_cache[hat_kodu_upper] = None
+        MobiettClient._hat_id_cache[hat_kodu_upper] = None
         return None
 
     async def get_live_fleet(self, hat_kodu: str) -> list[dict[str, Any]]:

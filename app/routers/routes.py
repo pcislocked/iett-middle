@@ -39,6 +39,7 @@ async def search_routes(q: str = Query(..., min_length=1)):
 
 @router.get("/{hat_kodu}", response_model=list[RouteMetadata])
 async def get_route_metadata(hat_kodu: str):
+    hat_kodu = hat_kodu.upper().strip()
     """Route variant/direction metadata.
 
     ntcapi ``mainGetLine`` is the primary source; IETT SOAP ``GetAllRoute``
@@ -69,6 +70,7 @@ async def get_route_metadata(hat_kodu: str):
 
 @router.get("/{hat_kodu}/buses", response_model=list[BusPosition])
 async def get_route_buses(hat_kodu: str):
+    hat_kodu = hat_kodu.upper().strip()
     """GPS positions of buses on a route.
 
     Primary: ntcapi ybs point-passing/{hat_id} — includes stop_sequence per bus.
@@ -124,6 +126,7 @@ async def get_route_buses(hat_kodu: str):
 
 @router.get("/{hat_kodu}/stops", response_model=list[RouteStop])
 async def get_route_stops(hat_kodu: str):
+    hat_kodu = hat_kodu.upper().strip()
     """Ordered stop list for a route with coordinates.
 
     ntcapi ``mainGetRoute`` is the primary source (fetches both directions);
@@ -183,6 +186,7 @@ async def get_route_stops(hat_kodu: str):
 
 @router.get("/{hat_kodu}/schedule", response_model=list[ScheduledDeparture])
 async def get_route_schedule(hat_kodu: str):
+    hat_kodu = hat_kodu.upper().strip()
     """Planned departure times for a route (all day types).
 
     ntcapi ``akyolbilGetTimeTable`` is the primary source;
@@ -230,6 +234,7 @@ async def get_route_schedule(hat_kodu: str):
 
 
 async def fetch_filtered_announcements(route_list: set[str]) -> list[dict]:
+    route_list = {r.upper().strip() for r in route_list if r.strip()}
     if not route_list:
         return []
         
@@ -263,8 +268,9 @@ async def get_batch_announcements(routes: str = Query(..., description="Comma-se
 
 @router.get("/{hat_kodu}/announcements", response_model=list[Announcement])
 async def get_route_announcements(hat_kodu: str):
+    hat_kodu = hat_kodu.upper().strip()
     """Active disruption announcements for a route."""
-    route_list = {hat_kodu.upper().strip()}
+    route_list = {hat_kodu}
     return await fetch_filtered_announcements(route_list)
         
 

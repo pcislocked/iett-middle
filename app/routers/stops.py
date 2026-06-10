@@ -100,6 +100,7 @@ async def nearby_stops(
 
 @router.get("/{dcode}/arrivals/raw")
 async def get_arrivals_raw(dcode: str):
+    dcode = dcode.strip()
     """Return the raw HTML from IETT GetStationInfo â€” debug only."""
     client = IettClient(get_session())
     try:
@@ -115,6 +116,7 @@ async def get_arrivals_raw(dcode: str):
 
 @router.get("/{dcode}/arrivals", response_model=list[Arrival])
 async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
+    dcode = dcode.strip()
     """Live ETAs at a stop, sourced from ntcapi ybs (has kapino + live location).
 
     Falls back to the legacy IETT HTML endpoint if ntcapi is unavailable.
@@ -183,7 +185,8 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
         if via and arrivals_data:
             try:
                 routes_via = await get_routes_at_stop(via)
-                arrivals_data = [a for a in arrivals_data if a.get("route_code") in routes_via]
+                routes_via_upper = {r.upper() for r in routes_via}
+                arrivals_data = [a for a in arrivals_data if a.get("route_code", "").upper() in routes_via_upper]
             except Exception as exc:
                 logger.warning(
                     "via-filter lookup failed for stop %s via %s â€” returning unfiltered arrivals: %s",
@@ -205,6 +208,7 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
 
 @router.get("/{dcode}/routes", response_model=list[str])
 async def get_routes_at_stop(dcode: str):
+    dcode = dcode.strip()
     """All route codes that pass through a stop."""
     key = f"stops:routes:{dcode}"
     
@@ -221,6 +225,7 @@ async def get_routes_at_stop(dcode: str):
 
 @router.get("/{dcode}", response_model=StopDetail)
 async def get_stop_detail(dcode: str):
+    dcode = dcode.strip()
     """Stop name and coordinates (from search + route stop lookup). Long-cached."""
     key = f"stops:detail:{dcode}"
     
@@ -240,6 +245,7 @@ async def get_stop_detail(dcode: str):
 
 @router.get("/{dcode}/announcements", response_model=list[Announcement])
 async def get_stop_announcements(dcode: str):
+    dcode = dcode.strip()
     """Live traffic and route announcements for a specific stop.
     
     Merges:
@@ -295,10 +301,12 @@ async def get_stop_announcements(dcode: str):
         # Add global announcements
         for ann in global_anns:
             msg = (ann.get("message") or "").strip()
-            route_code = (ann.get("route_code") or "").strip()
+            route_code = (ann.get("route_code") or "").strip().upper()
             key = (route_code, msg)
             if msg and key not in seen:
-                combined.append(ann)
+                ann_copy = dict(ann)
+                ann_copy["route_code"] = route_code
+                combined.append(ann_copy)
                 seen.add(key)
                 
         # Add stop-specific announcements
@@ -306,7 +314,7 @@ async def get_stop_announcements(dcode: str):
             if not isinstance(ann, dict):
                 continue
             msg = (ann.get("BILGI") or "").strip()
-            route_code = (ann.get("HAT") or "").strip()
+            route_code = (ann.get("HAT") or "").strip().upper()
             key = (route_code, msg)
             if msg and key not in seen:
                 combined.append({

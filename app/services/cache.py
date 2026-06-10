@@ -73,7 +73,7 @@ async def cache_set(key: str, value: Any, ttl: int, stale_ttl: int = 0, jitter: 
             
             # If still too large, forcefully remove some elements
             if len(_store) >= MAX_CACHE_SIZE:
-                to_remove = list(_store.keys())[: MAX_CACHE_SIZE // 10]
+                to_remove = sorted(_store.keys(), key=lambda k: _store[k][2])[: MAX_CACHE_SIZE // 10]
                 for k in to_remove:
                     _store.pop(k, None)
                     
@@ -154,7 +154,9 @@ async def cache_get_or_fetch(
             return await asyncio.shield(fut)
         except asyncio.CancelledError:
             # If the leader cancelled it (e.g. client disconnect), try again!
-            return await cache_get_or_fetch(key, ttl, fetcher, stale_ttl, jitter)
+            if fut.cancelled():
+                return await cache_get_or_fetch(key, ttl, fetcher, stale_ttl, jitter)
+            raise
         
     try:
         val = await fetcher()
