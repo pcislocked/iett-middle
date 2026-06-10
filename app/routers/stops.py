@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Query
 from app.config import settings
 from app.deps import get_plate_by_kapino, get_session
 from app.models.bus import Arrival
+from app.models.route import Announcement
 from app.models.stop import NearbyStop, StopDetail, StopSearchResult
 from app.services.cache import cache_get, cache_set, cache_get_or_fetch
 from app.services.iett_client import IettApiError, IettClient
@@ -235,3 +236,72 @@ async def get_stop_detail(dcode: str):
         
     detail_data = await cache_get_or_fetch(key, settings.cache_ttl_stops, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
     return StopDetail(**detail_data)
+
+
+@router.get("/{dcode}/announcements", response_model=list[Announcement])
+async def get_stop_announcements(dcode: str):
+    """Live traffic and route announcements for a specific stop.
+    
+    Merges:
+      1) Global route disruptions (from SOAP Duyurular.asmx) for all routes passing through this stop.
+      2) Stop-specific real-time traffic notices from MobiETT ybs stop-status.
+    """
+    from app.routers.routes import fetch_filtered_announcements
+    from app.services.mobiett_client import MobiettClient
+    
+    session = get_session()
+    
+    # 1. Fetch all routes passing through this stop
+    try:
+        route_codes = await get_routes_at_stop(dcode)
+    except Exception as exc:
+        logger.warning(f"Failed to fetch routes for stop {dcode}: {exc}")
+        route_codes = []
+        
+    # 2. Fetch global route announcements concurrently with stop-specific announcements
+    mobiett_client = MobiettClient(session)
+    try:
+        global_task = fetch_filtered_announcements(set(route_codes))
+        stop_status_task = mobiett_client.get_stop_announcements(dcode)
+        
+        global_anns, stop_anns = await asyncio.gather(global_task, stop_status_task, return_exceptions=True)
+        
+        if isinstance(global_anns, Exception):
+            logger.warning(f"Global announcements failed for stop {dcode}: {global_anns}")
+            global_anns = []
+        if isinstance(stop_anns, Exception):
+            logger.warning(f"Stop announcements failed for stop {dcode}: {stop_anns}")
+            stop_anns = []
+            
+    except Exception as e:
+        logger.error(f"Error fetching combined announcements for stop {dcode}: {e}")
+        global_anns, stop_anns = [], []
+
+    # 3. Merge and deduplicate
+    combined: list[Announcement] = []
+    seen = set()
+    
+    # Add global announcements
+    for ann in global_anns:
+        msg = ann.get("message", "").strip()
+        if msg and msg not in seen:
+            combined.append(Announcement(**ann))
+            seen.add(msg)
+            
+    # Add stop-specific announcements
+    for ann in stop_anns:
+        if not isinstance(ann, dict):
+            continue
+        msg = ann.get("BILGI", "").strip()
+        if msg and msg not in seen:
+            combined.append(Announcement(
+                route_code=ann.get("HAT", ""),
+                route_name="",
+                type="Trafik",
+                updated_at="",
+                message=msg
+            ))
+            seen.add(msg)
+            
+    return combined
+

@@ -143,3 +143,23 @@ class MobiettClient:
             return None
             
         return res[0]
+
+    async def get_stop_announcements(self, dcode: str) -> list[dict[str, Any]]:
+        """Get stop-status traffic announcements from ybs."""
+        res = await self._post_service(
+            "ybs",
+            {
+                "method": "POST",
+                "path": ["real-time-information", "stop-status", str(dcode)],
+                "data": {
+                    "password": settings.ntcapi_ybs_password,
+                    "username": settings.ntcapi_ybs_username
+                }
+            }
+        )
+        
+        if not res or not isinstance(res, dict):
+            return []
+            
+        data = res.get(str(dcode), {})
+        return data.get("duyuru", [])
