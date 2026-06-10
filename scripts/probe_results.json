@@ -1,0 +1,323 @@
+{
+  "1_all_fleet": {
+    "status": 500,
+    "label": "1_all_fleet",
+    "result": "PARSE_ERROR"
+  },
+  "2_route_fleet_14M": {
+    "status": 500,
+    "label": "2_route_fleet_14M",
+    "result": "PARSE_ERROR"
+  },
+  "2b_route_fleet_500T": {
+    "status": 500,
+    "label": "2b_route_fleet_500T",
+    "result": "PARSE_ERROR"
+  },
+  "3_arrivals_220602": {
+    "status": 200,
+    "label": "3_arrivals_220602",
+    "count": 8,
+    "sample": {
+      "route": "136B",
+      "eta_raw": "(15:14) 2 dk",
+      "eta_min": 2,
+      "dest": "HEKİMBAŞI  -  TAŞOCAKLARI CAMİİ"
+    },
+    "fields": [
+      "route",
+      "eta_raw",
+      "eta_min",
+      "dest"
+    ]
+  },
+  "3b_arrivals_220601": {
+    "status": 200,
+    "label": "3b_arrivals_220601",
+    "count": 6,
+    "sample": {
+      "route": "136B",
+      "eta_min": 3
+    },
+    "fields": [
+      "route",
+      "eta_min"
+    ]
+  },
+  "3c_arrivals_216572": {
+    "status": 200,
+    "label": "3c_arrivals_216572",
+    "count": 19,
+    "sample": {
+      "route": "15SD",
+      "eta_min": 1
+    },
+    "fields": [
+      "route",
+      "eta_min"
+    ]
+  },
+  "4_schedule_500T": {
+    "status": 200,
+    "label": "4_schedule_500T",
+    "count": 908,
+    "sample": {
+      "SHATKODU": "500T",
+      "HATADI": "TUZLA ŞİFA MAHALLESİ - CEVİZLİBAĞ",
+      "SGUZERAH": "500T_D_D0",
+      "SYON": "D",
+      "SGUNTIPI": "C",
+      "GUZERGAH_ISARETI": null,
+      "SSERVISTIPI": "ÖHO",
+      "DT": "05:55"
+    },
+    "fields": [
+      "SHATKODU",
+      "HATADI",
+      "SGUZERAH",
+      "SYON",
+      "SGUNTIPI",
+      "GUZERGAH_ISARETI",
+      "SSERVISTIPI",
+      "DT"
+    ]
+  },
+  "5_announcements": {
+    "status": 200,
+    "label": "5_announcements",
+    "count": 426,
+    "sample": {
+      "HATKODU": "10B",
+      "HAT": "BOSTANCI - KADIKÖY",
+      "TIP": "Günlük",
+      "GUNCELLEME_SAATI": "Kayit Saati: 16:07",
+      "MESAJ": "MAÇ NEDENIYLE RECEP PEKER CADDESI KAPALIDIR. ARAÇLARIMIZ BOSTANCI YÖNÜNDE KADIKÖY DURAGINDAN GÜZERGAH DISINA ÇIKARAK IHLAMUR DURAGINDAN GÜZERGAHA GIRECEKTIR."
+    },
+    "fields": [
+      "HATKODU",
+      "HAT",
+      "TIP",
+      "GUNCELLEME_SAATI",
+      "MESAJ"
+    ]
+  },
+  "6_route_stops_14M": {
+    "status": 200,
+    "label": "6_route_stops_14M",
+    "count": 96,
+    "sample": {
+      "HATKODU": "14M",
+      "YON": "D",
+      "SIRANO": "1",
+      "DURAKKODU": "403031",
+      "DURAKADI": "KADIKÖY",
+      "XKOORDINATI": "29.024177",
+      "YKOORDINATI": "40.992825",
+      "DURAKTIPI": "CCMODERN",
+      "ISLETMEBOLGE": "Anadolu2",
+      "ISLETMEALTBOLGE": "Kadıköy",
+      "ILCEADI": "Kadiköy"
+    },
+    "fields": [
+      "HATKODU",
+      "YON",
+      "SIRANO",
+      "DURAKKODU",
+      "DURAKADI",
+      "XKOORDINATI",
+      "YKOORDINATI",
+      "DURAKTIPI",
+      "ISLETMEBOLGE",
+      "ISLETMEALTBOLGE",
+      "ILCEADI"
+    ]
+  },
+  "7_search_ahmet_mithat": {
+    "status": 200,
+    "label": "7_search_ahmet_mithat",
+    "count": 2,
+    "sample": {
+      "Path": "/StationDetail?dkod=220601&stationname=ahmet-mithat-efendi-kultur-merkezi-beykoz",
+      "Code": "<img class='search-station-icon' src='../assets/img/icons/pin-bus-blue.svg' alt=''>",
+      "Name": "AHMET MİTHAT EFENDİ KÜLTÜR MERKEZİ - Beykoz - ÜSKÜDAR Yönü",
+      "Location": null,
+      "Stationcode": 220601
+    },
+    "fields": [
+      "Path",
+      "Code",
+      "Name",
+      "Location",
+      "Stationcode"
+    ]
+  },
+  "7b_search_500T": {
+    "status": 200,
+    "label": "7b_search_500T",
+    "count": 1,
+    "sample": {
+      "Path": "/RouteDetail?hkod=500T&routename=tuzla-sifa-mahallesi-4--levent-metro",
+      "Code": "500T",
+      "Name": "TUZLA ŞİFA MAHALLESİ - 4. LEVENT METRO",
+      "Location": null,
+      "Stationcode": 0
+    },
+    "fields": [
+      "Path",
+      "Code",
+      "Name",
+      "Location",
+      "Stationcode"
+    ]
+  },
+  "8_routes_at_stop_220602": {
+    "status": 200,
+    "label": "8_routes_at_stop_220602",
+    "count": 6,
+    "sample": "14M",
+    "fields": "non-dict"
+  },
+  "9_station_for_route_14M": {
+    "status": 200,
+    "label": "9_station_for_route_14M",
+    "count": 1,
+    "sample": {
+      "raw": "    \r\n\r\n<div class=\"col-md-6 col-12\">\r\n    <div class=\"line-pass-header\"> KALKIŞ</div>\r\n    <div class=\"line-pass-body\">\r\n            <div class=\"line-pass-item\">\r\n                <a href=\"/StationDet"
+    },
+    "fields": [
+      "raw"
+    ]
+  },
+  "10_fast_station_14M": {
+    "status": 200,
+    "label": "10_fast_station_14M",
+    "count": 1,
+    "sample": {
+      "raw": "<div class=\"custom-select-box\">\r\n    <div class=\"custom-select\">\r\n        <span id=\"slctText\">Depar G&#252;zergah Se&#231;iniz</span>\r\n        <img src=\"../assets/img/icons/arrow-down-black.svg\" alt=\""
+    },
+    "fields": [
+      "raw"
+    ]
+  },
+  "11_all_route_14M": {
+    "status": 200,
+    "label": "11_all_route_14M",
+    "count": 1,
+    "sample": {
+      "HAT_HAT_ADI": null,
+      "HAT_HAT_KODU": null,
+      "HAT_ID": 0,
+      "GUZERGAH_ADI": "1991 -  YENİ CAMİİ -  KADIKÖY - Gidiş",
+      "GUZERGAH_GUZERGAH_ISARETI": null,
+      "GUZERGAH_DEPAR_NO": 1991,
+      "GUZERGAH_GUZERGAH_KODU": "14M_G_D1991",
+      "GUZERGAH_ID": 0,
+      "GUZERGAH_YOLCU_GUZERGAH_ADI": null,
+      "GUZERGAH_YON": 0,
+      "GUZERGAH_GUZERGAH_ADI": " YENİ CAMİİ -  KADIKÖY"
+    },
+    "fields": [
+      "HAT_HAT_ADI",
+      "HAT_HAT_KODU",
+      "HAT_ID",
+      "GUZERGAH_ADI",
+      "GUZERGAH_GUZERGAH_ISARETI",
+      "GUZERGAH_DEPAR_NO",
+      "GUZERGAH_GUZERGAH_KODU",
+      "GUZERGAH_ID",
+      "GUZERGAH_YOLCU_GUZERGAH_ADI",
+      "GUZERGAH_YON",
+      "GUZERGAH_GUZERGAH_ADI"
+    ]
+  },
+  "12_route_station_all": {
+    "status": 200,
+    "label": "12_route_station_all",
+    "count": 1,
+    "sample": {
+      "raw": "        <div class=\"line-item\">\r\n            <a href=\"/RouteDetail?hkod=1&amp;routename=K%C4%B0RAZLITEPE%20-%20ACIBADEM%20%2F%20KADIK%C3%96Y\">\r\n                <span>1</span>\r\n                <p>KİRAZ"
+    },
+    "fields": [
+      "raw"
+    ]
+  },
+  "13_traffic_index": {
+    "status": 0,
+    "label": "13_traffic_index",
+    "fields": [
+      "raw",
+      "content_type"
+    ],
+    "sample": {
+      "raw": "Cannot connect to host trafik.ibb.gov.tr:443 ssl:default [getaddrinfo failed]",
+      "content_type": ""
+    }
+  },
+  "14_traffic_segments": {
+    "status": 0,
+    "label": "14_traffic_segments",
+    "count": 1,
+    "sample": {
+      "raw": "Cannot connect to host trafik.ibb.gov.tr:443 ssl:default [getaddrinfo failed]"
+    },
+    "fields": [
+      "raw"
+    ]
+  },
+  "15_tunnel_segments": {
+    "status": 0,
+    "label": "15_tunnel_segments",
+    "count": 1,
+    "sample": {
+      "raw": "Cannot connect to host trafik.ibb.gov.tr:443 ssl:default [getaddrinfo failed]"
+    },
+    "fields": [
+      "raw"
+    ]
+  },
+  "15b_static_layer_version": {
+    "status": 0,
+    "label": "15b_static_layer_version",
+    "fields": [
+      "raw"
+    ],
+    "sample": {
+      "raw": "Cannot connect to host trafik.ibb.gov.tr:443 ssl:default [getaddrinfo failed]"
+    }
+  },
+  "dead_GetFiloDurum": {
+    "status": 500,
+    "label": "dead_GetFiloDurum",
+    "fields": [
+      "status",
+      "preview"
+    ],
+    "sample": {
+      "status": 500,
+      "preview": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/s"
+    }
+  },
+  "cross_filter_via": {
+    "status": 200,
+    "label": "cross_filter_via",
+    "count": 1,
+    "sample": {
+      "common_routes": [
+        "135T",
+        "14M",
+        "15E",
+        "15M",
+        "15TY"
+      ],
+      "count_origin": 6,
+      "count_via": 12,
+      "count_common": 5
+    },
+    "fields": [
+      "common_routes",
+      "count_origin",
+      "count_via",
+      "count_common"
+    ]
+  }
+}
