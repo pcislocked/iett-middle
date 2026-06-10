@@ -113,8 +113,8 @@ async def get_route_buses(hat_kodu: str):
             try:
                 raw_meta = await get_route_metadata(hat_kodu)
                 hat_id = next(
-                    (m.get("hat_id") for m in raw_meta if m.get("hat_id")),
-                    None,  # type: ignore
+                    (m.get("hat_id") for m in (raw_meta or []) if m.get("hat_id")),
+                    None,
                 )
             except HTTPException as exc:
                 logger.warning(
