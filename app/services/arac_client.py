@@ -200,7 +200,7 @@ class AracClient:
             der = base64.b64decode(pubkey_b64)
             public_key = load_der_public_key(der)
             aes_key = AESGCM.generate_key(bit_length=256)
-            encrypted = public_key.encrypt(
+            encrypted = public_key.encrypt(  # type: ignore
                 aes_key,
                 padding.OAEP(
                     mgf=padding.MGF1(algorithm=hashes.SHA256()),

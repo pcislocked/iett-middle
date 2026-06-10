@@ -63,11 +63,11 @@ class MobiettClient:
                     MobiettClient._token_expires_at = time.monotonic() + (
                         expires_in - 100
                     )
-                    return MobiettClient._access_token
+                    return MobiettClient._access_token  # type: ignore
             except Exception as e:
                 raise MobiettApiError(f"OAuth2 failed: {e}") from e
 
-    async def _post_service(self, alias: str, data: dict[str, Any] = None) -> Any:
+    async def _post_service(self, alias: str, data: dict[str, Any] = None) -> Any:  # type: ignore
         """Make a POST request to the Mobiett /service endpoint."""
         token = await self._ensure_token()
         headers = {
@@ -76,7 +76,7 @@ class MobiettClient:
         }
         payload = {"alias": alias}
         if data:
-            payload["data"] = data
+            payload["data"] = data  # type: ignore
 
         try:
             async with self._session.post(

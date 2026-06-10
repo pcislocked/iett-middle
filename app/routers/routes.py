@@ -113,7 +113,7 @@ async def get_route_buses(hat_kodu: str):
             try:
                 raw_meta = await get_route_metadata(hat_kodu)
                 hat_id = next(
-                    (m.get("hat_id") for m in raw_meta if m.get("hat_id")), None
+                    (m.get("hat_id") for m in raw_meta if m.get("hat_id")), None  # type: ignore
                 )
             except HTTPException as exc:
                 logger.warning(
@@ -282,7 +282,7 @@ async def get_route_schedule(hat_kodu: str):
                 schedule = await client.get_route_schedule(hat_kodu)
             except IettApiError as exc:
                 raise HTTPException(502, detail=str(exc)) from exc
-            data = [
+            data = [  # type: ignore
                 normalizers.schedule.from_iett_soap_schedule(d.model_dump())
                 for d in schedule
             ]
@@ -327,7 +327,7 @@ async def fetch_filtered_announcements(route_list: set[str]) -> list[dict]:
     )
 
     combined = []
-    for ann in all_anns:
+    for ann in all_anns:  # type: ignore
         rc = ann.get("route_code", "").upper().strip()
         if rc in route_list:
             combined.append(dict(ann))

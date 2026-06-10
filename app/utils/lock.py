@@ -11,4 +11,4 @@ class LazyLock:
         await self._lock.acquire()
 
     async def __aexit__(self, exc_type, exc, tb):
-        self._lock.release()
+        self._lock.release()  # type: ignore

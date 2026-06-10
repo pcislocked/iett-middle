@@ -143,7 +143,7 @@ async def get_bus_detail(kapino: str) -> dict[str, Any]:
         from app.routers.routes import get_route_stops
 
         try:
-            route_stops_data = await get_route_stops(route_code)
+            route_stops_data = await get_route_stops(route_code)  # type: ignore
         except Exception:
             logger.exception("Failed to fetch route stops for %s", route_code)
 

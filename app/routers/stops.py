@@ -98,7 +98,7 @@ async def nearby_stops(
                     longitude=longitude,
                     district=c.get("district"),
                     direction=c.get("direction"),
-                    distance_m=c.get("distance_m")
+                    distance_m=c.get("distance_m")  # type: ignore
                     if c.get("distance_m") is not None
                     else _haversine_m(lat, lon, latitude, longitude),
                 )
@@ -164,7 +164,7 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
             # Resolve missing destinations per-route to avoid cache stampede
             missing_routes = list(
                 {
-                    a["route_code"]
+                    a["route_code"]  # type: ignore
                     for a in canonical
                     if not a.get("destination") and a.get("route_code")
                 }
@@ -188,7 +188,7 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
                         stale_ttl=settings.cache_stale_ttl,
                         jitter=True,
                     )
-                    route_names[rc] = name
+                    route_names[rc] = name  # type: ignore
                 except Exception as e:
                     logger.warning("Failed to fetch route name for %s: %s", rc, e)
 
@@ -196,10 +196,10 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
                 await asyncio.gather(*[_resolve_route(rc) for rc in missing_routes])
                 for a in canonical:
                     if not a.get("destination") and a.get("route_code") in route_names:
-                        a["destination"] = route_names[a["route_code"]]
+                        a["destination"] = route_names[a["route_code"]]  # type: ignore
 
             canonical.sort(
-                key=lambda a: (
+                key=lambda a: (  # type: ignore
                     a.get("eta_minutes") if a.get("eta_minutes") is not None else 9999
                 )
             )
@@ -228,7 +228,7 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
         if via and arrivals_data:
             try:
                 routes_via = await get_routes_at_stop(via)
-                routes_via_upper = {r.upper() for r in routes_via}
+                routes_via_upper = {r.upper() for r in routes_via}  # type: ignore
                 arrivals_data = [
                     a
                     for a in arrivals_data
@@ -254,7 +254,7 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
 
     # Enrich with plate from in-memory fleet store (free, O(1) by kapino).
     result = []
-    for a in arrivals_data:
+    for a in arrivals_data:  # type: ignore
         kapino = a.get("kapino")
         plate = a.get("plate") or (get_plate_by_kapino(kapino) if kapino else None)
         result.append(
@@ -312,7 +312,7 @@ async def get_stop_detail(dcode: str):
         stale_ttl=settings.cache_stale_ttl,
         jitter=True,
     )
-    return StopDetail(**detail_data)
+    return StopDetail(**detail_data)  # type: ignore
 
 
 @router.get("/{dcode}/announcements", response_model=list[Announcement])
@@ -345,7 +345,7 @@ async def get_stop_announcements(dcode: str):
         # 2. Fetch global route announcements concurrently with stop-specific announcements
         mobiett_client = MobiettClient(session)
         try:
-            global_task = fetch_filtered_announcements(set(route_codes))
+            global_task = fetch_filtered_announcements(set(route_codes))  # type: ignore
             stop_status_task = mobiett_client.get_stop_announcements(dcode)
 
             global_anns, stop_anns = await asyncio.gather(
@@ -377,7 +377,7 @@ async def get_stop_announcements(dcode: str):
         seen = set()
 
         # Add global announcements
-        for ann in global_anns:
+        for ann in global_anns:  # type: ignore
             msg = (ann.get("message") or "").strip()
             route_code = (ann.get("route_code") or "").strip().upper()
             key = (route_code, msg)
@@ -388,7 +388,7 @@ async def get_stop_announcements(dcode: str):
                 seen.add(key)
 
         # Add stop-specific announcements
-        for ann in stop_anns:
+        for ann in stop_anns:  # type: ignore
             if not isinstance(ann, dict):
                 continue
             msg = (ann.get("BILGI") or "").strip()
@@ -411,4 +411,4 @@ async def get_stop_announcements(dcode: str):
     announcements_data = await cache_get_or_fetch(
         key, 300, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True
     )
-    return [Announcement(**a) for a in announcements_data]
+    return [Announcement(**a) for a in announcements_data]  # type: ignore

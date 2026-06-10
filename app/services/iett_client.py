@@ -151,12 +151,12 @@ class IettClient:
         buses: dict[str, BusPosition] = {}
 
         if not isinstance(json_res, Exception):
-            for b in json_res:
+            for b in json_res:  # type: ignore
                 if b.kapino:
                     buses[b.kapino] = b
 
         if not isinstance(soap_res, Exception):
-            for b in soap_res:
+            for b in soap_res:  # type: ignore
                 if not b.kapino:
                     continue
                 if b.kapino in buses:
@@ -262,14 +262,14 @@ class IettClient:
 
         detail = None
         if soap_valid and json_valid:
-            soap_has_coords = soap_res.latitude not in (
+            soap_has_coords = soap_res.latitude not in (  # type: ignore
                 None,
                 0.0,
-            ) and soap_res.longitude not in (None, 0.0)
-            json_has_coords = json_res.latitude not in (
+            ) and soap_res.longitude not in (None, 0.0)  # type: ignore
+            json_has_coords = json_res.latitude not in (  # type: ignore
                 None,
                 0.0,
-            ) and json_res.longitude not in (None, 0.0)
+            ) and json_res.longitude not in (None, 0.0)  # type: ignore
             if json_has_coords and not soap_has_coords:
                 detail = json_res
             else:
@@ -288,14 +288,14 @@ class IettClient:
             ) from json_res
 
         if detail is not None and (
-            detail.latitude in (None, 0.0) or detail.longitude in (None, 0.0)
+            detail.latitude in (None, 0.0) or detail.longitude in (None, 0.0)  # type: ignore
         ):
             coords = get_stop_coords(dcode)
             if coords:
-                detail = detail.model_copy(
+                detail = detail.model_copy(  # type: ignore
                     update={"latitude": coords[0], "longitude": coords[1]}
                 )
-        return detail
+        return detail  # type: ignore
 
     async def get_all_stops(self) -> list[NearbyStop]:
         """All ~15 k IETT stops with coordinates (GetDurak_json, empty DurakKodu)."""

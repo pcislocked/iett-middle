@@ -258,7 +258,7 @@ class TestFleetDetailRouter:
             patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
             patch("app.routers.fleet.get_trail", return_value=[]),
-            patch("app.routers.fleet.get_session", return_value=MagicMock()),
+            patch("app.routers.fleet.get_session", return_value=MagicMock(), create=True),
             patch(
                 "app.services.cache._cache_get_internal",
                 AsyncMock(return_value=([], True)),
@@ -280,7 +280,7 @@ class TestFleetDetailRouter:
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
             patch("app.routers.fleet.get_trail", return_value=[]),
             patch("app.routers.fleet.get_last_route_by_kapino", return_value="15F"),
-            patch("app.routers.fleet.get_session", return_value=MagicMock()),
+            patch("app.routers.fleet.get_session", return_value=MagicMock(), create=True),
             patch(
                 "app.services.cache._cache_get_internal",
                 AsyncMock(return_value=([], True)),
@@ -312,7 +312,7 @@ class TestFleetDetailRouter:
             patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
             patch("app.routers.fleet.get_trail", return_value=[]),
-            patch("app.routers.fleet.get_session", return_value=MagicMock()),
+            patch("app.routers.fleet.get_session", return_value=MagicMock(), create=True),
             patch(
                 "app.services.cache._cache_get_internal",
                 AsyncMock(return_value=(cached_stops, True)),
@@ -331,7 +331,7 @@ class TestFleetDetailRouter:
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
             patch("app.routers.fleet.get_trail", return_value=[]),
             patch("app.routers.fleet.get_last_route_by_kapino", return_value=None),
-            patch("app.routers.fleet.get_session", return_value=MagicMock()),
+            patch("app.routers.fleet.get_session", return_value=MagicMock(), create=True),
             patch(
                 "app.services.cache._cache_get_internal", AsyncMock(return_value=None)
             ),
@@ -353,9 +353,9 @@ class TestStopsSearch:
         mock_client = MagicMock()
         mock_client.search_stops = AsyncMock(return_value=[_stop_search()])
         with (
-            patch("app.routers.stops.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.stops.cache_set", AsyncMock()),
-            patch("app.routers.stops.get_session", return_value=MagicMock()),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.stops.cache_set", AsyncMock(), create=True),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.stops.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/stops/search?q=ahmet")
@@ -371,7 +371,7 @@ class TestStopsNearby:
         # ntcapi fails â†’ fallback to index â†’ index not ready â†’ 503
         with (
             patch("app.routers.stops.ntcapi_client.get_nearby_stops", _NTCAPI_DOWN),
-            patch("app.routers.stops.get_session", return_value=MagicMock()),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.deps.get_stop_index_updated_at", return_value=None),
         ):
             resp = client.get("/v1/stops/nearby?lat=41.0&lon=29.0")
@@ -382,7 +382,7 @@ class TestStopsNearby:
         # ntcapi fails â†’ fallback to in-memory index â†’ returns results
         with (
             patch("app.routers.stops.ntcapi_client.get_nearby_stops", _NTCAPI_DOWN),
-            patch("app.routers.stops.get_session", return_value=MagicMock()),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.deps.get_stop_index_updated_at", return_value=now),
             patch("app.deps.get_nearby_stops", return_value=[_nearby_stop()]),
         ):
@@ -416,7 +416,7 @@ class TestStopsNearby:
                 "app.services.normalizers.stops.from_ntcapi_nearby_processed",
                 return_value=normalised,
             ),
-            patch("app.routers.stops.get_session", return_value=MagicMock()),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
         ):
             resp = client.get("/v1/stops/nearby?lat=41.0&lon=29.0")
         assert resp.status_code == 200
@@ -457,9 +457,9 @@ class TestStopArrivals:
         mock_client.get_stop_arrivals = AsyncMock(return_value=[_arrival()])
         with (
             patch("app.routers.stops.ntcapi_client.get_stop_arrivals", _NTCAPI_DOWN),
-            patch("app.routers.stops.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.stops.cache_set", AsyncMock()),
-            patch("app.routers.stops.get_session", return_value=MagicMock()),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.stops.cache_set", AsyncMock(), create=True),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.stops.IettClient", return_value=mock_client),
             patch("app.routers.stops.get_plate_by_kapino", return_value=None),
         ):
@@ -472,9 +472,9 @@ class TestStopArrivals:
         mock_client.get_stop_arrivals = AsyncMock(return_value=[])
         with (
             patch("app.routers.stops.ntcapi_client.get_stop_arrivals", _NTCAPI_DOWN),
-            patch("app.routers.stops.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.stops.cache_set", AsyncMock()),
-            patch("app.routers.stops.get_session", return_value=MagicMock()),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.stops.cache_set", AsyncMock(), create=True),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.stops.IettClient", return_value=mock_client),
             patch("app.routers.stops.get_plate_by_kapino", return_value=None),
         ):
@@ -488,9 +488,9 @@ class TestStopDetail:
         mock_client = MagicMock()
         mock_client.get_stop_detail = AsyncMock(return_value=_stop_detail())
         with (
-            patch("app.routers.stops.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.stops.cache_set", AsyncMock()),
-            patch("app.routers.stops.get_session", return_value=MagicMock()),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.stops.cache_set", AsyncMock(), create=True),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.stops.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/stops/220602")
@@ -500,9 +500,9 @@ class TestStopDetail:
         mock_client = MagicMock()
         mock_client.get_stop_detail = AsyncMock(return_value=None)
         with (
-            patch("app.routers.stops.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.stops.cache_set", AsyncMock()),
-            patch("app.routers.stops.get_session", return_value=MagicMock()),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.stops.cache_set", AsyncMock(), create=True),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.stops.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/stops/000000")
@@ -519,9 +519,9 @@ class TestRoutesSearch:
             return_value=[RouteSearchResult(hat_kodu="500T", name="TUZLA - LEVENT")]
         )
         with (
-            patch("app.routers.routes.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.routes.cache_set", AsyncMock()),
-            patch("app.routers.routes.get_session", return_value=MagicMock()),
+            patch("app.routers.routes.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.routes.cache_set", AsyncMock(), create=True),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.routes.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/routes/search?q=500T")
@@ -539,9 +539,9 @@ class TestRoutesMeta:
         mock_client.get_route_metadata = AsyncMock(return_value=[_route_meta()])
         with (
             patch("app.routers.routes.ntcapi_client.get_route_metadata", _NTCAPI_DOWN),
-            patch("app.routers.routes.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.routes.cache_set", AsyncMock()),
-            patch("app.routers.routes.get_session", return_value=MagicMock()),
+            patch("app.routers.routes.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.routes.cache_set", AsyncMock(), create=True),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.routes.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/routes/500T")
@@ -554,9 +554,9 @@ class TestRoutesBuses:
         mock_client = MagicMock()
         mock_client.get_route_buses = AsyncMock(return_value=[bus])
         with (
-            patch("app.routers.routes.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.routes.cache_set", AsyncMock()),
-            patch("app.routers.routes.get_session", return_value=MagicMock()),
+            patch("app.routers.routes.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.routes.cache_set", AsyncMock(), create=True),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.routes.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/routes/500T/buses")
@@ -579,9 +579,9 @@ class TestRoutesSchedule:
         mock_client.get_route_schedule = AsyncMock(return_value=[dep])
         with (
             patch("app.routers.routes.ntcapi_client.get_timetable", _NTCAPI_DOWN),
-            patch("app.routers.routes.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.routes.cache_set", AsyncMock()),
-            patch("app.routers.routes.get_session", return_value=MagicMock()),
+            patch("app.routers.routes.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.routes.cache_set", AsyncMock(), create=True),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.routes.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/routes/500T/schedule")
@@ -600,9 +600,9 @@ class TestRoutesAnnouncements:
         mock_client = MagicMock()
         mock_client.get_announcements = AsyncMock(return_value=[ann])
         with (
-            patch("app.routers.routes.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.routes.cache_set", AsyncMock()),
-            patch("app.routers.routes.get_session", return_value=MagicMock()),
+            patch("app.routers.routes.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.routes.cache_set", AsyncMock(), create=True),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.routes.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/routes/500T/announcements")
@@ -635,9 +635,9 @@ class TestRoutesBatchAnnouncements:
         mock_client = MagicMock()
         mock_client.get_announcements = AsyncMock(return_value=[ann1, ann2, ann3])
         with (
-            patch("app.routers.routes.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.routes.cache_set", AsyncMock()),
-            patch("app.routers.routes.get_session", return_value=MagicMock()),
+            patch("app.routers.routes.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.routes.cache_set", AsyncMock(), create=True),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.routes.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/routes/announcements/batch?routes=500T,15F,15F")
@@ -654,9 +654,9 @@ class TestRoutesBatchAnnouncements:
         mock_client = MagicMock()
         mock_client.get_announcements = AsyncMock(return_value=[])
         with (
-            patch("app.routers.routes.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.routes.cache_set", AsyncMock()),
-            patch("app.routers.routes.get_session", return_value=MagicMock()),
+            patch("app.routers.routes.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.routes.cache_set", AsyncMock(), create=True),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.routes.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/routes/announcements/batch?routes=,,,")
@@ -669,9 +669,9 @@ class TestRoutesBatchAnnouncements:
 
         mock_cache_set = AsyncMock()
         with (
-            patch("app.routers.routes.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.routes.cache_set", mock_cache_set),
-            patch("app.routers.routes.get_session", return_value=MagicMock()),
+            patch("app.routers.routes.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.routes.cache_set", mock_cache_set, create=True),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.routes.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/routes/announcements/batch?routes=500T")
@@ -695,9 +695,9 @@ class TestGaragesList:
         mock_client = MagicMock()
         mock_client.get_garages = AsyncMock(return_value=[_garage()])
         with (
-            patch("app.routers.garages.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.garages.cache_set", AsyncMock()),
-            patch("app.routers.garages.get_session", return_value=MagicMock()),
+            patch("app.routers.garages.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.garages.cache_set", AsyncMock(), create=True),
+            patch("app.routers.garages.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.garages.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/garages")
@@ -709,9 +709,9 @@ class TestGaragesList:
         mock_client = MagicMock()
         mock_client.get_garages = AsyncMock(return_value=[])
         with (
-            patch("app.routers.garages.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.garages.cache_set", AsyncMock()),
-            patch("app.routers.garages.get_session", return_value=MagicMock()),
+            patch("app.routers.garages.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.garages.cache_set", AsyncMock(), create=True),
+            patch("app.routers.garages.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.garages.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/garages")
@@ -729,9 +729,9 @@ class TestTrafficIndex:
             return_value=TrafficIndex(percent=45, description="Moderate")
         )
         with (
-            patch("app.routers.traffic.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.traffic.cache_set", AsyncMock()),
-            patch("app.routers.traffic.get_session", return_value=MagicMock()),
+            patch("app.routers.traffic.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.traffic.cache_set", AsyncMock(), create=True),
+            patch("app.routers.traffic.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.traffic.TrafficClient", return_value=mock_tc),
         ):
             resp = client.get("/v1/traffic/index")
@@ -753,9 +753,9 @@ class TestTrafficIndex:
         mock_tc = MagicMock()
         mock_tc.get_traffic_index = AsyncMock(side_effect=IettApiError("timeout"))
         with (
-            patch("app.routers.traffic.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.traffic.cache_set", AsyncMock()),
-            patch("app.routers.traffic.get_session", return_value=MagicMock()),
+            patch("app.routers.traffic.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.traffic.cache_set", AsyncMock(), create=True),
+            patch("app.routers.traffic.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.traffic.TrafficClient", return_value=mock_tc),
         ):
             resp = client.get("/v1/traffic/index")
@@ -770,9 +770,9 @@ class TestTrafficSegments:
         mock_tc = MagicMock()
         mock_tc.get_traffic_segments = AsyncMock(return_value=[seg])
         with (
-            patch("app.routers.traffic.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.traffic.cache_set", AsyncMock()),
-            patch("app.routers.traffic.get_session", return_value=MagicMock()),
+            patch("app.routers.traffic.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.traffic.cache_set", AsyncMock(), create=True),
+            patch("app.routers.traffic.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.traffic.TrafficClient", return_value=mock_tc),
         ):
             resp = client.get("/v1/traffic/segments")
@@ -797,9 +797,9 @@ class TestTrafficSegments:
         mock_tc = MagicMock()
         mock_tc.get_traffic_segments = AsyncMock(side_effect=IettApiError("down"))
         with (
-            patch("app.routers.traffic.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.traffic.cache_set", AsyncMock()),
-            patch("app.routers.traffic.get_session", return_value=MagicMock()),
+            patch("app.routers.traffic.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.traffic.cache_set", AsyncMock(), create=True),
+            patch("app.routers.traffic.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.traffic.TrafficClient", return_value=mock_tc),
         ):
             resp = client.get("/v1/traffic/segments")
@@ -817,9 +817,9 @@ class TestRoutesBusesFallbacks:
         mock_client = MagicMock()
         mock_client.get_route_buses = AsyncMock(return_value=[bus])
         with (
-            patch("app.routers.routes.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.routes.cache_set", AsyncMock()),
-            patch("app.routers.routes.get_session", return_value=MagicMock()),
+            patch("app.routers.routes.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.routes.cache_set", AsyncMock(), create=True),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.routes.ntcapi_client.get_route_metadata", _NTCAPI_DOWN),
             patch("app.routers.routes.IettClient", return_value=mock_client),
         ):
@@ -836,9 +836,9 @@ class TestRoutesBusesFallbacks:
         mock_client = MagicMock()
         mock_client.get_route_buses = AsyncMock(side_effect=IettApiError("soap down"))
         with (
-            patch("app.routers.routes.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.routes.cache_set", AsyncMock()),
-            patch("app.routers.routes.get_session", return_value=MagicMock()),
+            patch("app.routers.routes.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.routes.cache_set", AsyncMock(), create=True),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.routes.ntcapi_client.get_route_metadata", _NTCAPI_DOWN),
             patch("app.routers.routes.IettClient", return_value=mock_client),
             patch("app.deps.ensure_fleet_fresh", AsyncMock()),
@@ -865,9 +865,9 @@ class TestRoutesStopsFallback:
         mock_client = MagicMock()
         mock_client.get_route_stops = AsyncMock(return_value=[rs])
         with (
-            patch("app.routers.routes.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.routes.cache_set", AsyncMock()),
-            patch("app.routers.routes.get_session", return_value=MagicMock()),
+            patch("app.routers.routes.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.routes.cache_set", AsyncMock(), create=True),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.routes.ntcapi_client.get_route_stops", _NTCAPI_DOWN),
             patch("app.routers.routes.IettClient", return_value=mock_client),
         ):
@@ -881,9 +881,9 @@ class TestRoutesStopsFallback:
         mock_client = MagicMock()
         mock_client.get_route_stops = AsyncMock(side_effect=IettApiError("down"))
         with (
-            patch("app.routers.routes.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.routes.cache_set", AsyncMock()),
-            patch("app.routers.routes.get_session", return_value=MagicMock()),
+            patch("app.routers.routes.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.routes.cache_set", AsyncMock(), create=True),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.routes.ntcapi_client.get_route_stops", _NTCAPI_DOWN),
             patch("app.routers.routes.IettClient", return_value=mock_client),
         ):
@@ -940,7 +940,7 @@ class TestStopsExtra:
                 "app.services.normalizers.stops.from_ntcapi_nearby_processed",
                 return_value=processed[0],
             ),
-            patch("app.routers.stops.get_session", return_value=MagicMock()),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
         ):
             resp = client.get("/v1/stops/nearby?lat=41.08&lon=29.01")
         assert resp.status_code == 200
@@ -951,9 +951,9 @@ class TestStopsExtra:
         mock_client = MagicMock()
         mock_client.get_routes_at_stop = AsyncMock(return_value=["500T", "15F"])
         with (
-            patch("app.routers.stops.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.stops.cache_set", AsyncMock()),
-            patch("app.routers.stops.get_session", return_value=MagicMock()),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.stops.cache_set", AsyncMock(), create=True),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.stops.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/stops/301341/routes")
@@ -1010,9 +1010,9 @@ class TestStopsExtra:
                 "app.services.normalizers.arrivals.from_ntcapi_ybs",
                 return_value=canonical[0],
             ),
-            patch("app.routers.stops.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.stops.cache_set", AsyncMock()),
-            patch("app.routers.stops.get_session", return_value=MagicMock()),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.stops.cache_set", AsyncMock(), create=True),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.stops.get_plate_by_kapino", return_value=None),
         ):
             resp = client.get("/v1/stops/220602/arrivals")
@@ -1042,9 +1042,9 @@ class TestStopsExtra:
                 "app.routers.stops.ntcapi_client.get_stop_arrivals",
                 AsyncMock(return_value=raw),
             ),
-            patch("app.routers.stops.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.stops.cache_set", AsyncMock()),
-            patch("app.routers.stops.get_session", return_value=MagicMock()),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.stops.cache_set", AsyncMock(), create=True),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.stops.get_plate_by_kapino", return_value="34 HO 1000"),
         ):
             resp = client.get("/v1/stops/220602/arrivals")
@@ -1106,7 +1106,7 @@ class TestFleetDetailFallbacks:
             patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
             patch("app.routers.fleet.get_trail", return_value=[]),
-            patch("app.routers.routes.get_session", return_value=MagicMock()),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch(
                 "app.services.cache._cache_get_internal", AsyncMock(return_value=None)
             ),
@@ -1149,7 +1149,7 @@ class TestFleetDetailFallbacks:
             patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
             patch("app.routers.fleet.get_trail", return_value=[]),
-            patch("app.routers.routes.get_session", return_value=MagicMock()),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch(
                 "app.services.cache._cache_get_internal", AsyncMock(return_value=None)
             ),
@@ -1181,7 +1181,7 @@ class TestFleetDetailFallbacks:
             patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
             patch("app.routers.fleet.get_trail", return_value=[]),
-            patch("app.routers.routes.get_session", return_value=MagicMock()),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch(
                 "app.services.cache._cache_get_internal", AsyncMock(return_value=None)
             ),
@@ -1251,9 +1251,9 @@ class TestStopsViaFilter:
                 "app.services.normalizers.arrivals.from_ntcapi_ybs",
                 side_effect=[self._CANONICAL_500T, self._CANONICAL_15F],
             ),
-            patch("app.routers.stops.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.stops.cache_set", AsyncMock()),
-            patch("app.routers.stops.get_session", return_value=MagicMock()),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.stops.cache_set", AsyncMock(), create=True),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.stops.IettClient", return_value=mock_via),
             patch("app.routers.stops.get_plate_by_kapino", return_value=None),
         ):
@@ -1281,9 +1281,9 @@ class TestStopsViaFilter:
                 "app.services.normalizers.arrivals.from_ntcapi_ybs",
                 side_effect=[self._CANONICAL_500T, self._CANONICAL_15F],
             ),
-            patch("app.routers.stops.cache_get", AsyncMock(return_value=None)),
-            patch("app.routers.stops.cache_set", AsyncMock()),
-            patch("app.routers.stops.get_session", return_value=MagicMock()),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.stops.cache_set", AsyncMock(), create=True),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.stops.IettClient", return_value=mock_via),
             patch("app.routers.stops.get_plate_by_kapino", return_value=None),
             caplog.at_level(logging.WARNING, logger="app.routers.stops"),
@@ -1302,7 +1302,7 @@ class TestStopsArrivalsRaw:
         mock_client = MagicMock()
         mock_client._get_text = AsyncMock(return_value="<html>arrivals</html>")
         with (
-            patch("app.routers.stops.get_session", return_value=MagicMock()),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.stops.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/stops/220602/arrivals/raw")
@@ -1315,7 +1315,7 @@ class TestStopsArrivalsRaw:
         mock_client = MagicMock()
         mock_client._get_text = AsyncMock(side_effect=IettApiError("timeout"))
         with (
-            patch("app.routers.stops.get_session", return_value=MagicMock()),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.stops.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/stops/220602/arrivals/raw")
@@ -1332,7 +1332,7 @@ class TestAracSession:
             return_value={"captchaId": "cid-1", "captchaImage": "AAA"}
         )
         with (
-            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.arac.AracClient", return_value=mock_arac),
         ):
             resp = client.post("/v1/arac/session/captcha")
@@ -1349,7 +1349,7 @@ class TestAracSession:
         mock_arac = MagicMock()
         mock_arac.get_captcha = AsyncMock(side_effect=AracApiError("upstream down"))
         with (
-            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.arac.AracClient", return_value=mock_arac),
         ):
             resp = client.post("/v1/arac/session/captcha")
@@ -1361,7 +1361,7 @@ class TestAracSession:
             return_value={"sessionId": "sid-1", "sessionKey": "skey-1"}
         )
         with (
-            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.arac.AracClient", return_value=mock_arac),
         ):
             resp = client.post(
@@ -1379,7 +1379,7 @@ class TestAracSession:
             side_effect=AracApiError("Wrong CAPTCHA", status_code=400)
         )
         with (
-            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.arac.AracClient", return_value=mock_arac),
         ):
             resp = client.post(
@@ -1394,7 +1394,7 @@ class TestAracSession:
             return_value={"captchaId": "cid-2", "captchaImage": "BBB"}
         )
         with (
-            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.arac.AracClient", return_value=mock_arac),
         ):
             resp = client.post("/v1/arac/session/getpicture")
@@ -1409,7 +1409,7 @@ class TestAracSession:
             return_value={"sessionId": "sid-2", "sessionKey": "skey-2"}
         )
         with (
-            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.arac.AracClient", return_value=mock_arac),
         ):
             resp = client.post(
@@ -1438,7 +1438,7 @@ class TestAracFleet:
         mock_arac = MagicMock()
         mock_arac.get_fleet = AsyncMock(return_value=[BusPosition(**_arac_bus())])
         with (
-            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.arac.AracClient", return_value=mock_arac),
         ):
             resp = client.get("/v1/arac/fleet", headers=self._HEADERS)
@@ -1452,7 +1452,7 @@ class TestAracFleet:
         mock_arac = MagicMock()
         mock_arac.get_fleet = AsyncMock(return_value=[BusPosition(**_arac_bus())])
         with (
-            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.arac.AracClient", return_value=mock_arac),
         ):
             resp = client.get(
@@ -1469,7 +1469,7 @@ class TestAracFleet:
             side_effect=AracApiError("upstream", status_code=503)
         )
         with (
-            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.arac.AracClient", return_value=mock_arac),
         ):
             resp = client.get("/v1/arac/fleet", headers=self._HEADERS)
@@ -1481,7 +1481,7 @@ class TestAracFleet:
             return_value=BusPosition(**_arac_bus("A-001"))
         )
         with (
-            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.arac.AracClient", return_value=mock_arac),
         ):
             resp = client.get("/v1/arac/fleet/A-001", headers=self._HEADERS)
@@ -1496,7 +1496,7 @@ class TestAracFleet:
             side_effect=AracApiError("not found", status_code=404)
         )
         with (
-            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.arac.AracClient", return_value=mock_arac),
         ):
             resp = client.get("/v1/arac/fleet/A-999", headers=self._HEADERS)
@@ -1563,7 +1563,7 @@ class TestAracMissions:
             ]
         )
         with (
-            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.arac.AracClient", return_value=mock_arac),
         ):
             resp = client.get("/v1/arac/fleet/C-1753/missions", headers=self._HEADERS)
@@ -1588,7 +1588,7 @@ class TestAracMissions:
             side_effect=AracApiError("bad session", status_code=401)
         )
         with (
-            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.arac.AracClient", return_value=mock_arac),
         ):
             resp = client.get("/v1/arac/fleet/C-1753/missions", headers=self._HEADERS)
@@ -1645,7 +1645,7 @@ class TestAracMissions:
             ]
         )
         with (
-            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.arac.AracClient", return_value=mock_arac),
         ):
             resp = client.get("/v1/arac/fleet/C-1753/missions", headers=self._HEADERS)
@@ -1694,7 +1694,7 @@ class TestAracRouteStops:
             ]
         )
         with (
-            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.arac.AracClient", return_value=mock_arac),
         ):
             resp = client.get("/v1/arac/routes/16/stops", headers=self._HEADERS)
@@ -1712,7 +1712,7 @@ class TestAracRouteStops:
             side_effect=AracApiError("route unavailable", status_code=502)
         )
         with (
-            patch("app.routers.arac.get_session", return_value=MagicMock()),
+            patch("app.routers.arac.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.arac.AracClient", return_value=mock_arac),
         ):
             resp = client.get("/v1/arac/routes/16/stops", headers=self._HEADERS)

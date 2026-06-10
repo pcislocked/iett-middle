@@ -35,5 +35,8 @@ jobs:
       - name: Lint (ruff)
         run: ruff check app/ tests/
 
+      - name: Type check (pyright)
+        run: pyright app/
+
       - name: Test (pytest)
         run: pytest tests/ -v --tb=short --cov=app --cov-fail-under=80
