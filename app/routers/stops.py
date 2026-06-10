@@ -13,7 +13,7 @@ from app.deps import get_plate_by_kapino, get_session
 from app.models.bus import Arrival
 from app.models.route import Announcement
 from app.models.stop import NearbyStop, StopDetail, StopSearchResult
-from app.services.cache import cache_get, cache_set, cache_get_or_fetch
+from app.services.cache import cache_get_or_fetch
 from app.services.iett_client import IettApiError, IettClient
 from app.services import normalizers, ntcapi_client
 from app.services.ntcapi_client import NtcApiError

@@ -9,7 +9,6 @@ regardless of how many clients are connected.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import math
 import threading
@@ -23,7 +22,6 @@ from app.deps import (
     get_fleet_snapshot,
     get_fleet_updated_at,
     get_last_route_by_kapino,
-    get_session,
     get_trail,
 )
 from app.models.bus import BusDetail, BusPositionWithTrail
@@ -68,7 +66,6 @@ async def get_fleet() -> list[dict[str, Any]]:
     Additionally, fleet is forcibly refreshed at least every 15 minutes to prevent
     stale FILO data (some IBB SOAP responses can be 6+ hours old).
     """
-    from app.config import settings  # noqa: PLC0415
 
     await ensure_fleet_fresh()
     snapshot = get_fleet_snapshot()
@@ -83,7 +80,6 @@ async def get_fleet() -> list[dict[str, Any]]:
 @router.get("/meta", tags=["fleet"])
 async def get_fleet_meta() -> FleetMetaResponse:
     """Lightweight status: bus count + last update timestamp."""
-    from app.config import settings  # noqa: PLC0415
 
     await ensure_fleet_fresh()
     updated = get_fleet_updated_at()
@@ -127,12 +123,6 @@ async def get_bus_detail(kapino: str) -> dict[str, Any]:
     ``route_stops`` is fetched from cache or ntcapi so the client can draw a
     route polyline without a second round-trip.
     """
-    from app.config import settings  # noqa: PLC0415
-    from app.models.stop import RouteStop  # noqa: PLC0415
-    from app.services import normalizers, ntcapi_client  # noqa: PLC0415
-    from app.services.cache import cache_get, cache_set  # noqa: PLC0415
-    from app.services.iett_client import IettApiError, IettClient  # noqa: PLC0415
-    from app.services.ntcapi_client import NtcApiError  # noqa: PLC0415
 
     await ensure_fleet_fresh()
     snapshot = get_fleet_snapshot()
@@ -154,7 +144,7 @@ async def get_bus_detail(kapino: str) -> dict[str, Any]:
 
         try:
             route_stops_data = await get_route_stops(route_code)
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to fetch route stops for %s", route_code)
 
     return {
@@ -168,7 +158,6 @@ async def get_bus_detail(kapino: str) -> dict[str, Any]:
 @router.get("/{kapino}", response_model=BusPositionWithTrail)
 async def get_bus(kapino: str) -> dict[str, Any]:
     """Single bus live position + trail by door number (e.g. C-325)."""
-    from app.config import settings  # noqa: PLC0415
 
     await ensure_fleet_fresh()
     snapshot = get_fleet_snapshot()

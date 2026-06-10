@@ -1,6 +1,5 @@
 """New JSON Mobiett Client for iett-middle."""
 
-import asyncio
 import logging
 from typing import Any
 import time

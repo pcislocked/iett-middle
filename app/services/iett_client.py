@@ -30,10 +30,8 @@ from app.services.iett_parser import (
     parse_route_fleet_xml,
     parse_route_metadata_json,
     parse_route_schedule_xml,
-    parse_route_search_results,
     parse_route_stops_html,
     parse_routes_from_html,
-    parse_search_results,
     parse_stop_arrivals_html,
     parse_stop_detail_xml,
 )
