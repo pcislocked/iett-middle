@@ -1633,3 +1633,76 @@ class TestStopAnnouncements:
         assert len(data) == 1
         assert data[0]["message"] == "Local Only"
 
+
+    def test_stop_announcements_deduplicate_same_message_different_routes(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def mock_get_routes(*args, **kwargs):
+            return ["135T", "136B"]
+        
+        async def mock_fetch_filtered(*args, **kwargs):
+            return [{"route_code": "135T", "route_name": "", "type": "Trafik", "updated_at": "", "message": "Duplicate Delay"}]
+            
+        async def mock_get_stop_anns(*args, **kwargs):
+            return [{"HAT": "136B", "BILGI": "Duplicate Delay"}]
+            
+        monkeypatch.setattr("app.routers.stops.get_routes_at_stop", mock_get_routes)
+        monkeypatch.setattr("app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered)
+        monkeypatch.setattr("app.services.mobiett_client.MobiettClient.get_stop_announcements", mock_get_stop_anns)
+        monkeypatch.setattr("app.routers.stops.get_session", lambda: None)
+        
+        from app.services.cache import cache_delete
+        import asyncio
+        asyncio.run(cache_delete("stops:announcements:260211"))
+        
+        r = client.get("/v1/stops/260211/announcements")
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) == 2
+        routes = [d["route_code"] for d in data]
+        assert "135T" in routes
+        assert "136B" in routes
+
+    def test_stop_announcements_ybs_returns_null_fields(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def mock_get_routes(*args, **kwargs):
+            return ["135T"]
+        
+        async def mock_fetch_filtered(*args, **kwargs):
+            return []
+            
+        async def mock_get_stop_anns(*args, **kwargs):
+            return [{"HAT": None, "BILGI": None}]
+            
+        monkeypatch.setattr("app.routers.stops.get_routes_at_stop", mock_get_routes)
+        monkeypatch.setattr("app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered)
+        monkeypatch.setattr("app.services.mobiett_client.MobiettClient.get_stop_announcements", mock_get_stop_anns)
+        monkeypatch.setattr("app.routers.stops.get_session", lambda: None)
+        
+        from app.services.cache import cache_delete
+        import asyncio
+        asyncio.run(cache_delete("stops:announcements:260211"))
+        
+        r = client.get("/v1/stops/260211/announcements")
+        assert r.status_code == 200
+        assert r.json() == []
+
+    def test_stop_announcements_ybs_missing_duyuru_key(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def mock_get_routes(*args, **kwargs):
+            return ["135T"]
+        
+        async def mock_fetch_filtered(*args, **kwargs):
+            return []
+            
+        async def mock_get_stop_anns(*args, **kwargs):
+            return None # This happens if "duyuru" key is absent and it defaults to None
+            
+        monkeypatch.setattr("app.routers.stops.get_routes_at_stop", mock_get_routes)
+        monkeypatch.setattr("app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered)
+        monkeypatch.setattr("app.services.mobiett_client.MobiettClient.get_stop_announcements", mock_get_stop_anns)
+        monkeypatch.setattr("app.routers.stops.get_session", lambda: None)
+        
+        from app.services.cache import cache_delete
+        import asyncio
+        asyncio.run(cache_delete("stops:announcements:260211"))
+        
+        r = client.get("/v1/stops/260211/announcements")
+        assert r.status_code == 200
+        assert r.json() == []

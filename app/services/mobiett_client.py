@@ -1,4 +1,4 @@
-"""New JSON Mobiett Client for iett-middle."""
+﻿"""New JSON Mobiett Client for iett-middle."""
 import asyncio
 import logging
 from typing import Any
@@ -162,4 +162,5 @@ class MobiettClient:
             return []
             
         data = res.get(str(dcode), {})
-        return data.get("duyuru", [])
+        return data.get("duyuru") or []
+
