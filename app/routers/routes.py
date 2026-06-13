@@ -305,8 +305,8 @@ def fix_encoding(text: str | None) -> str | None:
         return text
     try:
         # If it looks like double-encoded UTF-8, decode it
-        if 'Ã' in text or 'Ä' in text or 'Å' in text or 'Â' in text:
-            return text.encode('latin1').decode('utf-8')
+        if "Ã" in text or "Ä" in text or "Å" in text or "Â" in text:
+            return text.encode("latin1").decode("utf-8")
     except Exception:
         pass
     return text
@@ -366,50 +366,56 @@ async def get_route_announcements(hat_kodu: str):
     hat_kodu = hat_kodu.upper().strip()
     """Active disruption announcements for a route."""
     key = f"routes:announcements:{hat_kodu}"
-    
+
     async def _fetch():
         route_list = {hat_kodu}
-        
+
         # 1. Get global announcements for the route
         global_anns = await fetch_filtered_announcements(route_list)
-        
+
         # 2. Get stops for the route to pull stop-specific announcements
         stops = []
         try:
             stops = await get_route_stops(hat_kodu)
         except Exception as exc:
-            logger.warning("Failed to get route stops for announcements enrichment: %s", exc)
-            
+            logger.warning(
+                "Failed to get route stops for announcements enrichment: %s", exc
+            )
+
         stops_to_check = []
         if stops:
             g_stops = [s for s in stops if s["direction"] == "G"]
             d_stops = [s for s in stops if s["direction"] == "D"]
-            
+
             # Pick 2nd, 3rd, and 4th stop from each direction
-            # Why [1:4]? We want a few stops near the beginning of the route 
-            # to catch route-wide traffic warnings, skipping the 1st (origin) 
+            # Why [1:4]? We want a few stops near the beginning of the route
+            # to catch route-wide traffic warnings, skipping the 1st (origin)
             # which might have different properties or be a terminal.
             for stop_list in (g_stops, d_stops):
                 if len(stop_list) > 1:
                     stops_to_check.extend([s["stop_code"] for s in stop_list[1:4]])
-                    
+
         # Deduplicate stops
         stops_to_check = list(set(stops_to_check))
-        
+
         # 3. Pull from mobiett ybs API concurrently
         stop_anns = []
         if stops_to_check:
             session = get_session()
             m_client = MobiettClient(session)
-            
+
             async def _fetch_stop(dcode: str):
                 try:
                     return await m_client.get_stop_announcements(dcode)
                 except Exception as exc:
-                    logger.warning("Failed to fetch stop announcements for %s: %s", dcode, exc)
+                    logger.warning(
+                        "Failed to fetch stop announcements for %s: %s", dcode, exc
+                    )
                     return []
-                    
-            results = await asyncio.gather(*[_fetch_stop(code) for code in stops_to_check])
+
+            results = await asyncio.gather(
+                *[_fetch_stop(code) for code in stops_to_check]
+            )
             for res_list in results:
                 for item in res_list:
                     if item.get("HAT") == hat_kodu:
@@ -418,23 +424,25 @@ async def get_route_announcements(hat_kodu: str):
                         for sub_msg in msg.split(" | "):
                             sub_msg = sub_msg.strip()
                             if sub_msg:
-                                stop_anns.append({
-                                    "route_code": hat_kodu,
-                                    "title": "Güzergah Duyurusu",
-                                    "message": sub_msg
-                                })
-                                
+                                stop_anns.append(
+                                    {
+                                        "route_code": hat_kodu,
+                                        "title": "Güzergah Duyurusu",
+                                        "message": sub_msg,
+                                    }
+                                )
+
         # 4. Merge and deduplicate
         seen_messages = set()
         final_anns = []
-        
+
         for ann in global_anns + stop_anns:
             msg = ann.get("message", "").strip()
             # Fuzzy deduplication could be added here later
             if msg not in seen_messages:
                 seen_messages.add(msg)
                 final_anns.append(ann)
-                
+
         return final_anns
 
     return await cache_get_or_fetch(
