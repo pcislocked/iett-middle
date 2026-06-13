@@ -1,4 +1,3 @@
-import pytest
 from app.routers.routes import fix_encoding
 
 
