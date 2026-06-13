@@ -420,17 +420,18 @@ async def get_route_announcements(hat_kodu: str):
                 for item in res_list:
                     if item.get("HAT") == hat_kodu:
                         msg = fix_encoding(item.get("BILGI", ""))
-                        # Split combined messages by ' | ' if present
-                        for sub_msg in msg.split(" | "):
-                            sub_msg = sub_msg.strip()
-                            if sub_msg:
-                                stop_anns.append(
-                                    {
-                                        "route_code": hat_kodu,
-                                        "title": "Güzergah Duyurusu",
-                                        "message": sub_msg,
-                                    }
-                                )
+                        if msg:
+                            # Split combined messages by ' | ' if present
+                            for sub_msg in msg.split(" | "):
+                                sub_msg = sub_msg.strip()
+                                if sub_msg:
+                                    stop_anns.append(
+                                        {
+                                            "route_code": hat_kodu,
+                                            "title": "Güzergah Duyurusu",
+                                            "message": sub_msg,
+                                        }
+                                    )
 
         # 4. Merge and deduplicate
         seen_messages = set()
