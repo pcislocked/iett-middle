@@ -12,7 +12,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Variant Stop & Route Indexing:** Extended the in-memory stops indexer in `deps.py` to index stops by sub-route variant code, providing variant-based filtering for arrivals and live positions.
 
 ### Fixed
-- **SQLite Concurrency & Locking:** Swapped blocking SQLite writes/deletes under the global dictionary cache `_lock` to thread-pool workers via `asyncio.to_thread`. This decouples the event loop from persistent disk writes and eliminates cache deadlock bottlenecks.
+- **In-Memory Cache Synchronization:** Swapped block-level locks and introduced `LazyLock` synchronization in `app/services/cache.py` to handle concurrent cache fetches safely in memory.
 - **Sweeper Resilience:** Added exponential backoff retry policies to the persistent background cache sweeper daemon and stop indexer loops, preventing silent task termination.
 - **Ruff & Lint Cleanups:** Executed automatic formatting and cleared unused imports to maintain clean import scopes and standard codebase styling.
 
