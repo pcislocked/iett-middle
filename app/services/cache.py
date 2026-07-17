@@ -9,8 +9,8 @@ from typing import Any, Awaitable, Callable, Union
 
 from app.utils.lock import LazyLock
 
-cache_hit_time: contextvars.ContextVar[Union[dict, float, None]] = contextvars.ContextVar(
-    "cache_hit_time", default=None
+cache_hit_time: contextvars.ContextVar[Union[dict, float, None]] = (
+    contextvars.ContextVar("cache_hit_time", default=None)
 )
 _DYNAMIC_PREFIXES = ("stops:arrivals", "routes:announcements", "traffic")
 
