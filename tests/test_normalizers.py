@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from app.services.normalizers import arrivals, positions, route_stops, schedule, stops
 
-
 # ===========================================================================
 # arrivals
 # ===========================================================================

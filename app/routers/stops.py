@@ -13,9 +13,9 @@ from app.deps import get_plate_by_kapino, get_session
 from app.models.bus import Arrival
 from app.models.route import Announcement
 from app.models.stop import NearbyStop, StopDetail, StopSearchResult
+from app.services import normalizers, ntcapi_client
 from app.services.cache import cache_get_or_fetch
 from app.services.iett_client import IettApiError, IettClient
-from app.services import normalizers, ntcapi_client
 from app.services.ntcapi_client import NtcApiError
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,10 @@ def _haversine_m(
 
 @router.get("/search", response_model=list[StopSearchResult])
 async def search_stops(q: str = Query(..., min_length=2)):
-    """Search stops by name."""
+    """Search for stops by name.
+
+    Returns a list of matching stops. Minimum query length is 2 characters.
+    """
     key = f"stops:search:{q.lower()}"
 
     async def _fetch():
@@ -61,13 +64,16 @@ async def search_stops(q: str = Query(..., min_length=2)):
 async def nearby_stops(
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
-    radius: float = Query(default=500, ge=50, le=2000),
+    radius: float = Query(default=500, ge=50, le=3000),
+    limit: int = Query(default=15, ge=5, le=50),
 ):
-    """Stops within *radius* metres of (lat, lon), sorted by distance.
+    """Find nearby stops within a given radius.
 
-    ntcapi ``mainGetBusStopNearby`` is the primary source.  Falls back to
-    the in-memory spatial index populated at startup.
-    Returns up to 30 results.
+    Returns a list of stops within `radius` meters of the provided `(lat, lon)` coordinates,
+    sorted by distance (closest first).
+
+    - Primary source: Live NTCAPI nearby lookup.
+    - Fallback: Local in-memory spatial index (R-Tree) populated at server startup.
     """
     session = get_session()
 
@@ -80,7 +86,7 @@ async def nearby_stops(
             normalizers.stops.from_ntcapi_nearby_processed(r) for r in raw_stops
         ]
         nearby_results: list[NearbyStop] = []
-        for c in canonical[:30]:
+        for c in canonical:
             try:
                 latitude = float(c["lat"])  # type: ignore[arg-type]
                 longitude = float(c["lon"])  # type: ignore[arg-type]
@@ -90,9 +96,15 @@ async def nearby_stops(
                     c.get("stop_code"),
                 )
                 continue
+
+            stop_code = str(c.get("stop_code") or "").strip()
+            # Ignore invalid stops (e.g. -1523 or non-numeric station codes from Marmaray/Metro)
+            if not stop_code.isdigit() or len(stop_code) < 4:
+                continue
+
             nearby_results.append(
                 NearbyStop(
-                    stop_code=c.get("stop_code") or "",
+                    stop_code=stop_code,
                     stop_name=c.get("stop_name") or "",
                     latitude=latitude,
                     longitude=longitude,
@@ -103,6 +115,10 @@ async def nearby_stops(
                     else _haversine_m(lat, lon, latitude, longitude),
                 )
             )
+
+            if len(nearby_results) >= limit:
+                break
+
         return nearby_results
     except NtcApiError as exc:
         logger.warning(
@@ -113,20 +129,25 @@ async def nearby_stops(
         )
 
     # â”€â”€ fallback: in-memory spatial index â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    from app.deps import get_nearby_stops as _get_nearby, get_stop_index_updated_at  # noqa: PLC0415
+    from app.deps import get_nearby_stops as _get_nearby  # noqa: PLC0415
+    from app.deps import get_stop_index_updated_at
 
     if get_stop_index_updated_at() is None:
         raise HTTPException(
             503, detail="Stop index not ready yet â€” try again in a moment"
         )
     results = _get_nearby(lat, lon, radius)
-    return results[:30]
+    return results[:limit]
 
 
 @router.get("/{dcode}/arrivals/raw")
 async def get_arrivals_raw(dcode: str):
     dcode = dcode.strip()
-    """Return the raw HTML from IETT GetStationInfo â€” debug only."""
+    """Return the raw HTML from IETT GetStationInfo (Internal/Debug).
+    
+    Provides the unparsed HTML payload directly from the legacy IETT stop arrival system.
+    Primarily used for debugging parser issues.
+    """
     client = IettClient(get_session())
     try:
         html = await client._get_text(
@@ -143,11 +164,14 @@ async def get_arrivals_raw(dcode: str):
 @router.get("/{dcode}/arrivals", response_model=list[Arrival])
 async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
     dcode = dcode.strip()
-    """Live ETAs at a stop, sourced from ntcapi ybs (has kapino + live location).
+    """Get live bus arrivals (ETAs) for a specific stop.
 
-    Falls back to the legacy IETT HTML endpoint if ntcapi is unavailable.
-    All sources are normalised to :class:`~app.models.bus.Arrival` via the
-    canonical data layer.
+    Fetches real-time estimated arrival times for all buses approaching the stop.
+    Optionally, you can filter the arrivals by passing a `via` stop code to only see buses 
+    that will eventually pass through that destination stop.
+
+    - Primary source: NTCAPI (includes door numbers `kapino` and live coordinates).
+    - Fallback: Legacy IETT HTML endpoint (no coordinates, basic ETAs only).
     """
     key = f"stops:arrivals:{dcode}" + (f":via:{via}" if via else "")
 
@@ -269,7 +293,10 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
 @router.get("/{dcode}/routes", response_model=list[str])
 async def get_routes_at_stop(dcode: str):
     dcode = dcode.strip()
-    """All route codes that pass through a stop."""
+    """Get all routes passing through a stop.
+    
+    Returns a simple list of route codes (e.g., `["14M", "500T"]`) that service this stop.
+    """
     key = f"stops:routes:{dcode}"
 
     async def _fetch():
@@ -292,7 +319,10 @@ async def get_routes_at_stop(dcode: str):
 @router.get("/{dcode}", response_model=StopDetail)
 async def get_stop_detail(dcode: str):
     dcode = dcode.strip()
-    """Stop name and coordinates (from search + route stop lookup). Long-cached."""
+    """Get basic details for a specific stop.
+    
+    Returns the exact name and geographic coordinates of the stop. This data is heavily cached.
+    """
     key = f"stops:detail:{dcode}"
 
     async def _fetch():
@@ -320,9 +350,11 @@ async def get_stop_announcements(dcode: str):
     dcode = dcode.strip()
     """Live traffic and route announcements for a specific stop.
     
-    Merges:
-      1) Global route disruptions (from SOAP Duyurular.asmx) for all routes passing through this stop.
-      2) Stop-specific real-time traffic notices from MobiETT ybs stop-status.
+    This endpoint gives you all alerts that might affect a passenger waiting at this stop.
+
+    **Merged Sources:**
+      1) **Route Disruptions:** Global route disruptions for **all routes** passing through this stop.
+      2) **Stop Traffic:** Stop-specific real-time traffic/congestion notices (e.g., "TRAFİK YOĞUNLUĞU").
     """
     key = f"stops:announcements:{dcode}"
 

@@ -10,7 +10,6 @@ import app.deps as deps
 from app.models.bus import BusPosition
 from app.models.stop import NearbyStop
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

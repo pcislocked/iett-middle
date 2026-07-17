@@ -17,10 +17,10 @@ from app.models.route import (
     ScheduledDeparture,
 )
 from app.models.stop import RouteStop
+from app.services import normalizers, ntcapi_client
 from app.services.cache import SkipCache, cache_get_or_fetch, cache_set
 from app.services.iett_client import IettApiError, IettClient
 from app.services.mobiett_client import MobiettClient
-from app.services import normalizers, ntcapi_client
 from app.services.ntcapi_client import NtcApiError
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,11 @@ router = APIRouter()
 
 @router.get("/search", response_model=list[RouteSearchResult])
 async def search_routes(q: str = Query(..., min_length=1)):
-    """Search routes by name or code (e.g. '14M', 'kadikoy')."""
+    """Search for routes by code or name.
+
+    Returns matching routes. You can search by route code (e.g., '14M') or
+    destination name (e.g., 'kadikoy').
+    """
     key = f"routes:search:{q.lower()}"
 
     async def _fetch():
@@ -53,10 +57,12 @@ async def search_routes(q: str = Query(..., min_length=1)):
 @router.get("/{hat_kodu}", response_model=list[RouteMetadata])
 async def get_route_metadata(hat_kodu: str):
     hat_kodu = hat_kodu.upper().strip()
-    """Route variant/direction metadata.
+    """Get metadata for a specific route.
 
-    ntcapi ``mainGetLine`` is the primary source; IETT SOAP ``GetAllRoute``
-    is the fallback.
+    Returns the variants and directions (Gidiş/Dönüş) for the route, including their endpoints.
+    
+    - Primary source: NTCAPI `mainGetLine`.
+    - Fallback: IETT SOAP `GetAllRoute`.
     """
     key = f"routes:meta:{hat_kodu}"
 
@@ -94,11 +100,13 @@ async def get_route_metadata(hat_kodu: str):
 @router.get("/{hat_kodu}/buses", response_model=list[BusPosition])
 async def get_route_buses(hat_kodu: str):
     hat_kodu = hat_kodu.upper().strip()
-    """GPS positions of buses on a route.
+    """Get live GPS positions of all buses currently operating on a route.
 
-    Primary: ntcapi ybs point-passing/{hat_id} — includes stop_sequence per bus.
-    Secondary: IETT GetHatOtoKonum_json SOAP.
-    Fallback: filters in-memory fleet store by route_code (stale-while-revalidate).
+    Returns a list of buses on the route, including their coordinates, door numbers, and next stops.
+
+    - Primary source: NTCAPI `point-passing` (includes stop sequence).
+    - Secondary source: IETT SOAP `GetHatOtoKonum_json`.
+    - Fallback: Filters the global in-memory fleet store.
     """
     from app.deps import ensure_fleet_fresh, get_buses_by_route  # noqa: PLC0415
 
@@ -171,10 +179,12 @@ async def get_route_buses(hat_kodu: str):
 @router.get("/{hat_kodu}/stops", response_model=list[RouteStop])
 async def get_route_stops(hat_kodu: str):
     hat_kodu = hat_kodu.upper().strip()
-    """Ordered stop list for a route with coordinates.
+    """Get the ordered sequence of stops for a route.
 
-    ntcapi ``mainGetRoute`` is the primary source (fetches both directions);
-    IETT SOAP ``GetHatDuraklari`` is the fallback.
+    Returns the complete list of stops for both directions (Gidiş/Dönüş) in their correct order.
+
+    - Primary source: NTCAPI `mainGetRoute`.
+    - Fallback: IETT SOAP `GetHatDuraklari`.
     """
     key = f"routes:stops:{hat_kodu}"
 
@@ -245,10 +255,13 @@ async def get_route_stops(hat_kodu: str):
 @router.get("/{hat_kodu}/schedule", response_model=list[ScheduledDeparture])
 async def get_route_schedule(hat_kodu: str):
     hat_kodu = hat_kodu.upper().strip()
-    """Planned departure times for a route (all day types).
+    """Get the official timetable schedule for a route.
 
-    ntcapi ``akyolbilGetTimeTable`` is the primary source;
-    IETT SOAP is the fallback.
+    Returns the planned departure times from the origin stops for all day types 
+    (Weekdays, Saturdays, Sundays).
+
+    - Primary source: NTCAPI timetable.
+    - Fallback: IETT SOAP timetable.
     """
     key = f"routes:schedule:{hat_kodu}"
 
@@ -356,15 +369,27 @@ async def fetch_filtered_announcements(route_list: set[str]) -> list[dict]:
 async def get_batch_announcements(
     routes: str = Query(..., description="Comma-separated route codes"),
 ):
-    """Get active disruption announcements for multiple routes at once."""
+    """Get active disruption announcements for multiple routes at once.
+
+    Fetches global IETT SOAP Duyurular announcements and filters them to
+    return only the notices that match the requested comma-separated list of
+    route codes (e.g. "?routes=14M,500T").
+    """
     route_list = {r.strip().upper() for r in routes.split(",") if r.strip()}
     return await fetch_filtered_announcements(route_list)
 
 
 @router.get("/{hat_kodu}/announcements", response_model=list[Announcement])
 async def get_route_announcements(hat_kodu: str):
+    """Active disruption and traffic announcements for a specific route.
+
+    This endpoint aggregates alerts from multiple sources to provide a complete picture of issues affecting a route.
+
+    **Merged Sources:**
+      1) **Route Disruptions:** Global system announcements filtered by this route (e.g., "GÜZERGAH DEĞİŞİKLİĞİ").
+      2) **Live Traffic Notices:** Real-time traffic alerts (e.g., "TRAFİK YOĞUNLUĞU") pulled dynamically for key stops along this route.
+    """
     hat_kodu = hat_kodu.upper().strip()
-    """Active disruption announcements for a route."""
     key = f"routes:announcements:{hat_kodu}"
 
     async def _fetch():
@@ -428,7 +453,11 @@ async def get_route_announcements(hat_kodu: str):
                                     stop_anns.append(
                                         {
                                             "route_code": hat_kodu,
-                                            "title": "Güzergah Duyurusu",
+                                            "route_name": "",
+                                            "type": "Güzergah Duyurusu",
+                                            "updated_at": item.get(
+                                                "GUNCELLEME_SAATI", ""
+                                            ),
                                             "message": sub_msg,
                                         }
                                     )

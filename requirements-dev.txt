@@ -6,4 +6,3 @@ httpx>=0.27
 ruff>=0.15.17
 pyright>=1.1.410
 pytest-cov
-

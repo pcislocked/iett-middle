@@ -9,7 +9,9 @@ expiry.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import math
 import re
 import time
 from typing import TYPE_CHECKING, Any
@@ -219,13 +221,11 @@ async def get_route_stops(
     if not variants:
         return []
 
-    # Pick canonical variant: prefer _D0, else the one with the most stops
-    canonical_key = next((k for k in variants if k.endswith("_D0")), None)
-    if canonical_key is None:
-        canonical_key = max(variants, key=lambda k: len(variants[k]))
-
-    stops = sorted(variants[canonical_key], key=lambda s: s["sequence"])
-    return stops
+    all_stops = []
+    for variant_stops in variants.values():
+        sorted_variant = sorted(variant_stops, key=lambda s: s["sequence"])
+        all_stops.extend(sorted_variant)
+    return all_stops
 
 
 async def get_route_metadata(
@@ -238,11 +238,35 @@ async def get_route_metadata(
     the numeric internal route identifier required for ybs point-passing calls.
     Returns list of dicts matching RouteMetadata shape.
     """
-    payload = {
+    payload_g = {
         "HATYONETIM.GUZERGAH.YON": "119",
         "HATYONETIM.HAT.HAT_KODU": hat_kodu,
     }
-    raw: list[dict] = await _call_service(session, "mainGetLine_basic", payload)
+    payload_d = {
+        "HATYONETIM.GUZERGAH.YON": "120",
+        "HATYONETIM.HAT.HAT_KODU": hat_kodu,
+    }
+    raw_g, raw_d = await asyncio.gather(
+        _call_service(session, "mainGetLine_basic", payload_g),
+        _call_service(session, "mainGetLine_basic", payload_d),
+        return_exceptions=True,
+    )
+
+    if isinstance(raw_g, Exception) and isinstance(raw_d, Exception):
+        logger.error(f"ntcapi: Both route metadata calls failed: G={raw_g}, D={raw_d}")
+        raise raw_g
+
+    raw = []
+    if isinstance(raw_g, list):
+        raw.extend(raw_g)
+    elif isinstance(raw_g, Exception):
+        logger.warning(f"ntcapi: Outbound route metadata call failed: {raw_g}")
+
+    if isinstance(raw_d, list):
+        raw.extend(raw_d)
+    elif isinstance(raw_d, Exception):
+        logger.warning(f"ntcapi: Inbound route metadata call failed: {raw_d}")
+
     results = []
     seen: set[str] = set()
     for item in raw:
@@ -286,7 +310,9 @@ async def get_route_buses_ybs(
     path and the ntcapi internal HAT_ID (not the public hat_kodu string).
     Returns a list of BusPosition objects.
     """
-    from app.models.bus import BusPosition  # noqa: PLC0415 — avoid circular at module level
+    from app.models.bus import (
+        BusPosition,  # noqa: PLC0415 — avoid circular at module level
+    )
 
     payload = {
         "data": {
@@ -397,3 +423,21 @@ def _parse_son_konum(value: Any) -> tuple[float | None, float | None]:
         return lat, lon
     except (IndexError, ValueError):
         return None, None
+
+
+async def get_global_notices(session: aiohttp.ClientSession) -> list[dict[str, Any]]:
+    """Fetch global notices from the NTC API using otnGetNotice alias."""
+    now_ms = str(math.floor(time.time() * 1000))
+    data = {"did090101.notice.endtime": now_ms, "did090101.notice.starttime": now_ms}
+
+    try:
+        res = await _call_service(session, "otnGetNotice", data)
+        # NTC API usually returns the data array directly for this endpoint
+        if isinstance(res, list):
+            return res
+        elif isinstance(res, dict) and "data" in res:
+            return res.get("data", [])
+        return []
+    except Exception as e:
+        logger.warning(f"ntcapi: Failed to fetch global notices: {e}", exc_info=True)
+        raise

@@ -5,9 +5,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Path
+import aiohttp
+from cachetools import TTLCache
+from fastapi import APIRouter, Depends, Header, HTTPException, Path, Request
 
-from app.deps import get_session
+from app.deps import get_session, limiter
 from app.models.arac import (
     AracCaptchaResponse,
     AracMissionItem,
@@ -21,11 +23,18 @@ from app.models.bus import BusPosition
 from app.services.arac_client import AracApiError, AracClient
 from app.utils.coerce import (
     _as_text as _as_str,
+)
+from app.utils.coerce import (
     _to_bool as _as_bool,
+)
+from app.utils.coerce import (
     _to_int as _as_int,
 )
 
 router = APIRouter()
+
+# Store cookies for captcha flows (max 1000 items, TTL 10 minutes)
+_captcha_cookies = TTLCache(maxsize=1000, ttl=600)
 
 
 def _status_from_arac_error(exc: AracApiError, fallback: int = 502) -> int:
@@ -148,37 +157,74 @@ def _require_arac_session_headers(
 
 
 @router.post("/session/captcha", response_model=AracCaptchaResponse)
-async def get_arac_captcha() -> AracCaptchaResponse:
-    client = AracClient(get_session())
-    try:
-        payload = await client.get_captcha()
-    except AracApiError as exc:
-        raise HTTPException(_status_from_arac_error(exc), detail=str(exc)) from exc
+@limiter.limit("15/minute")
+async def get_arac_captcha(request: Request) -> AracCaptchaResponse:
+    """Fetch a captcha challenge image to initialize an ARAC session.
+
+    Returns a unique `captchaId` and a base64 encoded image string. The client must
+    solve this captcha and pass the answer to the `/session/create` endpoint.
+    """
+    connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
+    async with aiohttp.ClientSession(connector=connector) as temp_session:
+        client = AracClient(temp_session)
+        try:
+            payload = await client.get_captcha()
+        except AracApiError as exc:
+            raise HTTPException(_status_from_arac_error(exc), detail=str(exc)) from exc
+
+        captcha_id = payload["captchaId"]
+        cookies_dict = {c.key: c.value for c in temp_session.cookie_jar}
+        _captcha_cookies[captcha_id] = cookies_dict
 
     return AracCaptchaResponse(
-        captchaId=payload["captchaId"],
+        captchaId=captcha_id,
         captchaImageBase64=payload["captchaImage"],
     )
 
 
 @router.post("/session/getpicture", response_model=AracCaptchaResponse)
-async def get_arac_captcha_picture() -> AracCaptchaResponse:
-    """Alias for captcha challenge fetch, kept for client workflow clarity."""
-    return await get_arac_captcha()
+@limiter.limit("15/minute")
+async def get_arac_captcha_picture(request: Request) -> AracCaptchaResponse:
+    """Alias for `/session/captcha` (Fetch Captcha).
+
+    Kept for backward compatibility and client workflow clarity.
+    """
+    return await get_arac_captcha(request)
 
 
 @router.post("/session/create", response_model=AracSessionCreateResponse)
+@limiter.limit("15/minute")
 async def create_arac_session(
+    request: Request,
     payload: AracSessionCreateRequest,
 ) -> AracSessionCreateResponse:
-    client = AracClient(get_session())
-    try:
-        session = await client.create_session(
-            captcha_id=payload.captchaId,
-            captcha_answer=payload.captchaAnswer,
+    """Create a new ARAC session by submitting a solved captcha.
+
+    Takes the `captchaId` and the user's `captchaAnswer`. If successful, returns
+    a `sessionId` and `sessionKey` which are required in the headers of all
+    subsequent authenticated ARAC requests.
+    """
+    if payload.captchaId not in _captcha_cookies:
+        raise HTTPException(
+            status_code=400,
+            detail="Captcha session not found or expired. Please request a new captcha.",
         )
-    except AracApiError as exc:
-        raise HTTPException(_status_from_arac_error(exc), detail=str(exc)) from exc
+    cookies_dict = _captcha_cookies.get(payload.captchaId)
+    connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
+    async with aiohttp.ClientSession(
+        connector=connector,
+        cookies=cookies_dict,  # pyright: ignore[reportArgumentType]
+    ) as temp_session:
+        client = AracClient(temp_session)
+        try:
+            session = await client.create_session(
+                captcha_id=payload.captchaId,
+                captcha_answer=payload.captchaAnswer,
+            )
+            # Remove cookies after successful use
+            _captcha_cookies.pop(payload.captchaId, None)
+        except AracApiError as exc:
+            raise HTTPException(_status_from_arac_error(exc), detail=str(exc)) from exc
 
     return AracSessionCreateResponse(
         sessionId=session["sessionId"],
@@ -187,17 +233,26 @@ async def create_arac_session(
 
 
 @router.post("/session/response", response_model=AracSessionCreateResponse)
+@limiter.limit("15/minute")
 async def respond_arac_captcha(
+    request: Request,
     payload: AracSessionCreateRequest,
 ) -> AracSessionCreateResponse:
-    """Alias for captcha response submission endpoint."""
-    return await create_arac_session(payload)
+    """Alias for `/session/create` (Submit Captcha Answer).
+
+    Kept for backward compatibility and client workflow clarity.
+    """
+    return await create_arac_session(request, payload)
 
 
 @router.get("/fleet", response_model=list[BusPosition])
 async def get_arac_fleet(
     credentials: tuple[str, str] = Depends(_require_arac_session_headers),
 ) -> list[BusPosition]:
+    """Get a complete snapshot of the fleet from the authenticated ARAC API.
+
+    Requires active ARAC session credentials in the headers (`X-Arac-Session-Id` and `X-Arac-Session-Key`).
+    """
     session_id, session_key = credentials
     client = AracClient(get_session())
     try:
@@ -211,6 +266,10 @@ async def get_arac_bus(
     kapino: str = Path(..., pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,39}$"),
     credentials: tuple[str, str] = Depends(_require_arac_session_headers),
 ) -> BusPosition:
+    """Get the live profile and position of a single bus from the ARAC API.
+
+    Requires active ARAC session credentials in the headers (`X-Arac-Session-Id` and `X-Arac-Session-Key`).
+    """
     session_id, session_key = credentials
     client = AracClient(get_session())
     try:
@@ -226,6 +285,10 @@ async def get_arac_missions(
     kapino: str = Path(..., pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,39}$"),
     credentials: tuple[str, str] = Depends(_require_arac_session_headers),
 ) -> AracMissionsResponse:
+    """Get the daily mission timeline (assignments and route history) for a specific bus.
+
+    Requires active ARAC session credentials in the headers (`X-Arac-Session-Id` and `X-Arac-Session-Key`).
+    """
     session_id, session_key = credentials
     client = AracClient(get_session())
     try:
@@ -249,6 +312,11 @@ async def get_arac_route_stops(
     route_id: str = Path(..., pattern=r"^\d{1,10}$"),
     credentials: tuple[str, str] = Depends(_require_arac_session_headers),
 ) -> list[AracRouteStop]:
+    """Get the ordered list of stops for a specific route ID from the ARAC API.
+
+    Note that `route_id` is the internal numeric ID (e.g., 1234), not the hat_kodu (e.g., 500T).
+    Requires active ARAC session credentials in the headers (`X-Arac-Session-Id` and `X-Arac-Session-Key`).
+    """
     session_id, session_key = credentials
     client = AracClient(get_session())
     try:

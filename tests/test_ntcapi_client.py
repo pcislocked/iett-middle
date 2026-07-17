@@ -11,6 +11,7 @@ import aiohttp
 import pytest
 from aioresponses import aioresponses
 
+import app.services.ntcapi_client as _ntc_mod
 from app.services.ntcapi_client import (
     NtcApiError,
     _parse_son_konum,
@@ -23,8 +24,6 @@ from app.services.ntcapi_client import (
     get_stop_arrivals,
     get_timetable,
 )
-import app.services.ntcapi_client as _ntc_mod
-
 
 _TOKEN_URL = "https://ntcapi.iett.istanbul/oauth2/v2/auth"
 _SERVICE_URL = "https://ntcapi.iett.istanbul/service"
@@ -333,7 +332,7 @@ class TestGetRouteStops:
             result = await get_route_stops("500T", "G", session)
         assert result == []
 
-    async def test_falls_back_to_largest_variant_when_no_d0(
+    async def test_returns_all_variant_stops_combined(
         self, session: aiohttp.ClientSession
     ) -> None:
         raw = [
@@ -366,8 +365,8 @@ class TestGetRouteStops:
             _mock_token(m)
             m.post(_SERVICE_URL, payload=raw)  # type: ignore[reportUnknownMemberType]
             result = await get_route_stops("500T", "G", session)
-        # D2 has 2 stops vs D1's 1 — should pick D2
-        assert len(result) == 2
+        # Should return all 3 stops from both variants
+        assert len(result) == 3
 
 
 # ---------------------------------------------------------------------------

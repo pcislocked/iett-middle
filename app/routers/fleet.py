@@ -79,7 +79,12 @@ async def get_fleet() -> list[dict[str, Any]]:
 
 @router.get("/meta", tags=["fleet"])
 async def get_fleet_meta() -> FleetMetaResponse:
-    """Lightweight status: bus count + last update timestamp."""
+    """Get lightweight fleet status.
+
+    Returns the total number of active buses currently tracked and the timestamp
+    of the last data refresh. Useful for quick health checks without downloading
+    the entire fleet payload.
+    """
 
     await ensure_fleet_fresh()
     updated = get_fleet_updated_at()
@@ -115,13 +120,12 @@ async def refresh_fleet() -> FleetRefreshResponse:
 
 @router.get("/{kapino}/detail", response_model=BusDetail)
 async def get_bus_detail(kapino: str) -> dict[str, Any]:
-    """Single bus with resolved route code + ordered stop list in one call.
+    """Get rich details for a single bus, including its route stops.
 
-    ``resolved_route_code`` uses the live ``route_code`` when available; falls
-    back to the last route seen for this kapino since server startup so that
-    parked / nightly-service buses still show their route.
-    ``route_stops`` is fetched from cache or ntcapi so the client can draw a
-    route polyline without a second round-trip.
+    Resolves the bus's current route code (falling back to its last known route
+    if parked or offline) and fetches the ordered list of stops for that route.
+    This allows clients to immediately draw the bus and its route path without
+    making secondary API calls.
     """
 
     await ensure_fleet_fresh()
@@ -157,7 +161,11 @@ async def get_bus_detail(kapino: str) -> dict[str, Any]:
 
 @router.get("/{kapino}", response_model=BusPositionWithTrail)
 async def get_bus(kapino: str) -> dict[str, Any]:
-    """Single bus live position + trail by door number (e.g. C-325)."""
+    """Get the live position and trail of a single bus.
+
+    Looks up a bus by its door number (e.g., 'C-325') from the in-memory fleet store
+    and returns its current coordinates along with a 5-minute historical trail.
+    """
 
     await ensure_fleet_fresh()
     snapshot = get_fleet_snapshot()

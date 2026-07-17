@@ -15,7 +15,8 @@ if sys.platform == "win32":
 # Clear cache fixture
 # ---------------------------------------------------------------------------
 import pytest
-from app.services.cache import _store, _inflight
+
+from app.services.cache import _inflight, _store
 
 
 @pytest.fixture(autouse=True)

@@ -2,6 +2,22 @@
 
 from __future__ import annotations
 
+from app.services.iett_parser import (
+    parse_all_fleet_xml,
+    parse_all_stops_json,
+    parse_announcements_xml,
+    parse_garages_xml,
+    parse_route_fleet_xml,
+    parse_route_metadata_json,
+    parse_route_schedule_xml,
+    parse_route_search_results,
+    parse_route_stops_html,
+    parse_route_stops_xml,
+    parse_routes_from_html,
+    parse_search_results,
+    parse_stop_arrivals_html,
+    parse_stop_detail_xml,
+)
 from tests.conftest import (
     ALL_STOPS_XML,
     ANNOUNCEMENTS_XML,
@@ -19,23 +35,6 @@ from tests.conftest import (
     SEARCH_JSON,
     STOP_DETAIL_XML,
 )
-from app.services.iett_parser import (
-    parse_all_fleet_xml,
-    parse_all_stops_json,
-    parse_announcements_xml,
-    parse_garages_xml,
-    parse_route_fleet_xml,
-    parse_route_metadata_json,
-    parse_route_schedule_xml,
-    parse_route_search_results,
-    parse_route_stops_html,
-    parse_route_stops_xml,
-    parse_routes_from_html,
-    parse_search_results,
-    parse_stop_arrivals_html,
-    parse_stop_detail_xml,
-)
-
 
 # ---------------------------------------------------------------------------
 # Fleet parsers

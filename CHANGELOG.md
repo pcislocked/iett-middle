@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.0] - 2026-07-17
+
+### Added
+- **Batch Disruption Announcements:** Implemented a new `/v1/routes/announcements/batch` endpoint to batch and fetch active announcements concurrently across multiple routes. This avoids N+1 database/API round-trips from clients.
+- **Variant Stop & Route Indexing:** Extended the in-memory stops indexer in `deps.py` to index stops by sub-route variant code, providing variant-based filtering for arrivals and live positions.
+
+### Fixed
+- **In-Memory Cache Synchronization:** Swapped block-level locks and introduced `LazyLock` synchronization in `app/services/cache.py` to handle concurrent cache fetches safely in memory.
+- **Sweeper Resilience:** Added exponential backoff retry policies to the persistent background cache sweeper daemon and stop indexer loops, preventing silent task termination.
+- **Ruff & Lint Cleanups:** Executed automatic formatting and cleared unused imports to maintain clean import scopes and standard codebase styling.
+
+---
+
 ## [0.3.25] - 2026-05-30
 
 ### Fixed
