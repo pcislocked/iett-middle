@@ -30,7 +30,11 @@ router = APIRouter()
 
 @router.get("/search", response_model=list[RouteSearchResult])
 async def search_routes(q: str = Query(..., min_length=1)):
-    """Search routes by name or code (e.g. '14M', 'kadikoy')."""
+    """Search for routes by code or name.
+    
+    Returns matching routes. You can search by route code (e.g., '14M') or 
+    destination name (e.g., 'kadikoy').
+    """
     key = f"routes:search:{q.lower()}"
 
     async def _fetch():
@@ -53,10 +57,12 @@ async def search_routes(q: str = Query(..., min_length=1)):
 @router.get("/{hat_kodu}", response_model=list[RouteMetadata])
 async def get_route_metadata(hat_kodu: str):
     hat_kodu = hat_kodu.upper().strip()
-    """Route variant/direction metadata.
+    """Get metadata for a specific route.
 
-    ntcapi ``mainGetLine`` is the primary source; IETT SOAP ``GetAllRoute``
-    is the fallback.
+    Returns the variants and directions (Gidiş/Dönüş) for the route, including their endpoints.
+    
+    - Primary source: NTCAPI `mainGetLine`.
+    - Fallback: IETT SOAP `GetAllRoute`.
     """
     key = f"routes:meta:{hat_kodu}"
 
@@ -94,11 +100,13 @@ async def get_route_metadata(hat_kodu: str):
 @router.get("/{hat_kodu}/buses", response_model=list[BusPosition])
 async def get_route_buses(hat_kodu: str):
     hat_kodu = hat_kodu.upper().strip()
-    """GPS positions of buses on a route.
+    """Get live GPS positions of all buses currently operating on a route.
 
-    Primary: ntcapi ybs point-passing/{hat_id} — includes stop_sequence per bus.
-    Secondary: IETT GetHatOtoKonum_json SOAP.
-    Fallback: filters in-memory fleet store by route_code (stale-while-revalidate).
+    Returns a list of buses on the route, including their coordinates, door numbers, and next stops.
+
+    - Primary source: NTCAPI `point-passing` (includes stop sequence).
+    - Secondary source: IETT SOAP `GetHatOtoKonum_json`.
+    - Fallback: Filters the global in-memory fleet store.
     """
     from app.deps import ensure_fleet_fresh, get_buses_by_route  # noqa: PLC0415
 
@@ -171,10 +179,12 @@ async def get_route_buses(hat_kodu: str):
 @router.get("/{hat_kodu}/stops", response_model=list[RouteStop])
 async def get_route_stops(hat_kodu: str):
     hat_kodu = hat_kodu.upper().strip()
-    """Ordered stop list for a route with coordinates.
+    """Get the ordered sequence of stops for a route.
 
-    ntcapi ``mainGetRoute`` is the primary source (fetches both directions);
-    IETT SOAP ``GetHatDuraklari`` is the fallback.
+    Returns the complete list of stops for both directions (Gidiş/Dönüş) in their correct order.
+
+    - Primary source: NTCAPI `mainGetRoute`.
+    - Fallback: IETT SOAP `GetHatDuraklari`.
     """
     key = f"routes:stops:{hat_kodu}"
 
@@ -245,10 +255,13 @@ async def get_route_stops(hat_kodu: str):
 @router.get("/{hat_kodu}/schedule", response_model=list[ScheduledDeparture])
 async def get_route_schedule(hat_kodu: str):
     hat_kodu = hat_kodu.upper().strip()
-    """Planned departure times for a route (all day types).
+    """Get the official timetable schedule for a route.
 
-    ntcapi ``akyolbilGetTimeTable`` is the primary source;
-    IETT SOAP is the fallback.
+    Returns the planned departure times from the origin stops for all day types 
+    (Weekdays, Saturdays, Sundays).
+
+    - Primary source: NTCAPI timetable.
+    - Fallback: IETT SOAP timetable.
     """
     key = f"routes:schedule:{hat_kodu}"
 

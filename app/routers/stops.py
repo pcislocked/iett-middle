@@ -37,7 +37,10 @@ def _haversine_m(
 
 @router.get("/search", response_model=list[StopSearchResult])
 async def search_stops(q: str = Query(..., min_length=2)):
-    """Search stops by name."""
+    """Search for stops by name.
+    
+    Returns a list of matching stops. Minimum query length is 2 characters.
+    """
     key = f"stops:search:{q.lower()}"
 
     async def _fetch():
@@ -64,11 +67,13 @@ async def nearby_stops(
     radius: float = Query(default=500, ge=50, le=3000),
     limit: int = Query(default=15, ge=5, le=50),
 ):
-    """Stops within *radius* metres of (lat, lon), sorted by distance.
+    """Find nearby stops within a given radius.
 
-    ntcapi ``mainGetBusStopNearby`` is the primary source.  Falls back to
-    the in-memory spatial index populated at startup.
-    Returns up to *limit* results.
+    Returns a list of stops within `radius` meters of the provided `(lat, lon)` coordinates, 
+    sorted by distance (closest first). 
+    
+    - Primary source: Live NTCAPI nearby lookup.
+    - Fallback: Local in-memory spatial index (R-Tree) populated at server startup.
     """
     session = get_session()
 
@@ -138,7 +143,11 @@ async def nearby_stops(
 @router.get("/{dcode}/arrivals/raw")
 async def get_arrivals_raw(dcode: str):
     dcode = dcode.strip()
-    """Return the raw HTML from IETT GetStationInfo â€” debug only."""
+    """Return the raw HTML from IETT GetStationInfo (Internal/Debug).
+    
+    Provides the unparsed HTML payload directly from the legacy IETT stop arrival system.
+    Primarily used for debugging parser issues.
+    """
     client = IettClient(get_session())
     try:
         html = await client._get_text(
@@ -155,11 +164,14 @@ async def get_arrivals_raw(dcode: str):
 @router.get("/{dcode}/arrivals", response_model=list[Arrival])
 async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
     dcode = dcode.strip()
-    """Live ETAs at a stop, sourced from ntcapi ybs (has kapino + live location).
+    """Get live bus arrivals (ETAs) for a specific stop.
 
-    Falls back to the legacy IETT HTML endpoint if ntcapi is unavailable.
-    All sources are normalised to :class:`~app.models.bus.Arrival` via the
-    canonical data layer.
+    Fetches real-time estimated arrival times for all buses approaching the stop.
+    Optionally, you can filter the arrivals by passing a `via` stop code to only see buses 
+    that will eventually pass through that destination stop.
+
+    - Primary source: NTCAPI (includes door numbers `kapino` and live coordinates).
+    - Fallback: Legacy IETT HTML endpoint (no coordinates, basic ETAs only).
     """
     key = f"stops:arrivals:{dcode}" + (f":via:{via}" if via else "")
 
@@ -281,7 +293,10 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
 @router.get("/{dcode}/routes", response_model=list[str])
 async def get_routes_at_stop(dcode: str):
     dcode = dcode.strip()
-    """All route codes that pass through a stop."""
+    """Get all routes passing through a stop.
+    
+    Returns a simple list of route codes (e.g., `["14M", "500T"]`) that service this stop.
+    """
     key = f"stops:routes:{dcode}"
 
     async def _fetch():
@@ -304,7 +319,10 @@ async def get_routes_at_stop(dcode: str):
 @router.get("/{dcode}", response_model=StopDetail)
 async def get_stop_detail(dcode: str):
     dcode = dcode.strip()
-    """Stop name and coordinates (from search + route stop lookup). Long-cached."""
+    """Get basic details for a specific stop.
+    
+    Returns the exact name and geographic coordinates of the stop. This data is heavily cached.
+    """
     key = f"stops:detail:{dcode}"
 
     async def _fetch():
