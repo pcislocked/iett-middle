@@ -223,7 +223,8 @@ async def get_route_stops(
 
     all_stops = []
     for variant_stops in variants.values():
-        all_stops.extend(variant_stops)
+        sorted_variant = sorted(variant_stops, key=lambda s: s["sequence"])
+        all_stops.extend(sorted_variant)
     return all_stops
 
 
