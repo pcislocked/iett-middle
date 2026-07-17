@@ -62,7 +62,10 @@ Sistem Durumu → http://localhost:8000/health
 
 ```
 GET /v1/fleet                                 tüm aktif otobüsler (~7k kayıt, 15s önbellek)
-GET /v1/fleet/{kapino}                        kapı numarasına göre tek bir otobüs
+GET /v1/fleet/meta                            hafif filo durumu: otobüs sayısı + son güncelleme zamanı
+POST /v1/fleet/refresh                        filo verilerini anında yeniden çekmeyi tetikle
+GET /v1/fleet/{kapino}                        kapı numarasına göre tek bir otobüsün konumu ve izi
+GET /v1/fleet/{kapino}/detail                 kapı numarasına göre tek otobüs, çözümlenmiş hat kodu ve durak listesi
 
 POST /v1/arac/session/captcha                 captcha doğrulama görselini al
 POST /v1/arac/session/getpicture              captcha görseli almak için alias
@@ -74,15 +77,24 @@ GET /v1/arac/fleet/{kapino}/missions          ARAÇ görev zaman çizelgesi (otu
 GET /v1/arac/routes/{route_id}/stops          ARAÇ hat durakları (oturum başlıkları gerektirir)
 
 GET /v1/stops/search?q={name}                 durak arama
+GET /v1/stops/nearby?lat={lat}&lon={lon}&radius={r} yakındaki duraklar
+GET /v1/stops/{dcode}                         durak adı ve koordinatları (durak detayı)
 GET /v1/stops/{dcode}/arrivals                bir duraktaki canlı tahmini varışlar (20s önbellek)
 GET /v1/stops/{dcode}/arrivals?via={dcode2}   dcode2 durağından da geçen otobüslere göre filtrelenmiş varışlar
 GET /v1/stops/{dcode}/routes                  bir duraktan geçen tüm hat kodları
+GET /v1/stops/{dcode}/announcements           durak bazlı ve hattan gelen aktif duyuruların birleşimi
 
 GET /v1/routes/search?q={name}                hat arama (örn: 14M)
+GET /v1/routes/{hat_kodu}                     hat varyant ve yön metaverileri
 GET /v1/routes/{hat_kodu}/buses               bir hattaki otobüslerin canlı GPS konumları (15s önbellek)
 GET /v1/routes/{hat_kodu}/stops               koordinatlarla birlikte sıralı durak listesi (24s önbellek)
 GET /v1/routes/{hat_kodu}/schedule            planlanan kalkış saatleri (1s önbellek)
 GET /v1/routes/{hat_kodu}/announcements       aktif aksama uyarıları (5d önbellek)
+GET /v1/routes/announcements/batch?routes={h1,h2} birden fazla hat için aksama duyurularını toplu al
+
+GET /v1/announcements/global                  önbelleğe alınmış genel sistem duyuruları
+
+GET /v1/garages                               tüm İETT otobüs garaj konumları (24sa önbellek)
 
 GET /v1/traffic/index                         şehir geneli % yoğunluk (30s önbellek)
 GET /v1/traffic/segments                      yol segmenti hızları (30s önbellek)
@@ -181,7 +193,10 @@ Copy `.env.example` to `.env` and edit as needed:
 
 ```
 GET /v1/fleet                                 all active buses (~7k records, cached 15s)
-GET /v1/fleet/{kapino}                        single bus by door number
+GET /v1/fleet/meta                            lightweight fleet status: bus count + last update timestamp
+POST /v1/fleet/refresh                        queue an immediate out-of-band fleet re-poll
+GET /v1/fleet/{kapino}                        single bus live position + trail by door number
+GET /v1/fleet/{kapino}/detail                 single bus with resolved route code + ordered stop list in one call
 
 POST /v1/arac/session/captcha                 fetch captcha challenge image
 POST /v1/arac/session/getpicture              alias for captcha challenge fetch
@@ -193,15 +208,24 @@ GET /v1/arac/fleet/{kapino}/missions          ARAC mission timeline (requires se
 GET /v1/arac/routes/{route_id}/stops          ARAC route stops (requires session headers)
 
 GET /v1/stops/search?q={name}                 stop search
+GET /v1/stops/nearby?lat={lat}&lon={lon}&radius={r} nearby stops
+GET /v1/stops/{dcode}                         stop detail (name and coordinates)
 GET /v1/stops/{dcode}/arrivals                live ETAs at a stop (cached 20s)
 GET /v1/stops/{dcode}/arrivals?via={dcode2}   ETAs filtered to buses also passing dcode2
 GET /v1/stops/{dcode}/routes                  all route codes through a stop
+GET /v1/stops/{dcode}/announcements           traffic and route announcements for a specific stop
 
 GET /v1/routes/search?q={name}                route search (e.g. 14M)
+GET /v1/routes/{hat_kodu}                     route variant/direction metadata
 GET /v1/routes/{hat_kodu}/buses               live GPS of buses on a route (cached 15s)
 GET /v1/routes/{hat_kodu}/stops               ordered stop list with coords (cached 24h)
 GET /v1/routes/{hat_kodu}/schedule            planned departures (cached 1h)
 GET /v1/routes/{hat_kodu}/announcements       active disruption alerts (cached 5m)
+GET /v1/routes/announcements/batch?routes={h1,h2} get disruption announcements for multiple routes
+
+GET /v1/announcements/global                  cached global notices/announcements
+
+GET /v1/garages                               all IETT bus garage locations (cached 24h)
 
 GET /v1/traffic/index                         city-wide % congestion (cached 30s)
 GET /v1/traffic/segments                      per-road segment speeds (cached 30s)
