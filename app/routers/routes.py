@@ -428,7 +428,9 @@ async def get_route_announcements(hat_kodu: str):
                                     stop_anns.append(
                                         {
                                             "route_code": hat_kodu,
-                                            "title": "Güzergah Duyurusu",
+                                            "route_name": "",
+                                            "type": "Güzergah Duyurusu",
+                                            "updated_at": item.get("GUNCELLEME_SAATI", ""),
                                             "message": sub_msg,
                                         }
                                     )

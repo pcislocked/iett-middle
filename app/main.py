@@ -8,11 +8,15 @@ import time
 from contextlib import asynccontextmanager
 
 import aiohttp
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.deps import cancel_fleet_refresh_task, close_session, set_session
-from app.routers import arac, fleet, garages, routes, stops, traffic
+from app.routers import arac, fleet, garages, routes, stops, traffic, announcements
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from app.deps import limiter
 
 logger = logging.getLogger(__name__)
 _outgoing = logging.getLogger("iett.outgoing")
@@ -85,6 +89,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     from app.services.cache import sweep_forever  # noqa: PLC0415
     from app.services.fleet_poller import refresh_fleet_forever  # noqa: PLC0415
     from app.services.stop_indexer import index_stops_forever  # noqa: PLC0415
+    from app.services.notice_poller import notice_poll_loop  # noqa: PLC0415
 
     connector = aiohttp.TCPConnector(
         resolver=aiohttp.ThreadedResolver() if sys.platform == "win32" else None,
@@ -106,12 +111,19 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     fleet_refresher = asyncio.create_task(refresh_fleet_forever(fleet_refresh_interval))
     stop_indexer = asyncio.create_task(index_stops_forever())
     cache_sweeper = asyncio.create_task(sweep_forever())
+    notice_poller = asyncio.create_task(notice_poll_loop())
 
     yield
 
     cache_sweeper.cancel()
     try:
         await cache_sweeper
+    except asyncio.CancelledError:
+        pass
+
+    notice_poller.cancel()
+    try:
+        await notice_poller
     except asyncio.CancelledError:
         pass
 
@@ -138,7 +150,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
 app = FastAPI(
     title="iett-middle",
     description="Smart caching proxy for IETT Istanbul public transit APIs.",
-    version="0.3.31",
+    version="0.4.0",
     lifespan=lifespan,
 )
 
@@ -147,7 +159,33 @@ app.add_middleware(
     allow_origins=["*"],
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
+    expose_headers=["X-IETT-Updated-At"],
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
+@app.middleware("http")
+async def add_cache_timestamp_header(request: Request, call_next):
+    from app.services.cache import cache_hit_time
+    import datetime
+
+    container = {}
+    token = cache_hit_time.set(container)
+    try:
+        response = await call_next(request)
+        hit_time = container.get("hit_time")
+        if hit_time is None:
+            val = cache_hit_time.get()
+            if isinstance(val, (int, float)):
+                hit_time = val
+        if hit_time is not None:
+            iso_time = datetime.datetime.fromtimestamp(hit_time, tz=datetime.timezone.utc).isoformat()
+            response.headers["X-IETT-Updated-At"] = iso_time
+        return response
+    finally:
+        cache_hit_time.reset(token)
 
 app.include_router(stops.router, prefix="/v1/stops", tags=["stops"])
 app.include_router(routes.router, prefix="/v1/routes", tags=["routes"])
@@ -155,6 +193,7 @@ app.include_router(fleet.router, prefix="/v1/fleet", tags=["fleet"])
 app.include_router(arac.router, prefix="/v1/arac", tags=["arac"])
 app.include_router(garages.router, prefix="/v1/garages", tags=["garages"])
 app.include_router(traffic.router, prefix="/v1/traffic", tags=["traffic"])
+app.include_router(announcements.router, prefix="/v1/announcements", tags=["announcements"])
 
 
 @app.get("/health", tags=["health"])

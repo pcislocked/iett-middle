@@ -61,7 +61,8 @@ async def search_stops(q: str = Query(..., min_length=2)):
 async def nearby_stops(
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
-    radius: float = Query(default=500, ge=50, le=2000),
+    radius: float = Query(default=500, ge=50, le=3000),
+    limit: int = Query(default=15, ge=5, le=50),
 ):
     """Stops within *radius* metres of (lat, lon), sorted by distance.
 
@@ -80,7 +81,7 @@ async def nearby_stops(
             normalizers.stops.from_ntcapi_nearby_processed(r) for r in raw_stops
         ]
         nearby_results: list[NearbyStop] = []
-        for c in canonical[:30]:
+        for c in canonical:
             try:
                 latitude = float(c["lat"])  # type: ignore[arg-type]
                 longitude = float(c["lon"])  # type: ignore[arg-type]
@@ -90,9 +91,15 @@ async def nearby_stops(
                     c.get("stop_code"),
                 )
                 continue
+                
+            stop_code = str(c.get("stop_code") or "").strip()
+            # Ignore invalid stops (e.g. -1523 or non-numeric station codes from Marmaray/Metro)
+            if not stop_code.isdigit() or len(stop_code) < 4:
+                continue
+
             nearby_results.append(
                 NearbyStop(
-                    stop_code=c.get("stop_code") or "",
+                    stop_code=stop_code,
                     stop_name=c.get("stop_name") or "",
                     latitude=latitude,
                     longitude=longitude,
@@ -103,6 +110,10 @@ async def nearby_stops(
                     else _haversine_m(lat, lon, latitude, longitude),
                 )
             )
+            
+            if len(nearby_results) >= limit:
+                break
+                
         return nearby_results
     except NtcApiError as exc:
         logger.warning(
@@ -120,7 +131,7 @@ async def nearby_stops(
             503, detail="Stop index not ready yet â€” try again in a moment"
         )
     results = _get_nearby(lat, lon, radius)
-    return results[:30]
+    return results[:limit]
 
 
 @router.get("/{dcode}/arrivals/raw")

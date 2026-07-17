@@ -4,11 +4,23 @@ from __future__ import annotations
 
 import asyncio
 import time
+import contextvars
 from typing import Any, Callable, Awaitable
 
 from app.utils.lock import LazyLock
 
-_store: dict[str, tuple[Any, float, float]] = {}
+cache_hit_time = contextvars.ContextVar("cache_hit_time", default=None)
+_DYNAMIC_PREFIXES = ("stops:arrivals", "routes:announcements", "traffic")
+
+def _set_cache_hit_time(val: float) -> None:
+    container = cache_hit_time.get()
+    if isinstance(container, dict):
+        if container.get("hit_time") is None:
+            container["hit_time"] = val
+    elif container is None:
+        cache_hit_time.set(val)
+
+_store: dict[str, tuple[Any, float, float, float]] = {}
 _lock = LazyLock()
 _inflight: dict[str, asyncio.Future] = {}
 
@@ -29,15 +41,19 @@ async def _cache_get_internal(key: str) -> tuple[Any, bool] | None:
     async with _lock:
         entry = _store.get(key)
         if entry is not None:
-            value, fresh_exp, stale_exp = entry
+            value, fresh_exp, stale_exp, created_at = entry
             now = time.monotonic()
             if now < fresh_exp:
                 if len(_hits) < MAX_STATS_SIZE or ns in _hits:
                     _hits[ns] = _hits.get(ns, 0) + 1
+                if key.startswith(_DYNAMIC_PREFIXES):
+                    _set_cache_hit_time(created_at)
                 return (value, True)
             elif now < stale_exp:
                 if len(_hits) < MAX_STATS_SIZE or ns in _hits:
                     _hits[ns] = _hits.get(ns, 0) + 1
+                if key.startswith(_DYNAMIC_PREFIXES):
+                    _set_cache_hit_time(created_at)
                 return (value, False)
             # Expired
             _store.pop(key, None)
@@ -74,7 +90,7 @@ async def cache_set(
         if len(_store) >= MAX_CACHE_SIZE:
             # Sweep expired
             now = time.monotonic()
-            expired = [k for k, (_, _, s_exp) in _store.items() if now >= s_exp]
+            expired = [k for k, (_, _, s_exp, _) in _store.items() if now >= s_exp]
             for k in expired:
                 _store.pop(k, None)
 
@@ -87,8 +103,11 @@ async def cache_set(
                     _store.pop(k, None)
 
         now = time.monotonic()
+        now_time = time.time()
         _store.pop(key, None)
-        _store[key] = (value, now + actual_ttl, now + actual_ttl + actual_stale)
+        _store[key] = (value, now + actual_ttl, now + actual_ttl + actual_stale, now_time)
+        if key.startswith(_DYNAMIC_PREFIXES):
+            _set_cache_hit_time(now_time)
 
 
 class SkipCache(Exception):
@@ -201,7 +220,7 @@ async def cache_delete(key: str) -> bool:
         existed = False
         entry = _store.get(key)
         if entry is not None:
-            _, _, stale_exp = entry
+            _, _, stale_exp, _ = entry
             existed = time.monotonic() < stale_exp
         _store.pop(key, None)
         return existed
@@ -218,7 +237,7 @@ async def cache_invalidate_namespace(namespace: str) -> int:
         keys = [k for k in _store if k == namespace or k.startswith(prefix)]
         removed = 0
         for k in keys:
-            _, _, stale_exp = _store[k]
+            _, _, stale_exp, _ = _store[k]
             if now < stale_exp:
                 removed += 1
             _store.pop(k, None)
@@ -245,7 +264,7 @@ async def sweep_forever(interval: int = 60) -> None:
         try:
             async with _lock:
                 now = time.monotonic()
-                expired = [k for k, (_, _, s_exp) in _store.items() if now >= s_exp]
+                expired = [k for k, (_, _, s_exp, _) in _store.items() if now >= s_exp]
                 for k in expired:
                     _store.pop(k, None)
         except Exception:
@@ -256,7 +275,7 @@ async def sweep_forever(interval: int = 60) -> None:
 
 def get_cache_stats() -> dict[str, Any]:
     now = time.monotonic()
-    active = sum(1 for _, (_, _, s_exp) in _store.items() if now < s_exp)
+    active = sum(1 for _, (_, _, s_exp, _) in _store.items() if now < s_exp)
     return {
         "active_keys": active,
         "total_keys": len(_store),

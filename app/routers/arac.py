@@ -5,9 +5,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Path
+from fastapi import APIRouter, Depends, Header, HTTPException, Path, Request
 
-from app.deps import get_session
+from app.deps import get_session, limiter
 from app.models.arac import (
     AracCaptchaResponse,
     AracMissionItem,
@@ -24,8 +24,13 @@ from app.utils.coerce import (
     _to_bool as _as_bool,
     _to_int as _as_int,
 )
+import aiohttp
+from cachetools import TTLCache
 
 router = APIRouter()
+
+# Store cookies for captcha flows (max 1000 items, TTL 10 minutes)
+_captcha_cookies = TTLCache(maxsize=1000, ttl=600)
 
 
 def _status_from_arac_error(exc: AracApiError, fallback: int = 502) -> int:
@@ -148,37 +153,52 @@ def _require_arac_session_headers(
 
 
 @router.post("/session/captcha", response_model=AracCaptchaResponse)
-async def get_arac_captcha() -> AracCaptchaResponse:
-    client = AracClient(get_session())
-    try:
-        payload = await client.get_captcha()
-    except AracApiError as exc:
-        raise HTTPException(_status_from_arac_error(exc), detail=str(exc)) from exc
+@limiter.limit("15/minute")
+async def get_arac_captcha(request: Request) -> AracCaptchaResponse:
+    connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
+    async with aiohttp.ClientSession(connector=connector) as temp_session:
+        client = AracClient(temp_session)
+        try:
+            payload = await client.get_captcha()
+        except AracApiError as exc:
+            raise HTTPException(_status_from_arac_error(exc), detail=str(exc)) from exc
+
+        captcha_id = payload["captchaId"]
+        cookies_dict = {c.key: c.value for c in temp_session.cookie_jar}
+        _captcha_cookies[captcha_id] = cookies_dict
 
     return AracCaptchaResponse(
-        captchaId=payload["captchaId"],
+        captchaId=captcha_id,
         captchaImageBase64=payload["captchaImage"],
     )
 
 
 @router.post("/session/getpicture", response_model=AracCaptchaResponse)
-async def get_arac_captcha_picture() -> AracCaptchaResponse:
+@limiter.limit("15/minute")
+async def get_arac_captcha_picture(request: Request) -> AracCaptchaResponse:
     """Alias for captcha challenge fetch, kept for client workflow clarity."""
-    return await get_arac_captcha()
+    return await get_arac_captcha(request)
 
 
 @router.post("/session/create", response_model=AracSessionCreateResponse)
+@limiter.limit("15/minute")
 async def create_arac_session(
+    request: Request,
     payload: AracSessionCreateRequest,
 ) -> AracSessionCreateResponse:
-    client = AracClient(get_session())
-    try:
-        session = await client.create_session(
-            captcha_id=payload.captchaId,
-            captcha_answer=payload.captchaAnswer,
-        )
-    except AracApiError as exc:
-        raise HTTPException(_status_from_arac_error(exc), detail=str(exc)) from exc
+    cookies_dict = _captcha_cookies.get(payload.captchaId, {})
+    connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
+    async with aiohttp.ClientSession(connector=connector, cookies=cookies_dict) as temp_session:
+        client = AracClient(temp_session)
+        try:
+            session = await client.create_session(
+                captcha_id=payload.captchaId,
+                captcha_answer=payload.captchaAnswer,
+            )
+            # Remove cookies after successful use
+            _captcha_cookies.pop(payload.captchaId, None)
+        except AracApiError as exc:
+            raise HTTPException(_status_from_arac_error(exc), detail=str(exc)) from exc
 
     return AracSessionCreateResponse(
         sessionId=session["sessionId"],
@@ -187,11 +207,13 @@ async def create_arac_session(
 
 
 @router.post("/session/response", response_model=AracSessionCreateResponse)
+@limiter.limit("15/minute")
 async def respond_arac_captcha(
+    request: Request,
     payload: AracSessionCreateRequest,
 ) -> AracSessionCreateResponse:
     """Alias for captcha response submission endpoint."""
-    return await create_arac_session(payload)
+    return await create_arac_session(request, payload)
 
 
 @router.get("/fleet", response_model=list[BusPosition])
