@@ -221,13 +221,10 @@ async def get_route_stops(
     if not variants:
         return []
 
-    # Pick canonical variant: prefer _D0, else the one with the most stops
-    canonical_key = next((k for k in variants if k.endswith("_D0")), None)
-    if canonical_key is None:
-        canonical_key = max(variants, key=lambda k: len(variants[k]))
-
-    stops = sorted(variants[canonical_key], key=lambda s: s["sequence"])
-    return stops
+    all_stops = []
+    for variant_stops in variants.values():
+        all_stops.extend(variant_stops)
+    return all_stops
 
 
 async def get_route_metadata(
@@ -442,4 +439,4 @@ async def get_global_notices(session: aiohttp.ClientSession) -> list[dict[str, A
         return []
     except Exception as e:
         logger.warning(f"ntcapi: Failed to fetch global notices: {e}", exc_info=True)
-        return []
+        raise

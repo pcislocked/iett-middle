@@ -33,3 +33,8 @@ coverage.xml
 # Docker
 *.dockerignore
 !.dockerignore
+
+# SQLite
+data/*.db
+data/*.db-shm
+data/*.db-wal
