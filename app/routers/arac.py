@@ -198,7 +198,8 @@ async def create_arac_session(
     cookies_dict = _captcha_cookies.get(payload.captchaId)
     connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
     async with aiohttp.ClientSession(
-        connector=connector, cookies=cookies_dict  # pyright: ignore[reportArgumentType]
+        connector=connector,
+        cookies=cookies_dict,  # pyright: ignore[reportArgumentType]
     ) as temp_session:
         client = AracClient(temp_session)
         try:
