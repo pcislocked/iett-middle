@@ -7,3 +7,4 @@ cryptography>=42.0
 pydantic>=2.7
 pydantic-settings>=2.3
 slowapi>=0.1.9
+cachetools>=5.0
