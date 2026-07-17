@@ -356,15 +356,27 @@ async def fetch_filtered_announcements(route_list: set[str]) -> list[dict]:
 async def get_batch_announcements(
     routes: str = Query(..., description="Comma-separated route codes"),
 ):
-    """Get active disruption announcements for multiple routes at once."""
+    """Get active disruption announcements for multiple routes at once.
+
+    Fetches global IETT SOAP Duyurular announcements and filters them to
+    return only the notices that match the requested comma-separated list of
+    route codes (e.g. "?routes=14M,500T").
+    """
     route_list = {r.strip().upper() for r in routes.split(",") if r.strip()}
     return await fetch_filtered_announcements(route_list)
 
 
 @router.get("/{hat_kodu}/announcements", response_model=list[Announcement])
 async def get_route_announcements(hat_kodu: str):
+    """Active disruption and traffic announcements for a specific route.
+
+    This endpoint aggregates alerts from multiple sources to provide a complete picture of issues affecting a route.
+
+    **Merged Sources:**
+      1) **Route Disruptions:** Global system announcements filtered by this route (e.g., "GÜZERGAH DEĞİŞİKLİĞİ").
+      2) **Live Traffic Notices:** Real-time traffic alerts (e.g., "TRAFİK YOĞUNLUĞU") pulled dynamically for key stops along this route.
+    """
     hat_kodu = hat_kodu.upper().strip()
-    """Active disruption announcements for a route."""
     key = f"routes:announcements:{hat_kodu}"
 
     async def _fetch():

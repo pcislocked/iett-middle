@@ -332,9 +332,11 @@ async def get_stop_announcements(dcode: str):
     dcode = dcode.strip()
     """Live traffic and route announcements for a specific stop.
     
-    Merges:
-      1) Global route disruptions (from SOAP Duyurular.asmx) for all routes passing through this stop.
-      2) Stop-specific real-time traffic notices from MobiETT ybs stop-status.
+    This endpoint gives you all alerts that might affect a passenger waiting at this stop.
+
+    **Merged Sources:**
+      1) **Route Disruptions:** Global route disruptions for **all routes** passing through this stop.
+      2) **Stop Traffic:** Stop-specific real-time traffic/congestion notices (e.g., "TRAFİK YOĞUNLUĞU").
     """
     key = f"stops:announcements:{dcode}"
 
