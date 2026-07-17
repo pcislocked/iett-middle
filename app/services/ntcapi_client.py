@@ -251,13 +251,15 @@ async def get_route_metadata(
     raw_g, raw_d = await asyncio.gather(
         _call_service(session, "mainGetLine_basic", payload_g),
         _call_service(session, "mainGetLine_basic", payload_d),
-        return_exceptions=True
+        return_exceptions=True,
     )
-    
+
     raw = []
-    if isinstance(raw_g, list): raw.extend(raw_g)
-    if isinstance(raw_d, list): raw.extend(raw_d)
-    
+    if isinstance(raw_g, list):
+        raw.extend(raw_g)
+    if isinstance(raw_d, list):
+        raw.extend(raw_d)
+
     results = []
     seen: set[str] = set()
     for item in raw:
@@ -413,14 +415,12 @@ def _parse_son_konum(value: Any) -> tuple[float | None, float | None]:
     except (IndexError, ValueError):
         return None, None
 
+
 async def get_global_notices(session: aiohttp.ClientSession) -> list[dict[str, Any]]:
     """Fetch global notices from the NTC API using otnGetNotice alias."""
     now_ms = str(math.floor(time.time() * 1000))
-    data = {
-        "did090101.notice.endtime": now_ms,
-        "did090101.notice.starttime": now_ms
-    }
-    
+    data = {"did090101.notice.endtime": now_ms, "did090101.notice.starttime": now_ms}
+
     try:
         res = await _call_service(session, "otnGetNotice", data)
         # NTC API usually returns the data array directly for this endpoint

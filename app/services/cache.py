@@ -12,6 +12,7 @@ from app.utils.lock import LazyLock
 cache_hit_time = contextvars.ContextVar("cache_hit_time", default=None)
 _DYNAMIC_PREFIXES = ("stops:arrivals", "routes:announcements", "traffic")
 
+
 def _set_cache_hit_time(val: float) -> None:
     container = cache_hit_time.get()
     if isinstance(container, dict):
@@ -19,6 +20,7 @@ def _set_cache_hit_time(val: float) -> None:
             container["hit_time"] = val
     elif container is None:
         cache_hit_time.set(val)
+
 
 _store: dict[str, tuple[Any, float, float, float]] = {}
 _lock = LazyLock()
@@ -105,7 +107,12 @@ async def cache_set(
         now = time.monotonic()
         now_time = time.time()
         _store.pop(key, None)
-        _store[key] = (value, now + actual_ttl, now + actual_ttl + actual_stale, now_time)
+        _store[key] = (
+            value,
+            now + actual_ttl,
+            now + actual_ttl + actual_stale,
+            now_time,
+        )
         if key.startswith(_DYNAMIC_PREFIXES):
             _set_cache_hit_time(now_time)
 

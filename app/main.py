@@ -166,6 +166,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
+
 @app.middleware("http")
 async def add_cache_timestamp_header(request: Request, call_next):
     from app.services.cache import cache_hit_time
@@ -181,11 +182,14 @@ async def add_cache_timestamp_header(request: Request, call_next):
             if isinstance(val, (int, float)):
                 hit_time = val
         if hit_time is not None:
-            iso_time = datetime.datetime.fromtimestamp(hit_time, tz=datetime.timezone.utc).isoformat()
+            iso_time = datetime.datetime.fromtimestamp(
+                hit_time, tz=datetime.timezone.utc
+            ).isoformat()
             response.headers["X-IETT-Updated-At"] = iso_time
         return response
     finally:
         cache_hit_time.reset(token)
+
 
 app.include_router(stops.router, prefix="/v1/stops", tags=["stops"])
 app.include_router(routes.router, prefix="/v1/routes", tags=["routes"])
@@ -193,7 +197,9 @@ app.include_router(fleet.router, prefix="/v1/fleet", tags=["fleet"])
 app.include_router(arac.router, prefix="/v1/arac", tags=["arac"])
 app.include_router(garages.router, prefix="/v1/garages", tags=["garages"])
 app.include_router(traffic.router, prefix="/v1/traffic", tags=["traffic"])
-app.include_router(announcements.router, prefix="/v1/announcements", tags=["announcements"])
+app.include_router(
+    announcements.router, prefix="/v1/announcements", tags=["announcements"]
+)
 
 
 @app.get("/health", tags=["health"])

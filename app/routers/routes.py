@@ -430,7 +430,9 @@ async def get_route_announcements(hat_kodu: str):
                                             "route_code": hat_kodu,
                                             "route_name": "",
                                             "type": "Güzergah Duyurusu",
-                                            "updated_at": item.get("GUNCELLEME_SAATI", ""),
+                                            "updated_at": item.get(
+                                                "GUNCELLEME_SAATI", ""
+                                            ),
                                             "message": sub_msg,
                                         }
                                     )

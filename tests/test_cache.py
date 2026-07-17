@@ -54,7 +54,12 @@ class TestCacheGetSet:
         # Force expiry by backdating the entry
         key = "ns:exp"
         value, _, _, _ = cache_mod._store[key]
-        cache_mod._store[key] = (value, time.monotonic() - 1, time.monotonic() - 1, time.time())
+        cache_mod._store[key] = (
+            value,
+            time.monotonic() - 1,
+            time.monotonic() - 1,
+            time.time(),
+        )
         result = asyncio.run(cache_get(key))
         assert result is None
 
@@ -62,7 +67,12 @@ class TestCacheGetSet:
         asyncio.run(cache_set("ns:rm", "bye", ttl=60))
         key = "ns:rm"
         value, _, _, _ = cache_mod._store[key]
-        cache_mod._store[key] = (value, time.monotonic() - 1, time.monotonic() - 1, time.time())
+        cache_mod._store[key] = (
+            value,
+            time.monotonic() - 1,
+            time.monotonic() - 1,
+            time.time(),
+        )
         asyncio.run(cache_get(key))
         assert key not in cache_mod._store
 
@@ -126,7 +136,12 @@ class TestCacheStats:
         asyncio.run(cache_set("ns:old", "gone", ttl=60))
         key = "ns:old"
         value, _, _, _ = cache_mod._store[key]
-        cache_mod._store[key] = (value, time.monotonic() - 1, time.monotonic() - 1, time.time())
+        cache_mod._store[key] = (
+            value,
+            time.monotonic() - 1,
+            time.monotonic() - 1,
+            time.time(),
+        )
         stats = get_cache_stats()
         active_before = stats["active_keys"]
         # add a fresh entry to confirm overall count is correct
@@ -138,7 +153,12 @@ class TestCacheStats:
         asyncio.run(cache_set("ns:exp2", "stale", ttl=60))
         key = "ns:exp2"
         value, _, _, _ = cache_mod._store[key]
-        cache_mod._store[key] = (value, time.monotonic() - 1, time.monotonic() - 1, time.time())
+        cache_mod._store[key] = (
+            value,
+            time.monotonic() - 1,
+            time.monotonic() - 1,
+            time.time(),
+        )
         stats = get_cache_stats()
         # expired entry is still in _store until next get
         assert stats["total_keys"] >= 1
@@ -169,7 +189,12 @@ class TestCacheInvalidation:
     def test_cache_delete_expired_key_returns_false(self) -> None:
         asyncio.run(cache_set("ns:exp", "v", ttl=60))
         value, _, _, _ = cache_mod._store["ns:exp"]
-        cache_mod._store["ns:exp"] = (value, time.monotonic() - 1, time.monotonic() - 1, time.time())
+        cache_mod._store["ns:exp"] = (
+            value,
+            time.monotonic() - 1,
+            time.monotonic() - 1,
+            time.time(),
+        )
 
         removed = asyncio.run(cache_delete("ns:exp"))
         assert removed is False
@@ -397,7 +422,12 @@ class TestCacheEdgeCases:
         await cache_set("ns:sweep1", "v", ttl=0)
         key = "ns:sweep1"
         value, _, _, _ = cache_mod._store[key]
-        cache_mod._store[key] = (value, time.monotonic() - 1, time.monotonic() - 1, time.time())
+        cache_mod._store[key] = (
+            value,
+            time.monotonic() - 1,
+            time.monotonic() - 1,
+            time.time(),
+        )
 
         task = asyncio.create_task(cache_mod.sweep_forever(interval=0.01))
         await asyncio.sleep(0.05)

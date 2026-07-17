@@ -188,7 +188,9 @@ async def create_arac_session(
 ) -> AracSessionCreateResponse:
     cookies_dict = _captcha_cookies.get(payload.captchaId, {})
     connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
-    async with aiohttp.ClientSession(connector=connector, cookies=cookies_dict) as temp_session:
+    async with aiohttp.ClientSession(
+        connector=connector, cookies=cookies_dict
+    ) as temp_session:
         client = AracClient(temp_session)
         try:
             session = await client.create_session(

@@ -91,7 +91,7 @@ async def nearby_stops(
                     c.get("stop_code"),
                 )
                 continue
-                
+
             stop_code = str(c.get("stop_code") or "").strip()
             # Ignore invalid stops (e.g. -1523 or non-numeric station codes from Marmaray/Metro)
             if not stop_code.isdigit() or len(stop_code) < 4:
@@ -110,10 +110,10 @@ async def nearby_stops(
                     else _haversine_m(lat, lon, latitude, longitude),
                 )
             )
-            
+
             if len(nearby_results) >= limit:
                 break
-                
+
         return nearby_results
     except NtcApiError as exc:
         logger.warning(
