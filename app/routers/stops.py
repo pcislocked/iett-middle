@@ -38,7 +38,7 @@ def _haversine_m(
 @router.get("/search", response_model=list[StopSearchResult])
 async def search_stops(q: str = Query(..., min_length=2)):
     """Search for stops by name.
-    
+
     Returns a list of matching stops. Minimum query length is 2 characters.
     """
     key = f"stops:search:{q.lower()}"
@@ -69,9 +69,9 @@ async def nearby_stops(
 ):
     """Find nearby stops within a given radius.
 
-    Returns a list of stops within `radius` meters of the provided `(lat, lon)` coordinates, 
-    sorted by distance (closest first). 
-    
+    Returns a list of stops within `radius` meters of the provided `(lat, lon)` coordinates,
+    sorted by distance (closest first).
+
     - Primary source: Live NTCAPI nearby lookup.
     - Fallback: Local in-memory spatial index (R-Tree) populated at server startup.
     """

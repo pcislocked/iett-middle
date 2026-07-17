@@ -31,8 +31,8 @@ router = APIRouter()
 @router.get("/search", response_model=list[RouteSearchResult])
 async def search_routes(q: str = Query(..., min_length=1)):
     """Search for routes by code or name.
-    
-    Returns matching routes. You can search by route code (e.g., '14M') or 
+
+    Returns matching routes. You can search by route code (e.g., '14M') or
     destination name (e.g., 'kadikoy').
     """
     key = f"routes:search:{q.lower()}"

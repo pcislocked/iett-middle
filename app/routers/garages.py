@@ -18,8 +18,8 @@ _TTL = 86_400  # 24 h — garages almost never change
 @router.get("", response_model=list[Garage])
 async def list_garages():
     """Get all IETT bus garage locations.
-    
-    Returns a list of all bus garages/depots operated by IETT along with their 
+
+    Returns a list of all bus garages/depots operated by IETT along with their
     coordinates. This data changes very rarely and is cached for 24 hours.
     """
     cached = await cache_get(_CACHE_KEY)

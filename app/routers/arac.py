@@ -160,8 +160,8 @@ def _require_arac_session_headers(
 @limiter.limit("15/minute")
 async def get_arac_captcha(request: Request) -> AracCaptchaResponse:
     """Fetch a captcha challenge image to initialize an ARAC session.
-    
-    Returns a unique `captchaId` and a base64 encoded image string. The client must 
+
+    Returns a unique `captchaId` and a base64 encoded image string. The client must
     solve this captcha and pass the answer to the `/session/create` endpoint.
     """
     connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
@@ -186,7 +186,7 @@ async def get_arac_captcha(request: Request) -> AracCaptchaResponse:
 @limiter.limit("15/minute")
 async def get_arac_captcha_picture(request: Request) -> AracCaptchaResponse:
     """Alias for `/session/captcha` (Fetch Captcha).
-    
+
     Kept for backward compatibility and client workflow clarity.
     """
     return await get_arac_captcha(request)
@@ -199,9 +199,9 @@ async def create_arac_session(
     payload: AracSessionCreateRequest,
 ) -> AracSessionCreateResponse:
     """Create a new ARAC session by submitting a solved captcha.
-    
-    Takes the `captchaId` and the user's `captchaAnswer`. If successful, returns 
-    a `sessionId` and `sessionKey` which are required in the headers of all 
+
+    Takes the `captchaId` and the user's `captchaAnswer`. If successful, returns
+    a `sessionId` and `sessionKey` which are required in the headers of all
     subsequent authenticated ARAC requests.
     """
     if payload.captchaId not in _captcha_cookies:
@@ -239,7 +239,7 @@ async def respond_arac_captcha(
     payload: AracSessionCreateRequest,
 ) -> AracSessionCreateResponse:
     """Alias for `/session/create` (Submit Captcha Answer).
-    
+
     Kept for backward compatibility and client workflow clarity.
     """
     return await create_arac_session(request, payload)
@@ -250,7 +250,7 @@ async def get_arac_fleet(
     credentials: tuple[str, str] = Depends(_require_arac_session_headers),
 ) -> list[BusPosition]:
     """Get a complete snapshot of the fleet from the authenticated ARAC API.
-    
+
     Requires active ARAC session credentials in the headers (`X-Arac-Session-Id` and `X-Arac-Session-Key`).
     """
     session_id, session_key = credentials
@@ -267,7 +267,7 @@ async def get_arac_bus(
     credentials: tuple[str, str] = Depends(_require_arac_session_headers),
 ) -> BusPosition:
     """Get the live profile and position of a single bus from the ARAC API.
-    
+
     Requires active ARAC session credentials in the headers (`X-Arac-Session-Id` and `X-Arac-Session-Key`).
     """
     session_id, session_key = credentials
@@ -286,7 +286,7 @@ async def get_arac_missions(
     credentials: tuple[str, str] = Depends(_require_arac_session_headers),
 ) -> AracMissionsResponse:
     """Get the daily mission timeline (assignments and route history) for a specific bus.
-    
+
     Requires active ARAC session credentials in the headers (`X-Arac-Session-Id` and `X-Arac-Session-Key`).
     """
     session_id, session_key = credentials
@@ -313,7 +313,7 @@ async def get_arac_route_stops(
     credentials: tuple[str, str] = Depends(_require_arac_session_headers),
 ) -> list[AracRouteStop]:
     """Get the ordered list of stops for a specific route ID from the ARAC API.
-    
+
     Note that `route_id` is the internal numeric ID (e.g., 1234), not the hat_kodu (e.g., 500T).
     Requires active ARAC session credentials in the headers (`X-Arac-Session-Id` and `X-Arac-Session-Key`).
     """

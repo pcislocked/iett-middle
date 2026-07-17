@@ -80,9 +80,9 @@ async def get_fleet() -> list[dict[str, Any]]:
 @router.get("/meta", tags=["fleet"])
 async def get_fleet_meta() -> FleetMetaResponse:
     """Get lightweight fleet status.
-    
-    Returns the total number of active buses currently tracked and the timestamp 
-    of the last data refresh. Useful for quick health checks without downloading 
+
+    Returns the total number of active buses currently tracked and the timestamp
+    of the last data refresh. Useful for quick health checks without downloading
     the entire fleet payload.
     """
 
@@ -122,9 +122,9 @@ async def refresh_fleet() -> FleetRefreshResponse:
 async def get_bus_detail(kapino: str) -> dict[str, Any]:
     """Get rich details for a single bus, including its route stops.
 
-    Resolves the bus's current route code (falling back to its last known route 
-    if parked or offline) and fetches the ordered list of stops for that route. 
-    This allows clients to immediately draw the bus and its route path without 
+    Resolves the bus's current route code (falling back to its last known route
+    if parked or offline) and fetches the ordered list of stops for that route.
+    This allows clients to immediately draw the bus and its route path without
     making secondary API calls.
     """
 
@@ -162,8 +162,8 @@ async def get_bus_detail(kapino: str) -> dict[str, Any]:
 @router.get("/{kapino}", response_model=BusPositionWithTrail)
 async def get_bus(kapino: str) -> dict[str, Any]:
     """Get the live position and trail of a single bus.
-    
-    Looks up a bus by its door number (e.g., 'C-325') from the in-memory fleet store 
+
+    Looks up a bus by its door number (e.g., 'C-325') from the in-memory fleet store
     and returns its current coordinates along with a 5-minute historical trail.
     """
 

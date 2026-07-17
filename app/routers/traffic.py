@@ -17,8 +17,8 @@ router = APIRouter()
 @router.get("/index", response_model=TrafficIndex)
 async def get_traffic_index():
     """Get the city-wide Istanbul traffic congestion index.
-    
-    Returns a single percentage value representing the overall traffic density 
+
+    Returns a single percentage value representing the overall traffic density
     across Istanbul. Cached for 30 seconds.
     """
     key = "traffic:index"
@@ -37,8 +37,8 @@ async def get_traffic_index():
 @router.get("/segments", response_model=list[TrafficSegment])
 async def get_traffic_segments():
     """Get live traffic speeds and congestion levels for all road segments.
-    
-    Returns a large array (~587 kB) of road segments with their current speed (km/h) 
+
+    Returns a large array (~587 kB) of road segments with their current speed (km/h)
     and congestion category (1-6). Cached for 30 seconds.
     """
     key = "traffic:segments"
