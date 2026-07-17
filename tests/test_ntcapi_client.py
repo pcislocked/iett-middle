@@ -11,6 +11,7 @@ import aiohttp
 import pytest
 from aioresponses import aioresponses
 
+import app.services.ntcapi_client as _ntc_mod
 from app.services.ntcapi_client import (
     NtcApiError,
     _parse_son_konum,
@@ -23,8 +24,6 @@ from app.services.ntcapi_client import (
     get_stop_arrivals,
     get_timetable,
 )
-import app.services.ntcapi_client as _ntc_mod
-
 
 _TOKEN_URL = "https://ntcapi.iett.istanbul/oauth2/v2/auth"
 _SERVICE_URL = "https://ntcapi.iett.istanbul/service"

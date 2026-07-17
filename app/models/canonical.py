@@ -20,13 +20,10 @@ Sources:
 
 from __future__ import annotations
 
-from typing import Literal
-
 # Python 3.12 ships TypedDict in typing; total=False means all keys optional
 # by default so we can build them incrementally from sparse sources.
 # Required fields use Literal / non-None typehints to document intent.
-from typing import TypedDict
-
+from typing import Literal, TypedDict
 
 # ---------------------------------------------------------------------------
 # Amenity flags — nested inside CanonicalArrival

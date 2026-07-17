@@ -9,11 +9,11 @@ expiry.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import math
 import re
 import time
-import math
-import asyncio
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
@@ -254,11 +254,20 @@ async def get_route_metadata(
         return_exceptions=True,
     )
 
+    if isinstance(raw_g, Exception) and isinstance(raw_d, Exception):
+        logger.error(f"ntcapi: Both route metadata calls failed: G={raw_g}, D={raw_d}")
+        raise raw_g
+
     raw = []
     if isinstance(raw_g, list):
         raw.extend(raw_g)
+    elif isinstance(raw_g, Exception):
+        logger.warning(f"ntcapi: Outbound route metadata call failed: {raw_g}")
+
     if isinstance(raw_d, list):
         raw.extend(raw_d)
+    elif isinstance(raw_d, Exception):
+        logger.warning(f"ntcapi: Inbound route metadata call failed: {raw_d}")
 
     results = []
     seen: set[str] = set()
@@ -303,7 +312,9 @@ async def get_route_buses_ybs(
     path and the ntcapi internal HAT_ID (not the public hat_kodu string).
     Returns a list of BusPosition objects.
     """
-    from app.models.bus import BusPosition  # noqa: PLC0415 — avoid circular at module level
+    from app.models.bus import (
+        BusPosition,  # noqa: PLC0415 — avoid circular at module level
+    )
 
     payload = {
         "data": {
@@ -430,5 +441,5 @@ async def get_global_notices(session: aiohttp.ClientSession) -> list[dict[str, A
             return res.get("data", [])
         return []
     except Exception as e:
-        logger.warning(f"ntcapi: Failed to fetch global notices: {e}")
+        logger.warning(f"ntcapi: Failed to fetch global notices: {e}", exc_info=True)
         return []

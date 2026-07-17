@@ -16,13 +16,19 @@ import aiohttp
 
 if TYPE_CHECKING:
     from app.models.bus import BusPosition
-from app.models.stop import NearbyStop
-
-from slowapi import Limiter
 from fastapi import Request
+from slowapi import Limiter
+
+from app.models.stop import NearbyStop
 
 
 def get_real_ip(request: Request) -> str:
+    """Extract real client IP from headers.
+
+    WARNING: This assumes the app is fronted by a trusted proxy (like Cloudflare or Nginx)
+    that sanitizes and overrides CF-Connecting-IP/X-Forwarded-For headers. If exposed
+    directly to the public internet, this is vulnerable to client-side IP spoofing.
+    """
     if cf_ip := request.headers.get("CF-Connecting-IP"):
         return cf_ip.split(",")[0].strip()
     if xfwd := request.headers.get("X-Forwarded-For"):

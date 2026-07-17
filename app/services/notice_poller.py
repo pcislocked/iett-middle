@@ -2,8 +2,8 @@ import asyncio
 import logging
 
 from app.deps import get_session
-from app.services.ntcapi_client import get_global_notices
 from app.services.cache import cache_set
+from app.services.ntcapi_client import get_global_notices
 
 logger = logging.getLogger(__name__)
 

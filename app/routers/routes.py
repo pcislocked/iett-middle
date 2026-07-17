@@ -17,10 +17,10 @@ from app.models.route import (
     ScheduledDeparture,
 )
 from app.models.stop import RouteStop
+from app.services import normalizers, ntcapi_client
 from app.services.cache import SkipCache, cache_get_or_fetch, cache_set
 from app.services.iett_client import IettApiError, IettClient
 from app.services.mobiett_client import MobiettClient
-from app.services import normalizers, ntcapi_client
 from app.services.ntcapi_client import NtcApiError
 
 logger = logging.getLogger(__name__)

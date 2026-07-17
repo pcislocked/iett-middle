@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-import time
 import contextvars
-from typing import Any, Callable, Awaitable
+import time
+from typing import Any, Awaitable, Callable
 
 from app.utils.lock import LazyLock
 

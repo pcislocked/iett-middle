@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+import aiohttp
+from cachetools import TTLCache
 from fastapi import APIRouter, Depends, Header, HTTPException, Path, Request
 
 from app.deps import get_session, limiter
@@ -21,11 +23,13 @@ from app.models.bus import BusPosition
 from app.services.arac_client import AracApiError, AracClient
 from app.utils.coerce import (
     _as_text as _as_str,
+)
+from app.utils.coerce import (
     _to_bool as _as_bool,
+)
+from app.utils.coerce import (
     _to_int as _as_int,
 )
-import aiohttp
-from cachetools import TTLCache
 
 router = APIRouter()
 
@@ -186,7 +190,12 @@ async def create_arac_session(
     request: Request,
     payload: AracSessionCreateRequest,
 ) -> AracSessionCreateResponse:
-    cookies_dict = _captcha_cookies.get(payload.captchaId, {})
+    if payload.captchaId not in _captcha_cookies:
+        raise HTTPException(
+            status_code=400,
+            detail="Captcha session not found or expired. Please request a new captcha.",
+        )
+    cookies_dict = _captcha_cookies.get(payload.captchaId)
     connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
     async with aiohttp.ClientSession(
         connector=connector, cookies=cookies_dict

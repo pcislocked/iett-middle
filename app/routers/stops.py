@@ -13,9 +13,9 @@ from app.deps import get_plate_by_kapino, get_session
 from app.models.bus import Arrival
 from app.models.route import Announcement
 from app.models.stop import NearbyStop, StopDetail, StopSearchResult
+from app.services import normalizers, ntcapi_client
 from app.services.cache import cache_get_or_fetch
 from app.services.iett_client import IettApiError, IettClient
-from app.services import normalizers, ntcapi_client
 from app.services.ntcapi_client import NtcApiError
 
 logger = logging.getLogger(__name__)
@@ -68,7 +68,7 @@ async def nearby_stops(
 
     ntcapi ``mainGetBusStopNearby`` is the primary source.  Falls back to
     the in-memory spatial index populated at startup.
-    Returns up to 30 results.
+    Returns up to *limit* results.
     """
     session = get_session()
 
@@ -124,7 +124,8 @@ async def nearby_stops(
         )
 
     # â”€â”€ fallback: in-memory spatial index â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    from app.deps import get_nearby_stops as _get_nearby, get_stop_index_updated_at  # noqa: PLC0415
+    from app.deps import get_nearby_stops as _get_nearby  # noqa: PLC0415
+    from app.deps import get_stop_index_updated_at
 
     if get_stop_index_updated_at() is None:
         raise HTTPException(

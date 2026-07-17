@@ -10,13 +10,12 @@ from contextlib import asynccontextmanager
 import aiohttp
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-
-from app.deps import cancel_fleet_refresh_task, close_session, set_session
-from app.routers import arac, fleet, garages, routes, stops, traffic, announcements
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from app.deps import limiter
+
+from app.deps import cancel_fleet_refresh_task, close_session, limiter, set_session
+from app.routers import announcements, arac, fleet, garages, routes, stops, traffic
 
 logger = logging.getLogger(__name__)
 _outgoing = logging.getLogger("iett.outgoing")
@@ -88,8 +87,8 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     from app.config import settings  # noqa: PLC0415
     from app.services.cache import sweep_forever  # noqa: PLC0415
     from app.services.fleet_poller import refresh_fleet_forever  # noqa: PLC0415
-    from app.services.stop_indexer import index_stops_forever  # noqa: PLC0415
     from app.services.notice_poller import notice_poll_loop  # noqa: PLC0415
+    from app.services.stop_indexer import index_stops_forever  # noqa: PLC0415
 
     connector = aiohttp.TCPConnector(
         resolver=aiohttp.ThreadedResolver() if sys.platform == "win32" else None,
@@ -169,8 +168,9 @@ app.add_middleware(SlowAPIMiddleware)
 
 @app.middleware("http")
 async def add_cache_timestamp_header(request: Request, call_next):
-    from app.services.cache import cache_hit_time
     import datetime
+
+    from app.services.cache import cache_hit_time
 
     container = {}
     token = cache_hit_time.set(container)

@@ -9,7 +9,6 @@ from starlette.testclient import TestClient
 
 from app.main import app
 
-
 # ---------------------------------------------------------------------------
 # Shared fixture
 # ---------------------------------------------------------------------------
@@ -48,6 +47,7 @@ class TestEndpoints:
 class TestMakeTraceConfig:
     def test_returns_aiohttp_trace_config(self) -> None:
         import aiohttp
+
         from app.main import _make_trace_config
 
         tc = _make_trace_config()

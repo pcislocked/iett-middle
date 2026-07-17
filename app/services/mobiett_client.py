@@ -1,10 +1,11 @@
 """New JSON Mobiett Client for iett-middle."""
 
 import logging
-from typing import Any
 import time
+from typing import Any
 
 import aiohttp
+
 from app.config import settings
 from app.utils.lock import LazyLock
 

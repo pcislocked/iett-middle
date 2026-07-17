@@ -13,7 +13,6 @@ from app.models.arac import AracRouteStop
 from app.models.bus import BusPosition
 from app.utils.coerce import _as_text, _to_bool, _to_float, _to_int
 
-
 _BASE_HEADERS = {
     # ARAC captcha endpoints may reject non-browser-like requests with HTML 403 pages.
     # Mirror the public web client's fetch profile to keep captcha bootstrap stable.

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from app.models.stop import RouteStop as RouteStop  # re-exported for BusDetail schema
 from app.models.canonical import Amenities
+from app.models.stop import RouteStop as RouteStop  # re-exported for BusDetail schema
 
 
 class TrailPoint(BaseModel):

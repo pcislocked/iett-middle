@@ -2,7 +2,7 @@
 
 Fetches the rendered timetable HTML from iett.istanbul and extracts
 the ``(-1)``, ``(-2)`` etc. footnote indicators next to departure times.
-Results are aggressively cached for 24 hours via our SQLite cache.
+Results are aggressively cached for 24 hours.
 """
 
 from __future__ import annotations

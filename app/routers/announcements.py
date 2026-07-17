@@ -1,5 +1,7 @@
 from typing import Any
+
 from fastapi import APIRouter
+
 from app.services.cache import cache_get
 from app.services.notice_poller import GLOBAL_NOTICES_CACHE_KEY
 

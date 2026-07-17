@@ -9,18 +9,19 @@ from collections.abc import AsyncIterator
 import pytest
 from aioresponses import aioresponses
 
-from app.services.iett_client import IettApiError, IettClient
-from app.models.bus import BusPosition, Arrival
+from app.models.bus import Arrival, BusPosition
 from app.models.garage import Garage
-from app.models.stop import NearbyStop, RouteStop, StopDetail
 from app.models.route import (
     Announcement,
     RouteMetadata,
     RouteSearchResult,
     ScheduledDeparture,
 )
+from app.models.stop import NearbyStop, RouteStop, StopDetail
+from app.services.iett_client import IettApiError, IettClient
 from tests.conftest import (
     ALL_STOPS_XML,
+    ANNOUNCEMENTS_XML,
     ARRIVALS_HTML,
     FLEET_ALL_XML,
     GARAGE_XML,
@@ -29,7 +30,6 @@ from tests.conftest import (
     ROUTE_STOPS_HTML,
     ROUTES_BY_STATION_HTML,
     SCHEDULE_XML,
-    ANNOUNCEMENTS_XML,
     STOP_DETAIL_XML,
     STOP_DETAIL_ZERO_COORDS_XML,
 )
@@ -90,7 +90,7 @@ class TestGetRouteBuses:
         assert buses[0].route_code == "500T"
 
     async def test_fallback_to_json_when_soap_fails(self, client: IettClient) -> None:
-        from app.services.mobiett_client import MOBIETT_SERVICE_URL, MOBIETT_AUTH_URL
+        from app.services.mobiett_client import MOBIETT_AUTH_URL, MOBIETT_SERVICE_URL
 
         with aioresponses() as m:
             m.post(FLEET_URL, exception=TimeoutError("SOAP down"))
@@ -303,7 +303,7 @@ class TestGetStopDetail:
         assert detail.dcode == "220602"
 
     async def test_fallback_to_json_when_soap_fails(self, client: IettClient) -> None:
-        from app.services.mobiett_client import MOBIETT_SERVICE_URL, MOBIETT_AUTH_URL
+        from app.services.mobiett_client import MOBIETT_AUTH_URL, MOBIETT_SERVICE_URL
 
         with aioresponses() as m:
             m.post(HAT_DURAK_URL, exception=TimeoutError("SOAP down"))

@@ -14,11 +14,9 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 
-
 # ---------------------------------------------------------------------------
 # Helpers â€” build minimal model dicts that routers will serialise
 # ---------------------------------------------------------------------------
-
 from app.models.bus import Arrival, BusPosition
 from app.models.garage import Garage
 from app.models.route import (
@@ -1331,8 +1329,8 @@ class TestFleetDetailFallbacks:
         self, client: TestClient
     ) -> None:
         """Both ntcapi and IETT SOAP fail â†’ 200 with empty route_stops list."""
-        from app.services.ntcapi_client import NtcApiError as NE
         from app.services.iett_client import IettApiError
+        from app.services.ntcapi_client import NtcApiError as NE
 
         bus = _bus("A-001", "500T")
         mock_iett = MagicMock()
@@ -1434,6 +1432,7 @@ class TestStopsViaFilter:
     ) -> None:
         """IettApiError on via-stop lookup â†’ arrivals returned unfiltered; warning logged."""
         import logging
+
         from app.services.iett_client import IettApiError
 
         mock_via = MagicMock()
@@ -1960,6 +1959,7 @@ class TestAracRouterHelpers:
 
     def test_require_session_headers_helper(self) -> None:
         from fastapi import HTTPException
+
         from app.routers.arac import _require_arac_session_headers
 
         assert _require_arac_session_headers(
