@@ -4,5 +4,5 @@ pytest-asyncio>=1.4.0
 aioresponses>=0.7.9
 httpx>=0.28.1
 ruff>=0.15.22
-pyright>=1.1.410
+pyright>=1.1.411
 pytest-cov
