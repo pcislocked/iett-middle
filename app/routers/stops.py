@@ -48,7 +48,8 @@ async def search_stops(q: str = Query(..., min_length=2)):
         try:
             results = await client.search_stops(q)
         except IettApiError as exc:
-            raise HTTPException(502, detail=str(exc)) from exc
+            logger.warning("search_stops failed for q=%s: %s", q, exc)
+            raise HTTPException(502, detail="Durak arama servisine ulaşılamadı.") from exc
         return [r.model_dump() for r in results]
 
     return await cache_get_or_fetch(
@@ -77,7 +78,7 @@ async def nearby_stops(
     """
     session = get_session()
 
-    # â”€â”€ primary: ntcapi mainGetBusStopNearby â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ———————————————————————— primary: ntcapi mainGetBusStopNearby ————————————————————————
     try:
         raw_stops = await ntcapi_client.get_nearby_stops(
             lat, lon, radius / 1000, session
@@ -128,13 +129,13 @@ async def nearby_stops(
             exc,
         )
 
-    # â”€â”€ fallback: in-memory spatial index â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ———————————————————————— fallback: in-memory spatial index ———————————————————————————
     from app.deps import get_nearby_stops as _get_nearby  # noqa: PLC0415
     from app.deps import get_stop_index_updated_at
 
     if get_stop_index_updated_at() is None:
         raise HTTPException(
-            503, detail="Stop index not ready yet â€” try again in a moment"
+            503, detail="Stop index not ready yet — try again in a moment"
         )
     results = _get_nearby(lat, lon, radius)
     return results[:limit]
@@ -155,7 +156,8 @@ async def get_arrivals_raw(dcode: str):
             params={"dcode": dcode, "langid": "1"},
         )
     except IettApiError as exc:
-        raise HTTPException(502, detail=str(exc)) from exc
+        logger.warning("get_arrivals_raw failed for %s: %s", dcode, exc)
+        raise HTTPException(502, detail="Durak varış ham verisine ulaşılamadı.") from exc
     from fastapi.responses import PlainTextResponse  # noqa: PLC0415
 
     return PlainTextResponse(content=html)
@@ -179,7 +181,7 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
         session = get_session()
         arrivals_data = []
 
-        # â”€â”€ primary: ntcapi ybs (has kapino + live bus location) â”€â”€â”€â”€â”€â”€
+        # ———————————————————————— primary: ntcapi ybs (has kapino + live bus location) ———————
         try:
             raw_items = await ntcapi_client.get_stop_arrivals(dcode, session)
             canonical = [normalizers.arrivals.from_ntcapi_ybs(r) for r in raw_items]
@@ -233,7 +235,7 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
                 "ntcapi arrivals failed for %s, falling back to HTML: %s", dcode, exc
             )
 
-        # â”€â”€ fallback: legacy IETT HTML (no kapino, no location) â”€â”€â”€â”€â”€â”€â”€
+        # ———————————————————————— fallback: legacy IETT HTML (no kapino, no location) ————————
         if not arrivals_data:
             client = IettClient(session)
             try:
@@ -242,13 +244,14 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
                 else:
                     iett_arrivals = await client.get_stop_arrivals(dcode)
             except IettApiError as exc:
-                raise HTTPException(502, detail=str(exc)) from exc
+                logger.warning("HTML arrivals fallback failed for %s: %s", dcode, exc)
+                raise HTTPException(502, detail="İETT durak varış servisine ulaşılamadı.") from exc
             arrivals_data = [
                 normalizers.arrivals.from_iett_html(a.model_dump())
                 for a in iett_arrivals
             ]
 
-        # â”€â”€ via filter (applied after ntcapi fetch if needed) â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # ———————————————————————— via filter (applied after ntcapi fetch if needed) ——————————
         if via and arrivals_data:
             try:
                 routes_via = await get_routes_at_stop(via)
@@ -260,7 +263,7 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
                 ]
             except Exception as exc:
                 logger.warning(
-                    "via-filter lookup failed for stop %s via %s â€” returning unfiltered arrivals: %s",
+                    "via-filter lookup failed for stop %s via %s — returning unfiltered arrivals: %s",
                     dcode,
                     via,
                     exc,
@@ -304,7 +307,8 @@ async def get_routes_at_stop(dcode: str):
         try:
             route_codes = await client.get_routes_at_stop(dcode)
         except IettApiError as exc:
-            raise HTTPException(502, detail=str(exc)) from exc
+            logger.warning("get_routes_at_stop failed for %s: %s", dcode, exc)
+            raise HTTPException(502, detail="Duraktan geçen hatlar servisine ulaşılamadı.") from exc
         return sorted(route_codes)
 
     return await cache_get_or_fetch(
@@ -330,7 +334,8 @@ async def get_stop_detail(dcode: str):
         try:
             detail = await client.get_stop_detail(dcode)
         except IettApiError as exc:
-            raise HTTPException(502, detail=str(exc)) from exc
+            logger.warning("get_stop_detail failed for %s: %s", dcode, exc)
+            raise HTTPException(502, detail="Durak detay servisine ulaşılamadı.") from exc
         if detail is None:
             raise HTTPException(404, detail=f"Stop {dcode!r} not found")
         return detail.model_dump()

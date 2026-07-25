@@ -90,6 +90,8 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     from app.services.notice_poller import notice_poll_loop  # noqa: PLC0415
     from app.services.stop_indexer import index_stops_forever  # noqa: PLC0415
 
+    app.state.start_time = time.time()
+
     connector = aiohttp.TCPConnector(
         resolver=aiohttp.ThreadedResolver() if sys.platform == "win32" else None,
         limit=50,
@@ -99,6 +101,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
         aiohttp.ClientSession(
             connector=connector,
             trace_configs=trace_configs,
+            timeout=aiohttp.ClientTimeout(total=20),
             headers={"User-Agent": "iett-middle/1.0 (+https://github.com/pcislocked)"},
         )
     )
@@ -111,6 +114,13 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     stop_indexer = asyncio.create_task(index_stops_forever())
     cache_sweeper = asyncio.create_task(sweep_forever())
     notice_poller = asyncio.create_task(notice_poll_loop())
+
+    app.state.bg_tasks = {
+        "fleet_refresher": fleet_refresher,
+        "stop_indexer": stop_indexer,
+        "cache_sweeper": cache_sweeper,
+        "notice_poller": notice_poller,
+    }
 
     yield
 
@@ -203,10 +213,42 @@ app.include_router(
 
 
 @app.get("/health", tags=["health"])
-async def health():
+@app.get("/healthz", tags=["health"], include_in_schema=False)
+async def health(request: Request):
+    import time
+    from app.deps import get_fleet_snapshot, get_fleet_updated_at
     from app.services.cache import get_cache_stats
 
-    return {"status": "ok", "cache": get_cache_stats()}
+    start_time = getattr(request.app.state, "start_time", time.time())
+    uptime_seconds = int(time.time() - start_time)
+    bg_tasks = getattr(request.app.state, "bg_tasks", {})
+
+    tasks_status = {}
+    is_healthy = True
+    for name, task in bg_tasks.items():
+        if task.done():
+            exc = task.exception()
+            if exc:
+                tasks_status[name] = f"errored: {exc}"
+                is_healthy = False
+            else:
+                tasks_status[name] = "stopped"
+        else:
+            tasks_status[name] = "running"
+
+    fleet_updated = get_fleet_updated_at()
+    status_str = "ok" if is_healthy else "degraded"
+
+    return {
+        "status": status_str,
+        "uptime_seconds": uptime_seconds,
+        "fleet": {
+            "bus_count": len(get_fleet_snapshot()),
+            "updated_at": fleet_updated.isoformat() if fleet_updated else None,
+        },
+        "background_tasks": tasks_status,
+        "cache": get_cache_stats(),
+    }
 
 
 @app.get("/", include_in_schema=False)

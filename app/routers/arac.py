@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import Any
 
 import aiohttp
@@ -20,6 +22,8 @@ from app.models.arac import (
 from app.models.bus import BusPosition
 from app.services.arac_client import AracApiError, AracClient, solve_captcha_image
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 # Store cookies for captcha flows (max 1000 items, TTL 10 minutes)
@@ -27,8 +31,9 @@ _captcha_cookies: TTLCache[str, dict[str, str]] = TTLCache(maxsize=1000, ttl=600
 
 
 def _status_from_arac_error(exc: AracApiError, fallback: int = 502) -> int:
-    if isinstance(exc.status_code, int) and 400 <= exc.status_code <= 599:
-        return exc.status_code
+    status = getattr(exc, "status_code", None)
+    if isinstance(status, int) and 400 <= status <= 599:
+        return status
     return fallback
 
 
@@ -85,6 +90,8 @@ def _require_arac_session_headers(
         raise HTTPException(401, detail="Missing X-Arac-Session-Id X-Arac-Session-Key X-Session-Id X-Session-Key")
     return (sid, skey)
 
+
+@router.get("/session/captcha", response_model=AracCaptchaResponse)
 @router.post("/session/captcha", response_model=AracCaptchaResponse)
 @limiter.limit("60/minute")
 async def get_arac_captcha(request: Request) -> AracCaptchaResponse:
@@ -100,7 +107,10 @@ async def get_arac_captcha(request: Request) -> AracCaptchaResponse:
         try:
             captcha_data = await client.get_captcha()
         except AracApiError as exc:
-            raise HTTPException(502, detail=str(exc)) from exc
+            logger.warning("get_arac_captcha failed: %s", exc)
+            status = _status_from_arac_error(exc, 502)
+            detail_msg = str(exc) if status < 500 else "ARAC captcha servisine ulaşılamadı."
+            raise HTTPException(status, detail=detail_msg) from exc
 
         captcha_id = captcha_data["captchaId"]
         captcha_image = captcha_data["captchaImage"]
@@ -109,8 +119,8 @@ async def get_arac_captcha(request: Request) -> AracCaptchaResponse:
         cookies_dict = {c.key: c.value for c in temp_session.cookie_jar}
         _captcha_cookies[captcha_id] = cookies_dict
 
-    # Try OCR
-    suggested = solve_captcha_image(captcha_image)
+    # Try OCR asynchronously in thread pool to prevent blocking asyncio loop
+    suggested = await asyncio.to_thread(solve_captcha_image, captcha_image)
 
     return AracCaptchaResponse(
         captchaId=captcha_id,
@@ -162,8 +172,10 @@ async def create_arac_session(
             result_cookies = {c.key: c.value for c in temp_session.cookie_jar}
 
         except AracApiError as exc:
-            status = exc.status_code if isinstance(exc.status_code, int) and 400 <= exc.status_code <= 599 else 502
-            raise HTTPException(status, detail=str(exc)) from exc
+            logger.warning("create_arac_session failed: %s", exc)
+            status = _status_from_arac_error(exc, 502)
+            detail_msg = str(exc) if status < 500 else "ARAC servisine ulaşılamadı."
+            raise HTTPException(status, detail=detail_msg) from exc
 
     import json
     return AracSessionCreateResponse(
@@ -200,8 +212,10 @@ async def get_arac_bus_detail(
             vehicle_hash = await client.get_vehicle_hash(kapino)
             detail = await client.get_detail(vehicle_hash)
         except AracApiError as exc:
-            status = exc.status_code if isinstance(exc.status_code, int) and 400 <= exc.status_code <= 599 else 502
-            raise HTTPException(status, detail=str(exc)) from exc
+            logger.warning("get_arac_bus_detail failed: %s", exc)
+            status = _status_from_arac_error(exc, 502)
+            detail_msg = str(exc) if status < 500 else "ARAC araç detay servisine ulaşılamadı."
+            raise HTTPException(status, detail=detail_msg) from exc
 
     data_vehicle = detail.get("dataVehicle", {})
     data_task = detail.get("dataTask", [])

@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
+import logging
 import time
 from typing import Any, Awaitable, Callable, Union
 
+from app.config import settings
 from app.utils.lock import LazyLock
+
+logger = logging.getLogger(__name__)
 
 cache_hit_time: contextvars.ContextVar[Union[dict, float, None]] = (
     contextvars.ContextVar("cache_hit_time", default=None)
@@ -179,8 +183,9 @@ async def cache_get_or_fetch(
         task.add_done_callback(_bg_tasks.discard)
         return value
 
-    # Normal missing fetch
+    # Normal missing fetch (or fully expired)
     async with _lock:
+        stored_entry = _store.get(key)
         if key in _inflight:
             fut = _inflight[key]
             is_leader = False
@@ -198,9 +203,12 @@ async def cache_get_or_fetch(
                 return await cache_get_or_fetch(key, ttl, fetcher, stale_ttl, jitter)
             raise
 
+    # Default stale_ttl if 0 passed
+    effective_stale = stale_ttl if stale_ttl > 0 else settings.cache_stale_ttl
+
     try:
         val = await fetcher()
-        await cache_set(key, val, ttl, stale_ttl, jitter)
+        await cache_set(key, val, ttl, effective_stale, jitter)
         if not fut.done():
             fut.set_result(val)
         return val
@@ -209,6 +217,18 @@ async def cache_get_or_fetch(
             fut.set_result(e.value)
         return e.value
     except Exception as e:
+        if stored_entry is not None:
+            value, _, _, created_at = stored_entry
+            logger.warning(
+                "Upstream error for cache key '%s': %s. Serving expired fallback.",
+                key,
+                e,
+            )
+            if key.startswith(_DYNAMIC_PREFIXES):
+                _set_cache_hit_time(created_at)
+            if not fut.done():
+                fut.set_result(value)
+            return value
         if not fut.done():
             fut.set_exception(e)
         raise

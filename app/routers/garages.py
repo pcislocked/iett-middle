@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, HTTPException
 
 from app.deps import get_session
 from app.models.garage import Garage
 from app.services.cache import cache_get, cache_set
 from app.services.iett_client import IettApiError, IettClient
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -29,7 +33,8 @@ async def list_garages():
     try:
         garages = await client.get_garages()
     except IettApiError as exc:
-        raise HTTPException(502, detail=str(exc)) from exc
+        logger.warning("list_garages failed: %s", exc)
+        raise HTTPException(502, detail="İETT garaj servisine ulaşılamadı.") from exc
     data = [g.model_dump() for g in garages]
     await cache_set(_CACHE_KEY, data, _TTL)
     return garages

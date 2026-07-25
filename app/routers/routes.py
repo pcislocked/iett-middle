@@ -32,8 +32,7 @@ router = APIRouter()
 async def search_routes(q: str = Query(..., min_length=1)):
     """Search for routes by code or name.
 
-    Returns matching routes. You can search by route code (e.g., '14M') or
-    destination name (e.g., 'kadikoy').
+    Returns a list of matching routes (e.g. searching '500' returns '500T', '500L', etc.).
     """
     key = f"routes:search:{q.lower()}"
 
@@ -42,7 +41,8 @@ async def search_routes(q: str = Query(..., min_length=1)):
         try:
             results = await client.search_routes(q)
         except IettApiError as exc:
-            raise HTTPException(502, detail=str(exc)) from exc
+            logger.warning("search_routes failed for q=%s: %s", q, exc)
+            raise HTTPException(502, detail="Hat arama servisine ulaşılamadı.") from exc
         return [r.model_dump() for r in results]
 
     return await cache_get_or_fetch(
@@ -84,7 +84,8 @@ async def get_route_metadata(hat_kodu: str):
             try:
                 meta = await client.get_route_metadata(hat_kodu)
             except IettApiError as exc:
-                raise HTTPException(502, detail=str(exc)) from exc
+                logger.warning("get_route_metadata failed for %s: %s", hat_kodu, exc)
+                raise HTTPException(502, detail="Hat üst veri servisine ulaşılamadı.") from exc
             data = [m.model_dump() for m in meta]
         return data
 
@@ -92,7 +93,7 @@ async def get_route_metadata(hat_kodu: str):
         key,
         settings.cache_ttl_search,
         _fetch,
-        stale_ttl=settings.cache_stale_ttl,
+        stale_ttl=86400,
         jitter=True,
     )
 
@@ -236,7 +237,8 @@ async def get_route_stops(hat_kodu: str):
                     )
             except IettApiError as exc:
                 if not stops:
-                    raise HTTPException(502, detail=str(exc)) from exc
+                    logger.warning("get_route_stops failed for %s: %s", hat_kodu, exc)
+                    raise HTTPException(502, detail="Hat durakları servisine ulaşılamadı.") from exc
 
         dumped = [s.model_dump() for s in stops]
         if has_null_coords:
@@ -247,7 +249,7 @@ async def get_route_stops(hat_kodu: str):
         key,
         settings.cache_ttl_stops,
         _fetch,
-        stale_ttl=settings.cache_stale_ttl,
+        stale_ttl=86400,
         jitter=True,
     )
 
@@ -296,7 +298,8 @@ async def get_route_schedule(hat_kodu: str):
             try:
                 schedule = await client.get_route_schedule(hat_kodu)
             except IettApiError as exc:
-                raise HTTPException(502, detail=str(exc)) from exc
+                logger.warning("get_route_schedule failed for %s: %s", hat_kodu, exc)
+                raise HTTPException(502, detail="Hat sefer saatleri servisine ulaşılamadı.") from exc
             data = [  # type: ignore
                 normalizers.schedule.from_iett_soap_schedule(d.model_dump())
                 for d in schedule

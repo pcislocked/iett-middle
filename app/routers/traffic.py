@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, HTTPException
 
 from app.config import settings
@@ -10,6 +12,8 @@ from app.models.traffic import TrafficIndex, TrafficSegment
 from app.services.cache import cache_get, cache_set
 from app.services.iett_client import IettApiError
 from app.services.traffic import TrafficClient
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -29,7 +33,8 @@ async def get_traffic_index():
     try:
         index = await client.get_traffic_index()
     except IettApiError as exc:
-        raise HTTPException(502, detail=str(exc)) from exc
+        logger.warning("get_traffic_index failed: %s", exc)
+        raise HTTPException(502, detail="Trafik indeksi servisine ulaşılamadı.") from exc
     await cache_set(key, index.model_dump(), settings.cache_ttl_traffic)
     return index
 
@@ -49,7 +54,8 @@ async def get_traffic_segments():
     try:
         segments = await client.get_traffic_segments()
     except IettApiError as exc:
-        raise HTTPException(502, detail=str(exc)) from exc
+        logger.warning("get_traffic_segments failed: %s", exc)
+        raise HTTPException(502, detail="Trafik segment servisine ulaşılamadı.") from exc
     data = [s.model_dump() for s in segments]
     await cache_set(key, data, settings.cache_ttl_traffic)
     return segments

@@ -1543,6 +1543,14 @@ class TestAracSession:
             )
         assert resp.status_code in (400, 401)
 
+    def test_create_returns_400_for_expired_captcha_id(self, client: TestClient) -> None:
+        resp = client.post(
+            "/v1/arac/session/create",
+            json={"captchaId": "non-existent-cid", "captchaAnswer": "123456", "kapino": "C-1753"},
+        )
+        assert resp.status_code == 400
+        assert "not found or expired" in resp.json()["detail"].lower()
+
 
 class TestAracFleet:
     _HEADERS = {"X-Arac-Session-Key": '{"Cookie":"1"}'}
@@ -1550,6 +1558,14 @@ class TestAracFleet:
     def test_401_when_session_headers_missing(self, client: TestClient) -> None:
         resp = client.get("/v1/arac/fleet/C-1753/detail")
         assert resp.status_code == 401
+
+    def test_400_when_session_key_invalid_json(self, client: TestClient) -> None:
+        resp = client.get(
+            "/v1/arac/fleet/C-1753/detail",
+            headers={"X-Arac-Session-Key": "invalid_not_json"},
+        )
+        assert resp.status_code == 400
+        assert "not valid json" in resp.json()["detail"].lower()
 
     def test_200_returns_single_vehicle(self, client: TestClient) -> None:
         from app.services.arac_client import AracClient
