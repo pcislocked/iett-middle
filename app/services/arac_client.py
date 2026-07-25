@@ -21,6 +21,56 @@ logger = logging.getLogger(__name__)
 
 _ARAC_BASE = "https://arac.iett.gov.tr"
 
+
+def _clip(text: str, limit: int = 500) -> str:
+    if len(text) <= limit:
+        return text
+    return text[:limit] + "...<truncated>"
+
+
+def _to_int(val: Any) -> int | None:
+    if val is None:
+        return None
+    try:
+        if isinstance(val, (int, float)):
+            if abs(val) > 1e300:
+                return None
+            return int(val)
+        s = str(val).strip()
+        if not s:
+            return None
+        res = int(float(s))
+        if abs(res) > 1e300:
+            return None
+        return res
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
+def _is_html_text(text: str) -> bool:
+    t = text.strip().lower()
+    return t.startswith("<!doctype html") or "<html" in t or "<head" in t or "<body" in t
+
+
+def _extract_error_message(payload: Any) -> str | None:
+    if isinstance(payload, dict):
+        for k in ("message", "Message", "error", "Error", "detail", "Detail"):
+            v = payload.get(k)
+            if isinstance(v, str) and v.strip() and not _is_html_text(v):
+                return v.strip()
+    elif isinstance(payload, str) and payload.strip() and not _is_html_text(payload):
+        return payload.strip()[:200]
+    return None
+
+
+def _direction_letter_from_route_code(route_code: str | None) -> str | None:
+    if not route_code:
+        return None
+    parts = route_code.split("_")
+    if len(parts) >= 2 and parts[1].upper() in ("G", "D"):
+        return parts[1].upper()
+    return None
+
 _BASE_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                   "(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",

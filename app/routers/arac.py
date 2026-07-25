@@ -25,6 +25,66 @@ router = APIRouter()
 # Store cookies for captcha flows (max 1000 items, TTL 10 minutes)
 _captcha_cookies: TTLCache[str, dict[str, str]] = TTLCache(maxsize=1000, ttl=600)
 
+
+def _status_from_arac_error(exc: AracApiError, fallback: int = 502) -> int:
+    if isinstance(exc.status_code, int) and 400 <= exc.status_code <= 599:
+        return exc.status_code
+    return fallback
+
+
+def _as_bool(val: Any) -> bool | None:
+    from app.utils.coerce import _to_bool
+    return _to_bool(val)
+
+
+def _as_int(val: Any) -> int | None:
+    from app.services.arac_client import _to_int
+    return _to_int(val)
+
+
+def _as_str(val: Any) -> str | None:
+    from app.utils.coerce import _as_text
+    return _as_text(val)
+
+
+def _ms_to_iso(val: Any) -> str | None:
+    if val is None:
+        return None
+    from datetime import datetime, timezone
+    try:
+        fval = float(val)
+        if fval < 0 or fval > 1e15:
+            return None
+        ts = fval / 1000.0
+        return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
+def _require_arac_session_headers(
+    request: Request | None = None,
+    *,
+    x_arac_session_id: str | None = None,
+    x_arac_session_key: str | None = None,
+    x_session_id: str | None = None,
+    x_session_key: str | None = None,
+) -> dict[str, str] | tuple[str, str]:
+    if request is not None:
+        session_key_raw = request.headers.get("X-Arac-Session-Key") or request.headers.get("X-Session-Key")
+        if not session_key_raw:
+            raise HTTPException(401, detail="Missing X-Arac-Session-Key header. Detail: X-Arac-Session-Id X-Arac-Session-Key X-Session-Id X-Session-Key")
+        import json
+        try:
+            return json.loads(session_key_raw)
+        except (ValueError, TypeError):
+            raise HTTPException(400, detail="X-Arac-Session-Key is not valid JSON.")
+
+    sid = x_arac_session_id or x_session_id
+    skey = x_arac_session_key or x_session_key
+    if not sid or not skey:
+        raise HTTPException(401, detail="Missing X-Arac-Session-Id X-Arac-Session-Key X-Session-Id X-Session-Key")
+    return (sid, skey)
+
 @router.post("/session/captcha", response_model=AracCaptchaResponse)
 @limiter.limit("60/minute")
 async def get_arac_captcha(request: Request) -> AracCaptchaResponse:
@@ -111,21 +171,6 @@ async def create_arac_session(
         sessionKey=json.dumps(result_cookies),  # cookies as JSON string
     )
 
-@router.get("/fleet/{kapino}", response_model=BusPosition)
-async def get_arac_bus(
-    kapino: str = Path(..., pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,39}$"),
-    x_arac_session_key: str | None = None,
-) -> BusPosition:
-    """Get vehicle profile from ARAC API using stored session cookies.
-
-    X-Arac-Session-Key header must contain the JSON-encoded cookies
-    returned by /session/create.
-    """
-    from fastapi import Header
-    # Re-declare with proper Header injection
-    raise HTTPException(501, detail="Use /fleet/{kapino}/detail instead")
-
-
 @router.get("/fleet/{kapino}/detail")
 async def get_arac_bus_detail(
     request: Request,
@@ -181,3 +226,12 @@ async def get_arac_bus_detail(
             missions=missions,
         ).model_dump(),
     }
+
+
+@router.get("/fleet/{kapino}", response_model=BusPosition)
+async def get_arac_bus(
+    kapino: str = Path(..., pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,39}$"),
+    x_arac_session_key: str | None = None,
+) -> BusPosition:
+    """Get vehicle profile from ARAC API using stored session cookies."""
+    raise HTTPException(501, detail="Use /fleet/{kapino}/detail instead")
