@@ -6,6 +6,6 @@ lxml>=5.3
 ddddocr>=1.6
 opencv-python-headless>=4.0
 pydantic>=2.7
-pydantic-settings>=2.3
+pydantic-settings>=2.14.2
 slowapi>=0.1.9
 cachetools>=5.0
