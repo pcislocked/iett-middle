@@ -3,7 +3,6 @@ from app.models.arac import (
     AracMissionItem,
     AracMissionsResponse,
     AracMissionSummary,
-    AracRouteStop,
     AracSessionCreateRequest,
     AracSessionCreateResponse,
 )
@@ -26,7 +25,6 @@ __all__ = [
     "AracMissionItem",
     "AracMissionSummary",
     "AracMissionsResponse",
-    "AracRouteStop",
     "Announcement",
     "RouteMetadata",
     "RouteSearchResult",
