@@ -1,0 +1,15 @@
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501", "W291", "W293", "RUF012", "TRY002", "SIM117"]
+
+[tool.pyright]
+include = ["app", "tests"]
+reportTypedDictNotRequiredAccess = false
+reportAssignmentType = false
+reportMissingImports = false
+reportOptionalOperand = false
+reportPrivateImportUsage = false

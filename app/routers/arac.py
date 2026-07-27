@@ -13,7 +13,6 @@ from fastapi import APIRouter, HTTPException, Path, Request
 from app.deps import limiter
 from app.models.arac import (
     AracCaptchaResponse,
-    AracMissionItem,
     AracMissionsResponse,
     AracMissionSummary,
     AracSessionCreateRequest,
@@ -27,7 +26,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Store cookies for captcha flows (max 1000 items, TTL 10 minutes)
-_captcha_cookies: TTLCache[str, dict[str, str]] = TTLCache(maxsize=1000, ttl=600)
+_captcha_cookies = TTLCache[str, dict[str, str]](maxsize=1000, ttl=600)
 
 
 def _status_from_arac_error(exc: AracApiError, fallback: int = 502) -> int:

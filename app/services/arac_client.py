@@ -12,6 +12,7 @@ import logging
 from typing import Any
 
 import aiohttp
+from yarl import URL
 
 from app.models.arac import AracMissionItem
 from app.models.bus import BusPosition
@@ -121,7 +122,7 @@ def solve_captcha_image(image_base64: str) -> str | None:
             image_base64 = image_base64.split(",", 1)[1]
         img_bytes = base64.b64decode(image_base64)
         res = _get_ocr().classification(img_bytes)
-        return res if res else None
+        return str(res) if res else None
     except Exception:  # noqa: BLE001
         logger.warning("ddddocr captcha solve failed", exc_info=True)
         return None
@@ -219,7 +220,7 @@ class AracClient:
 
         # Generate a captchaId from the session cookie
         cookies = self._session.cookie_jar.filter_cookies(
-            aiohttp.client.URL(_ARAC_BASE)
+            URL(_ARAC_BASE)
         )
         captcha_session_key = ""
         for key, cookie in cookies.items():
