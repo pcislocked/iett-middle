@@ -25,10 +25,12 @@
 
 ### 🌟 Öne Çıkan Özellikler
 
+- **🔀 Tek İstekte Çoklu Veri Konsolidasyonu (API Data Aggregator / Aggregation):**
+  İETT'nin dağınık ve parçalı API ekosisteminde A kaynağında bulunan canlı GPS konumu, B kaynağındaki durak sırası ve C kaynağındaki araç teknik donanım bilgilerini arka planda birleştirerek (data aggregation) ön yüze **tek bir HTTP yanıtında** (ör: `/v1/fleet/{kapino}/detail`) eksiksiz sunar. Mobil istemcinin ardışık onlarca istek yapmasını (N+1 problemi) engeller.
 - **⚡ Akıllı Bellek İçi TTL Önbellekleme (In-Memory Cache):** Filo (~7k araç: 15s), Durak Varışları (20s), Sefer Saatleri (1sa), Duyurular (5dk) ve Garajlar (24sa) için optimize edilmiş TTL önbellekleme.
-- **🔄 Otomatik Mobiett & SOAP Fallback:** İBB açık verilerindeki SOAP kısıtlamalarını ve veri karartmalarını aşmak için arka planda Mobiett JSON servisleri ile otomatik veri birleştirme (merge).
+- **🔄 Otomatik Mobiett & SOAP Fallback (Failover):** İBB açık verilerindeki SOAP kısıtlamalarını ve veri karartmalarını aşmak için arka planda Mobiett JSON servisleri, SOAP XML ve BeautifulSoup HTML kazıma altyapıları arasında otomatik veri birleştirme ve kesintisiz geçiş.
 - **🔒 ARAÇ Oturum & Otomatik Captcha Çözücü (`arac.iett.gov.tr`):** Dahili `ddddocr` OCR modeli ile otomatik captcha yanıtı üretme, istemci bazlı izole oturum yönetimi (`X-Arac-Session-Key`) ve manuel captcha doğrulaması.
-- **📍 Ultra Hızlı Yakın Durak İndeksi (Spatial Indexing):** Sunucu başlangıcında yüklenen R-Tree mekansal indeksi sayesinde kullanıcının koordinatına en yakın durakları milisaniyeler içinde hesaplama (`GET /v1/stops/nearby`).
+- **📍 Ultra Hızlı Yakın Durak İndeksi (Spatial R-Tree Indexing):** Sunucu başlangıcında yüklenen R-Tree mekansal indeksi sayesinde kullanıcının koordinatına en yakın durakları milisaniyeler içinde hesaplama (`GET /v1/stops/nearby`).
 - **🛡️ Güvenlik & Rate Limiting:** SlowAPI ile uç nokta bazlı hız sınırlaması, hata kalkanı (error shielding) ve ASP.NET iç hata sızıntılarını engelleme.
 - **📊 Canlı Sistem Durumu & Metrikler:** `/health` uç noktası üzerinden sistem çalışma süresi (uptime) ve bellek önbellek istatistikleri sunumu.
 
@@ -153,10 +155,12 @@ Backend component of a three-repository stack:
 
 ### 🌟 Key Features
 
+- **🔀 Unified Data Aggregation (API Aggregator):**
+  Combines disparate, fragmented data sources (e.g. live GPS from Source A, stop sequence from Source B, and vehicle specs from Source C) into a single, unified JSON payload in a single HTTP request (e.g. `/v1/fleet/{kapino}/detail`). Completely eliminates mobile N+1 request waterfalls.
 - **⚡ Smart In-Memory TTL Caching:** Optimized per-endpoint TTL caching (Fleet ~7k buses: 15s, ETAs: 20s, Timetables: 1h, Announcements: 5m, Garages: 24h).
-- **🔄 Automatic Mobiett & SOAP Fallback:** Merges Mobiett JSON endpoints and SOAP APIs in real-time to bypass municipal public API restrictions.
+- **🔄 Automatic Mobiett & SOAP Failover:** Merges Mobiett JSON endpoints, SOAP XML APIs, and BeautifulSoup HTML parsers in real-time to bypass municipal public API restrictions.
 - **🔒 ARAC Session & Captcha Engine (`arac.iett.gov.tr`):** Built-in `ddddocr` OCR engine for automated captcha solving, client-isolated session authentication (`X-Arac-Session-Key`), and manual captcha verification endpoints.
-- **📍 Ultra-Fast Spatial Indexing (R-Tree):** Memory-mapped spatial R-Tree index populated at startup for instant nearby stop lookup (`GET /v1/stops/nearby`).
+- **📍 Ultra-Fast Spatial R-Tree Indexing:** Memory-mapped spatial R-Tree index populated at startup for instant nearby stop lookup (`GET /v1/stops/nearby`).
 - **🛡️ Security & Error Shielding:** Rate-limiting via SlowAPI, sanitizing raw ASP.NET HTML stack traces, preventing internal leakage.
 - **📊 Health & Monitoring Metrics:** Live server metrics and uptime stats via `/health`.
 
