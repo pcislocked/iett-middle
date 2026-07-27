@@ -25,8 +25,8 @@
 
 ### 🌟 Öne Çıkan Özellikler
 
-- **🔀 Tek İstekte Çoklu Veri Konsolidasyonu (API Data Aggregator / Aggregation):**
-  İETT'nin dağınık ve parçalı API ekosisteminde A kaynağında bulunan canlı GPS konumu, B kaynağındaki durak sırası ve C kaynağındaki araç teknik donanım bilgilerini arka planda birleştirerek (data aggregation) ön yüze **tek bir HTTP yanıtında** (ör: `/v1/fleet/{kapino}/detail`) eksiksiz sunar. Mobil istemcinin ardışık onlarca istek yapmasını (N+1 problemi) engeller.
+- **🔀 Tek İstekte Çoklu Veri Konsolidasyonu (API Data Aggregator):**
+  İETT SOAP servisleri, Mobiett JSON altyapısı ve `arac.iett.gov.tr` şifreli API'lerindeki parçalı verileri arka planda harmanlayarak ön yüze **tek bir HTTP yanıtında** (ör: `/v1/fleet/{kapino}/detail` ile anlık konum, hat bilgisi, sıralı durak listesi ve araç teknik donanımı) sunar. Mobil cihazların ardışık onlarca ağ isteği yapmasını (N+1 problemi) ve hücresel veri gecikmelerini engeller.
 - **⚡ Akıllı Bellek İçi TTL Önbellekleme (In-Memory Cache):** Filo (~7k araç: 15s), Durak Varışları (20s), Sefer Saatleri (1sa), Duyurular (5dk) ve Garajlar (24sa) için optimize edilmiş TTL önbellekleme.
 - **🔄 Otomatik Mobiett & SOAP Fallback (Failover):** İBB açık verilerindeki SOAP kısıtlamalarını ve veri karartmalarını aşmak için arka planda Mobiett JSON servisleri, SOAP XML ve BeautifulSoup HTML kazıma altyapıları arasında otomatik veri birleştirme ve kesintisiz geçiş.
 - **🔒 ARAÇ Oturum & Otomatik Captcha Çözücü (`arac.iett.gov.tr`):** Dahili `ddddocr` OCR modeli ile otomatik captcha yanıtı üretme, istemci bazlı izole oturum yönetimi (`X-Arac-Session-Key`) ve manuel captcha doğrulaması.
@@ -156,7 +156,7 @@ Backend component of a three-repository stack:
 ### 🌟 Key Features
 
 - **🔀 Unified Data Aggregation (API Aggregator):**
-  Combines disparate, fragmented data sources (e.g. live GPS from Source A, stop sequence from Source B, and vehicle specs from Source C) into a single, unified JSON payload in a single HTTP request (e.g. `/v1/fleet/{kapino}/detail`). Completely eliminates mobile N+1 request waterfalls.
+  Harmonizes fragmented data from IETT SOAP services, Mobiett JSON endpoints, and `arac.iett.gov.tr` APIs into a **single HTTP payload** (e.g. `/v1/fleet/{kapino}/detail` combining live position, resolved route, ordered stop list, and vehicle specs). Completely eliminates mobile N+1 request waterfalls and network latency.
 - **⚡ Smart In-Memory TTL Caching:** Optimized per-endpoint TTL caching (Fleet ~7k buses: 15s, ETAs: 20s, Timetables: 1h, Announcements: 5m, Garages: 24h).
 - **🔄 Automatic Mobiett & SOAP Failover:** Merges Mobiett JSON endpoints, SOAP XML APIs, and BeautifulSoup HTML parsers in real-time to bypass municipal public API restrictions.
 - **🔒 ARAC Session & Captcha Engine (`arac.iett.gov.tr`):** Built-in `ddddocr` OCR engine for automated captcha solving, client-isolated session authentication (`X-Arac-Session-Key`), and manual captcha verification endpoints.
