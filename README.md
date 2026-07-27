@@ -138,24 +138,51 @@ Detaylı KVKK ve veri işleme politikası için:
 
 ## 🇬🇧 English
 
-`iett-middle` is a high-performance Python/FastAPI proxy service with smart in-memory TTL caching and automatic fallback mechanisms for Istanbul IETT public transit APIs, Mobiett services, and `arac.iett.gov.tr` APIs.
+## 🇬🇧 English
 
-### Key Features
-- **In-Memory TTL Caching:** Optimized caching for fleet positions (15s), ETAs (20s), timetables (1h), and alerts (5m).
-- **Mobiett & SOAP Fallback:** Seamlessly merges Mobiett JSON APIs and legacy SOAP data to bypass IBB API restrictions.
-- **ARAC Captcha Solver:** Integrated OCR solver (`ddddocr`) for automated captcha handling and per-session credential validation.
-- **Spatial Nearby Stops Index:** Fast R-Tree spatial indexing for instant nearby stop lookup (`GET /v1/stops/nearby`).
-- **Security & Error Shielding:** Rate-limiting via SlowAPI, sanitizing raw ASP.NET HTML stack traces.
+`iett-middle` is a high-performance Python/FastAPI backend proxy service engineered with smart in-memory TTL caching and automatic multi-provider fallback mechanisms for Istanbul public bus transit APIs (IETT), Mobiett mobile endpoints, `arac.iett.gov.tr` encrypted services, and IBB Open Data channels.
 
-### Quick Start
+[IETT](https://iett.istanbul) is Istanbul's municipal bus operator. Their raw API ecosystem is a chaotic mix of legacy SOAP XML, undocumented HTML parsing, and mobile JSON endpoints from the official Mobiett application (`ntcapi.iett.istanbul`). `iett-middle` normalizes all of them into a clean, strictly typed, versioned REST + JSON architecture with in-memory TTL caching to shield upstream servers and deliver sub-millisecond response times to the frontend.
+
+Backend component of a three-repository stack:
+[**iett-middle**](https://github.com/pcislocked/iett-middle) (this repo) ·
+[iett-pwa](https://github.com/pcislocked/iett-pwa) (web app) ·
+[iett-hacs](https://github.com/pcislocked/iett-hacs) (Home Assistant integration)
+
+---
+
+### 🌟 Key Features
+
+- **⚡ Smart In-Memory TTL Caching:** Optimized per-endpoint TTL caching (Fleet ~7k buses: 15s, ETAs: 20s, Timetables: 1h, Announcements: 5m, Garages: 24h).
+- **🔄 Automatic Mobiett & SOAP Fallback:** Merges Mobiett JSON endpoints and SOAP APIs in real-time to bypass municipal public API restrictions.
+- **🔒 ARAC Session & Captcha Engine (`arac.iett.gov.tr`):** Built-in `ddddocr` OCR engine for automated captcha solving, client-isolated session authentication (`X-Arac-Session-Key`), and manual captcha verification endpoints.
+- **📍 Ultra-Fast Spatial Indexing (R-Tree):** Memory-mapped spatial R-Tree index populated at startup for instant nearby stop lookup (`GET /v1/stops/nearby`).
+- **🛡️ Security & Error Shielding:** Rate-limiting via SlowAPI, sanitizing raw ASP.NET HTML stack traces, preventing internal leakage.
+- **📊 Health & Monitoring Metrics:** Live server metrics and uptime stats via `/health`.
+
+---
+
+### 🚀 Quick Start (Development)
+
 ```bash
 python -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate        # Linux/macOS
+# or: .venv\Scripts\activate      # Windows
+
 pip install -r requirements.txt
+pip install -r requirements-dev.txt
+
 uvicorn app.main:app --reload --port 8000
 ```
 
-### Docs & Health
-- **Swagger UI:** [http://localhost:8000/docs](http://localhost:8000/docs)
-- **ReDoc:** [http://localhost:8000/redoc](http://localhost:8000/redoc)
-- **Uptime Health:** [http://localhost:8000/health](http://localhost:8000/health)
+- **Swagger UI API Docs:** [https://iettapi.pcislocked.net/docs](https://iettapi.pcislocked.net/docs)
+- **ReDoc Docs:** [https://iettapi.pcislocked.net/redoc](https://iettapi.pcislocked.net/redoc)
+- **Health Metrics:** [https://iettapi.pcislocked.net/health](https://iettapi.pcislocked.net/health)
+
+---
+
+### ⚖️ License & Legal
+
+Under the [IBB Open Data License](https://data.ibb.gov.tr/license):
+> **Contains public sector information licensed under CC BY 4.0.**  
+Full Data & Privacy Policy: [https://pcislocked.net/kvkk/#iett-pwa](https://pcislocked.net/kvkk/#iett-pwa)
