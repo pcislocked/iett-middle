@@ -216,6 +216,7 @@ app.include_router(
 @app.get("/healthz", tags=["health"], include_in_schema=False)
 async def health(request: Request):
     import time
+
     from app.deps import get_fleet_snapshot, get_fleet_updated_at
     from app.services.cache import get_cache_stats
 
