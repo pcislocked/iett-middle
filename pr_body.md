@@ -1,16 +1,7 @@
-# release: v0.4.0
+# release: v0.4.1
 
-This Pull Request contains all changes for the v0.4.0 release:
-
-## Features
-- **SQLite Caching:** Improved backend caching mechanism by migrating to a more robust SQLite-based solution, complete with updated cachetools dependencies.
-- **Multi-Probe Backend & Variant Routing:** Expanded support for multi-probe features and variant routing functionality.
-
-## Documentation
-- **Swagger Updates:** Comprehensively expanded docstrings across all API endpoints (announcements, arac, fleet, garages, routes, stops, traffic) to provide detailed Swagger documentation.
-- **README Updates:** Updated API endpoints in README.md to match the v0.4.0 release.
-
-## Code Quality & Dependencies
-- **Ruff Compliance:** Enforced strict ruff format and ruff check across the entire codebase (app/ and tests/) for consistent styling and import sorting.
-- **Typing Fixes:** Resolved pyright error handler mismatches, context var annotations, and cookies assignment type mismatches for strict typing compliance.
-- **Dependabot Bumps:** Updated multiple dependencies including actions/checkout (v7), setup-python (v6), docker/metadata-action (v6), pytest, ruff, pyright, pytest-asyncio, and beautifulsoup4.
+This Pull Request contains all changes for the v0.4.1 hotfix release:
+- **Dependabot Resolution:** Bumped and consolidated backend dependencies (`httpx>=0.28.1`, `cryptography>=49.0.0`, `pydantic>=2.13.4`, `pydantic-settings>=2.14.2`, `ruff>=0.16.0`, `pyright>=1.1.411`).
+- **Aiohttp & Aioresponses Compatibility:** Pinned `aiohttp>=3.11.0,<3.13` to resolve breaking `ClientResponse` initializer mismatch with `aioresponses`.
+- **Code Quality & Linter Compliance:** Configured `pyproject.toml` for `ruff 0.16.0` and `pyright 1.1.411`, fixing all import formatting and typecheck annotations across `app/` and `tests/`.
+- **Test Suite:** Maintained 100% green test suite (363/363 pytest tests passing, 0 ruff errors, 0 pyright errors).
