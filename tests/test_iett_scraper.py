@@ -44,15 +44,23 @@ SAMPLE_IETT_HTML = """
 """
 
 
-@pytest.mark.asyncio
-async def test_fetch_official_footnotes_parses_html() -> None:
+def _create_mock_session(status: int = 200, text: str = SAMPLE_IETT_HTML) -> MagicMock:
     mock_resp = MagicMock()
-    mock_resp.status = 200
-    mock_resp.text = AsyncMock(return_value=SAMPLE_IETT_HTML)
+    mock_resp.status = status
+    mock_resp.text = AsyncMock(return_value=text)
+
+    mock_post_cm = AsyncMock()
+    mock_post_cm.__aenter__.return_value = mock_resp
+    mock_post_cm.__aexit__.return_value = None
 
     mock_session = MagicMock()
-    mock_session.post.return_value.__aenter__.return_value = mock_resp
+    mock_session.post.return_value = mock_post_cm
+    return mock_session
 
+
+@pytest.mark.asyncio
+async def test_fetch_official_footnotes_parses_html() -> None:
+    mock_session = _create_mock_session(status=200, text=SAMPLE_IETT_HTML)
     result = await _fetch_official_footnotes("15F", mock_session)
 
     assert "KÖPRÜBAŞI KALKIŞ" in result
@@ -64,12 +72,7 @@ async def test_fetch_official_footnotes_parses_html() -> None:
 
 @pytest.mark.asyncio
 async def test_fetch_official_footnotes_handles_http_error() -> None:
-    mock_resp = MagicMock()
-    mock_resp.status = 500
-
-    mock_session = MagicMock()
-    mock_session.post.return_value.__aenter__.return_value = mock_resp
-
+    mock_session = _create_mock_session(status=500)
     result = await _fetch_official_footnotes("15F", mock_session)
     assert result == {}
 
@@ -85,16 +88,17 @@ async def test_fetch_official_footnotes_handles_network_exception() -> None:
 
 @pytest.mark.asyncio
 async def test_get_official_footnotes_cached() -> None:
-    mock_resp = MagicMock()
-    mock_resp.status = 200
-    mock_resp.text = AsyncMock(return_value=SAMPLE_IETT_HTML)
-
-    mock_session = MagicMock()
-    mock_session.post.return_value.__aenter__.return_value = mock_resp
+    mock_session = _create_mock_session(status=200, text=SAMPLE_IETT_HTML)
 
     res1 = await get_official_footnotes("500T", mock_session)
     assert isinstance(res1, dict)
     assert "KÖPRÜBAŞI KALKIŞ" in res1
+    assert mock_session.post.call_count == 1
+
+    # Second call should be served from cache without calling session.post again
+    res2 = await get_official_footnotes("500T", mock_session)
+    assert res2 == res1
+    assert mock_session.post.call_count == 1
 
 
 def test_match_footnote_exact_direction() -> None:
