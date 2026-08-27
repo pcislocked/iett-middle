@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.2] - 2026-08-27
+
+### Dependencies & Maintenance
+- **Dependabot Updates:** Bumped `cachetools` (>=7.1.6), `ddddocr` (>=1.6.1), `aiohttp` (>=3.14.3,<3.15), `actions/setup-python` (v7).
+- **App Version Bump:** Updated FastAPI application version to `0.4.2`.
+- **Test Suite:** Maintained 100% green test suite (363/363 pytest tests passing).
+
+---
+
 ## [0.4.1] - 2026-07-27
 
 ### Dependencies & Maintenance
