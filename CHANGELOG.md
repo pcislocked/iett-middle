@@ -5,6 +5,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.3] - 2026-08-27
+
+### Added & Improved
+- **Backend Test Coverage Expansion:**
+  - Added dedicated test suite for `iett_scraper` (timetable HTML scraping, footnote mapping, HTTP and network error paths, 24h caching).
+  - Added dedicated test suite for `notice_poller` background worker.
+  - Reached 370 passing tests (100% green).
+  - Backend test coverage increased to **87%**.
+- **Dependencies & CI:**
+  - Pinned `aiohttp>=3.10.11,<=3.11.12` for reliable `aioresponses` mock compatibility.
+  - Bumped `uvicorn[standard]` to `>=0.52.4`.
+  - Updated CI workflow to `actions/setup-python@v5`.
+
+---
+
 ## [0.4.2] - 2026-08-27
 
 ### Dependencies & Maintenance
