@@ -76,9 +76,7 @@ async def _ensure_token(session: aiohttp.ClientSession) -> str:
             _token_expiry = time.monotonic() + expires_in
         else:
             _token_expiry = time.monotonic() + 3600
-        logger.debug(
-            "ntcapi: new token obtained, expires at monotonic %s", _token_expiry
-        )
+        logger.debug("ntcapi: new token obtained, expires at monotonic %s", _token_expiry)
         return _token  # type: ignore[return-value]
 
 
@@ -101,9 +99,7 @@ async def _call_service(
     ) as resp:
         if resp.status != 200:
             text = await resp.text()
-            raise NtcApiError(
-                f"Service call '{alias}' failed {resp.status}: {text[:200]}"
-            )
+            raise NtcApiError(f"Service call '{alias}' failed {resp.status}: {text[:200]}")
         return await resp.json()
 
 
@@ -342,9 +338,7 @@ async def get_route_buses_ybs(
                 break
         seq = item.get("H_GOREV_DURAK_GECIS_SIRANO")
         try:
-            stop_seq: int | None = (
-                int(seq) if seq is not None and str(seq).strip() else None
-            )
+            stop_seq: int | None = int(seq) if seq is not None and str(seq).strip() else None
         except (ValueError, TypeError):
             stop_seq = None
         positions.append(

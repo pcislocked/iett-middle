@@ -103,9 +103,7 @@ class TestParseSonKonum:
 
 
 class TestEnsureToken:
-    async def test_fetches_token_on_cold_start(
-        self, session: aiohttp.ClientSession
-    ) -> None:
+    async def test_fetches_token_on_cold_start(self, session: aiohttp.ClientSession) -> None:
         with aioresponses() as m:
             _mock_token(m)
             m.post(  # type: ignore[reportUnknownMemberType]
@@ -125,9 +123,7 @@ class TestEnsureToken:
         # Token endpoint was NOT called — still the cached value
         assert _ntc_mod._token == "cached-token"
 
-    async def test_token_fetch_failure_raises(
-        self, session: aiohttp.ClientSession
-    ) -> None:
+    async def test_token_fetch_failure_raises(self, session: aiohttp.ClientSession) -> None:
         with aioresponses() as m:
             m.post(_TOKEN_URL, status=401, payload={"error": "unauthorized"})  # type: ignore[reportUnknownMemberType]
             with pytest.raises(NtcApiError, match="Token fetch failed 401"):
@@ -143,9 +139,7 @@ class TestEnsureToken:
             m.post(_SERVICE_URL, payload=[])  # type: ignore[reportUnknownMemberType]
             await get_stop_arrivals("301341", session)
         assert _ntc_mod._token == "tok2"
-        assert _ntc_mod._token_expiry == pytest.approx(
-            time.monotonic() + 7200, rel=1e-3
-        )
+        assert _ntc_mod._token_expiry == pytest.approx(time.monotonic() + 7200, rel=1e-3)
 
 
 # ---------------------------------------------------------------------------
@@ -187,9 +181,7 @@ class TestGetStopArrivals:
             result = await get_stop_arrivals("301341", session)
         assert len(result) == 1
 
-    async def test_skips_items_with_no_route_or_time(
-        self, session: aiohttp.ClientSession
-    ) -> None:
+    async def test_skips_items_with_no_route_or_time(self, session: aiohttp.ClientSession) -> None:
         raw = [{"some_field": "x"}]
         with aioresponses() as m:
             _mock_token(m)
@@ -223,9 +215,7 @@ class TestGetBusLocation:
         assert result["kapino"] == "A-001"
         assert result["plate"] == "34HO1000"
 
-    async def test_empty_response_returns_none(
-        self, session: aiohttp.ClientSession
-    ) -> None:
+    async def test_empty_response_returns_none(self, session: aiohttp.ClientSession) -> None:
         with aioresponses() as m:
             _mock_token(m)
             m.post(_SERVICE_URL, payload=[])  # type: ignore[reportUnknownMemberType]
@@ -239,9 +229,7 @@ class TestGetBusLocation:
 
 
 class TestGetRouteMetadata:
-    async def test_deduplicates_variant_codes(
-        self, session: aiohttp.ClientSession
-    ) -> None:
+    async def test_deduplicates_variant_codes(self, session: aiohttp.ClientSession) -> None:
         raw = [
             {
                 "GUZERGAH_GUZERGAH_KODU": "500T_G_D0",
@@ -308,9 +296,7 @@ class TestGetRouteStops:
         assert result[0]["stop_code"] == "222"  # sequence 1 comes first
         assert result[1]["stop_code"] == "111"
 
-    async def test_yon_letter_mapped_to_number(
-        self, session: aiohttp.ClientSession
-    ) -> None:
+    async def test_yon_letter_mapped_to_number(self, session: aiohttp.ClientSession) -> None:
         """'D' direction letter maps to yon '120' in the payload."""
         captured: list[dict] = []
 
@@ -323,18 +309,14 @@ class TestGetRouteStops:
 
         assert captured[0]["HATYONETIM.GUZERGAH.YON"] == "120"
 
-    async def test_empty_raw_returns_empty_list(
-        self, session: aiohttp.ClientSession
-    ) -> None:
+    async def test_empty_raw_returns_empty_list(self, session: aiohttp.ClientSession) -> None:
         with aioresponses() as m:
             _mock_token(m)
             m.post(_SERVICE_URL, payload=[])  # type: ignore[reportUnknownMemberType]
             result = await get_route_stops("500T", "G", session)
         assert result == []
 
-    async def test_returns_all_variant_stops_combined(
-        self, session: aiohttp.ClientSession
-    ) -> None:
+    async def test_returns_all_variant_stops_combined(self, session: aiohttp.ClientSession) -> None:
         raw = [
             {
                 "GUZERGAH_GUZERGAH_KODU": "500T_G_D1",
@@ -404,9 +386,7 @@ class TestGetRouteBusesYbs:
         assert result[0].stop_sequence == 5
         assert result[1].stop_sequence is None
 
-    async def test_skips_items_without_lat_lon(
-        self, session: aiohttp.ClientSession
-    ) -> None:
+    async def test_skips_items_without_lat_lon(self, session: aiohttp.ClientSession) -> None:
         raw = [
             {"K_ARAC_KAPINUMARASI": "X-999"},  # no ENLEM/BOYLAM
         ]

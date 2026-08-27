@@ -207,9 +207,7 @@ app.include_router(fleet.router, prefix="/v1/fleet", tags=["fleet"])
 app.include_router(arac.router, prefix="/v1/arac", tags=["arac"])
 app.include_router(garages.router, prefix="/v1/garages", tags=["garages"])
 app.include_router(traffic.router, prefix="/v1/traffic", tags=["traffic"])
-app.include_router(
-    announcements.router, prefix="/v1/announcements", tags=["announcements"]
-)
+app.include_router(announcements.router, prefix="/v1/announcements", tags=["announcements"])
 
 
 @app.get("/health", tags=["health"])

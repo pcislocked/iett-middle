@@ -74,10 +74,7 @@ class TestHelperFns:
         assert _extract_error_message({"error": "y"}) == "y"
         assert _extract_error_message({"detail": "z"}) == "z"
         assert (
-            _extract_error_message(
-                {"detail": "<html><body>405 Not Allowed</body></html>"}
-            )
-            is None
+            _extract_error_message({"detail": "<html><body>405 Not Allowed</body></html>"}) is None
         )
         assert _extract_error_message({"oops": 1}) is None
 
@@ -94,9 +91,7 @@ class TestHelperFns:
 
 
 class TestAracClientMethods:
-    async def test_get_vehicle_hash_success(
-        self, session: aiohttp.ClientSession
-    ) -> None:
+    async def test_get_vehicle_hash_success(self, session: aiohttp.ClientSession) -> None:
         client = AracClient(session)
         with aioresponses() as m:
             m.post(
@@ -112,9 +107,7 @@ class TestAracClientMethods:
             vhash = await client.get_vehicle_hash("C-1753")
             assert vhash == "hash_123"
 
-    async def test_get_vehicle_hash_not_found(
-        self, session: aiohttp.ClientSession
-    ) -> None:
+    async def test_get_vehicle_hash_not_found(self, session: aiohttp.ClientSession) -> None:
         client = AracClient(session)
         with aioresponses() as m:
             m.post(
@@ -125,9 +118,7 @@ class TestAracClientMethods:
                 await client.get_vehicle_hash("X-999")
             assert exc.value.status_code == 404
 
-    async def test_get_vehicle_hash_rate_limited(
-        self, session: aiohttp.ClientSession
-    ) -> None:
+    async def test_get_vehicle_hash_rate_limited(self, session: aiohttp.ClientSession) -> None:
         client = AracClient(session)
         with aioresponses() as m:
             m.post(
@@ -142,9 +133,7 @@ class TestAracClientMethods:
                 await client.get_vehicle_hash("C-1753")
             assert exc.value.status_code == 429
 
-    async def test_get_captcha_success(
-        self, session: aiohttp.ClientSession
-    ) -> None:
+    async def test_get_captcha_success(self, session: aiohttp.ClientSession) -> None:
         client = AracClient(session)
         with aioresponses() as m:
             m.post(
@@ -155,9 +144,7 @@ class TestAracClientMethods:
             assert "captchaId" in res
             assert res["captchaImage"] == "data:image/png;base64,iVBORw=="
 
-    async def test_get_captcha_missing_image(
-        self, session: aiohttp.ClientSession
-    ) -> None:
+    async def test_get_captcha_missing_image(self, session: aiohttp.ClientSession) -> None:
         client = AracClient(session)
         with aioresponses() as m:
             m.post(
@@ -167,9 +154,7 @@ class TestAracClientMethods:
             with pytest.raises(AracApiError, match="missing captchaImage"):
                 await client.get_captcha()
 
-    async def test_submit_captcha_success(
-        self, session: aiohttp.ClientSession
-    ) -> None:
+    async def test_submit_captcha_success(self, session: aiohttp.ClientSession) -> None:
         client = AracClient(session)
         with aioresponses() as m:
             m.post(
@@ -179,9 +164,7 @@ class TestAracClientMethods:
             ok = await client.submit_captcha("hash_123", "123456")
             assert ok is True
 
-    async def test_submit_captcha_failed(
-        self, session: aiohttp.ClientSession
-    ) -> None:
+    async def test_submit_captcha_failed(self, session: aiohttp.ClientSession) -> None:
         client = AracClient(session)
         with aioresponses() as m:
             m.post(
@@ -191,9 +174,7 @@ class TestAracClientMethods:
             ok = await client.submit_captcha("hash_123", "000000")
             assert ok is False
 
-    async def test_get_detail_success(
-        self, session: aiohttp.ClientSession
-    ) -> None:
+    async def test_get_detail_success(self, session: aiohttp.ClientSession) -> None:
         client = AracClient(session)
         with aioresponses() as m:
             m.post(
@@ -214,9 +195,7 @@ class TestAracClientMethods:
             assert detail["isSuccess"] is True
             assert detail["dataVehicle"]["vehicleDoorCode"] == "C-1753"
 
-    async def test_get_detail_unauthorized(
-        self, session: aiohttp.ClientSession
-    ) -> None:
+    async def test_get_detail_unauthorized(self, session: aiohttp.ClientSession) -> None:
         client = AracClient(session)
         with aioresponses() as m:
             m.post(
@@ -233,20 +212,22 @@ class TestAracClientMethods:
         assert res is None or isinstance(res, str)
 
     def test_normalize_bus_position(self) -> None:
-        pos = AracClient.normalize_bus_position({
-            "vehicleDoorCode": "C-1753",
-            "numberPlate": "34 HO 1753",
-            "latitude": "41.0123",
-            "longitude": "28.9765",
-            "operatorType": "İstanbul Halk Ulaşım",
-            "accessibility": True,
-            "hasUsbCharger": False,
-            "hasWifi": True,
-            "hasBicycleRack": False,
-            "isAirConditioned": True,
-            "lastLocationDate": "2026-07-25",
-            "lastLocationTime": "21:30:00",
-        })
+        pos = AracClient.normalize_bus_position(
+            {
+                "vehicleDoorCode": "C-1753",
+                "numberPlate": "34 HO 1753",
+                "latitude": "41.0123",
+                "longitude": "28.9765",
+                "operatorType": "İstanbul Halk Ulaşım",
+                "accessibility": True,
+                "hasUsbCharger": False,
+                "hasWifi": True,
+                "hasBicycleRack": False,
+                "isAirConditioned": True,
+                "lastLocationDate": "2026-07-25",
+                "lastLocationTime": "21:30:00",
+            }
+        )
         assert pos.kapino == "C-1753"
         assert pos.plate == "34 HO 1753"
         assert pos.latitude == pytest.approx(41.0123)
@@ -257,13 +238,15 @@ class TestAracClientMethods:
         assert pos.last_seen == "2026-07-25 21:30:00"
 
     def test_normalize_missions(self) -> None:
-        missions = AracClient.normalize_missions([
-            {
-                "lineCode": "14R",
-                "firstStop": "KADIKÖY",
-                "orer": "21:45",
-            }
-        ])
+        missions = AracClient.normalize_missions(
+            [
+                {
+                    "lineCode": "14R",
+                    "firstStop": "KADIKÖY",
+                    "orer": "21:45",
+                }
+            ]
+        )
         assert len(missions) == 1
         assert missions[0].line_code == "14R"
         assert missions[0].first_stop == "KADIKÖY"

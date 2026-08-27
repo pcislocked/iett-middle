@@ -94,9 +94,7 @@ def summarise(label, status, data):
         entry["count"] = len(data)
         entry["sample"] = data[0] if data else None
         if data:
-            entry["fields"] = (
-                list(data[0].keys()) if isinstance(data[0], dict) else "non-dict"
-            )
+            entry["fields"] = list(data[0].keys()) if isinstance(data[0], dict) else "non-dict"
     elif isinstance(data, dict):
         entry["fields"] = list(data.keys())
         entry["sample"] = data
@@ -269,9 +267,7 @@ async def probe_all():
         except Exception:
             items = []
         summarise("7_search_ahmet_mithat", status, items)
-        print(
-            f"  HTTP {status} | results={len(items)} | sample={items[0] if items else 'n/a'}"
-        )
+        print(f"  HTTP {status} | results={len(items)} | sample={items[0] if items else 'n/a'}")
 
         print("── 7b. GetSearchItems q=500T ──")
         status, ct, body = await http_get(
@@ -283,9 +279,7 @@ async def probe_all():
         except Exception:
             items2 = []
         summarise("7b_search_500T", status, items2)
-        print(
-            f"  HTTP {status} | results={len(items2)} | sample={items2[0] if items2 else 'n/a'}"
-        )
+        print(f"  HTTP {status} | results={len(items2)} | sample={items2[0] if items2 else 'n/a'}")
 
         print("── 8. GetRouteByStation dcode=220602 ──")
         status, ct, html = await http_get(
@@ -339,9 +333,7 @@ async def probe_all():
             print(f"  sample={fst[0]}")
 
         print("── 11. GetAllRoute rcode=14M ──")
-        status, ct, body = await http_get(
-            s, f"{IETT_REST}/GetAllRoute", {"rcode": "14M"}
-        )
+        status, ct, body = await http_get(s, f"{IETT_REST}/GetAllRoute", {"rcode": "14M"})
         try:
             ar = json.loads(body)
         except Exception:

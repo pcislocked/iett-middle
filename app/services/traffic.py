@@ -30,9 +30,7 @@ class TrafficClient:
     async def _get_json(self, path: str) -> list | dict:
         url = f"{settings.trafik_base}/{path}"
         try:
-            async with self._session.get(
-                url, timeout=aiohttp.ClientTimeout(total=15)
-            ) as resp:
+            async with self._session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
                 resp.raise_for_status()
                 return await resp.json(content_type=None)
         except aiohttp.ClientError as exc:
@@ -43,9 +41,7 @@ class TrafficClient:
         data = await self._get_json("TrafficIndex_Sc1_Cont")
         percent = int(data) if isinstance(data, (int, float, str)) else 0
         level = min(7, max(1, round(percent / 16)))
-        return TrafficIndex(
-            percent=percent, description=_CONGESTION_LABELS.get(level, "Unknown")
-        )
+        return TrafficIndex(percent=percent, description=_CONGESTION_LABELS.get(level, "Unknown"))
 
     async def get_traffic_segments(self) -> list[TrafficSegment]:
         """Per-road segment speeds and congestion levels."""

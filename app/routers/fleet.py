@@ -50,9 +50,7 @@ FleetRefreshResponse = FleetRefreshQueuedResponse | FleetRefreshCooldownResponse
 
 
 def _snapshot_with_trails() -> list[dict[str, Any]]:
-    return [
-        {**b, "trail": get_trail(cast(str, b["kapino"]))} for b in get_fleet_snapshot()
-    ]
+    return [{**b, "trail": get_trail(cast(str, b["kapino"]))} for b in get_fleet_snapshot()]
 
 
 @router.get("", response_model=list[BusPositionWithTrail])

@@ -37,9 +37,7 @@ from tests.conftest import (
 FLEET_URL = "https://api.ibb.gov.tr/iett/FiloDurum/SeferGerceklesme.asmx"
 HAT_DURAK_URL = "https://api.ibb.gov.tr/iett/UlasimAnaVeri/HatDurakGuzergah.asmx"
 ARRIVALS_URL = re.compile(r"https://iett\.istanbul/tr/RouteStation/GetStationInfo.*")
-ROUTES_AT_STOP_URL = re.compile(
-    r"https://iett\.istanbul/tr/RouteStation/GetRouteByStation.*"
-)
+ROUTES_AT_STOP_URL = re.compile(r"https://iett\.istanbul/tr/RouteStation/GetRouteByStation.*")
 SCHEDULE_URL = "https://api.ibb.gov.tr/iett/UlasimAnaVeri/PlanlananSeferSaati.asmx"
 ANNOUNCEMENTS_URL = "https://api.ibb.gov.tr/iett/UlasimDinamikVeri/Duyurular.asmx"
 ROUTE_STATION_FOR_ROUTE_URL = re.compile(
@@ -94,9 +92,7 @@ class TestGetRouteBuses:
 
         with aioresponses() as m:
             m.post(FLEET_URL, exception=TimeoutError("SOAP down"))
-            m.post(
-                MOBIETT_AUTH_URL, payload={"access_token": "token", "expires_in": 3600}
-            )
+            m.post(MOBIETT_AUTH_URL, payload={"access_token": "token", "expires_in": 3600})
 
             def callback(url, **kwargs):
                 from aioresponses import CallbackResult
@@ -169,9 +165,7 @@ class TestGetStopArrivalsVia:
             m.get(ROUTES_AT_STOP_URL, body=ROUTES_BY_STATION_HTML)  # type: ignore[misc]
             m.get(ROUTES_AT_STOP_URL, body=via_html)  # type: ignore[misc]
             m.get(ARRIVALS_URL, body=ARRIVALS_HTML)  # type: ignore[misc]
-            arrivals: list[Arrival] = await client.get_stop_arrivals_via(
-                "220602", "216572"
-            )
+            arrivals: list[Arrival] = await client.get_stop_arrivals_via("220602", "216572")
         assert all(a.route_code == "14M" for a in arrivals)
 
     async def test_empty_when_no_common_routes(self, client: IettClient) -> None:
@@ -307,9 +301,7 @@ class TestGetStopDetail:
 
         with aioresponses() as m:
             m.post(HAT_DURAK_URL, exception=TimeoutError("SOAP down"))
-            m.post(
-                MOBIETT_AUTH_URL, payload={"access_token": "token", "expires_in": 3600}
-            )
+            m.post(MOBIETT_AUTH_URL, payload={"access_token": "token", "expires_in": 3600})
             m.post(
                 MOBIETT_SERVICE_URL,
                 payload=[
@@ -349,9 +341,7 @@ class TestGetStopDetail:
             detail = await client.get_stop_detail("000000")
         assert detail is None
 
-    async def test_coords_filled_from_stop_index_when_zero(
-        self, client: IettClient
-    ) -> None:
+    async def test_coords_filled_from_stop_index_when_zero(self, client: IettClient) -> None:
         """When SOAP returns (0.0, 0.0) coords the in-memory index should supply real ones."""
         from unittest.mock import patch
 
@@ -363,9 +353,7 @@ class TestGetStopDetail:
         assert abs(detail.latitude - 41.1234) < 0.001
         assert abs(detail.longitude - 29.0871) < 0.001
 
-    async def test_coords_stay_zero_when_index_has_no_entry(
-        self, client: IettClient
-    ) -> None:
+    async def test_coords_stay_zero_when_index_has_no_entry(self, client: IettClient) -> None:
         """When SOAP returns (0.0, 0.0) and the stop index has no entry, coords remain 0.0."""
         from unittest.mock import patch
 

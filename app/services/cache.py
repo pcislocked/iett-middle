@@ -13,8 +13,8 @@ from app.utils.lock import LazyLock
 
 logger = logging.getLogger(__name__)
 
-cache_hit_time: contextvars.ContextVar[Union[dict, float, None]] = (
-    contextvars.ContextVar("cache_hit_time", default=None)
+cache_hit_time: contextvars.ContextVar[Union[dict, float, None]] = contextvars.ContextVar(
+    "cache_hit_time", default=None
 )
 _DYNAMIC_PREFIXES = ("stops:arrivals", "routes:announcements", "traffic")
 
@@ -286,7 +286,7 @@ async def cache_clear() -> int:
         return removed
 
 
-async def sweep_forever(interval: int = 60) -> None:
+async def sweep_forever(interval: float = 60.0) -> None:
     """Periodically clean up expired cache entries in the background."""
     while True:
         await asyncio.sleep(interval)

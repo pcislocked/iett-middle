@@ -72,9 +72,10 @@ def _direction_letter_from_route_code(route_code: str | None) -> str | None:
         return parts[1].upper()
     return None
 
+
 _BASE_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                  "(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
+    "(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
     "Content-Type": "application/json",
@@ -108,6 +109,7 @@ def _get_ocr():
     global _ocr_instance
     if _ocr_instance is None:
         import ddddocr
+
         _ocr_instance = ddddocr.DdddOcr(show_ad=False)
     return _ocr_instance
 
@@ -129,6 +131,7 @@ def solve_captcha_image(image_base64: str) -> str | None:
 
 
 # ── Client ──────────────────────────────────────────────────────────────────
+
 
 class AracClient:
     """Client for the new arac.iett.gov.tr API."""
@@ -176,11 +179,14 @@ class AracClient:
 
         This hash changes on every request. Do NOT cache it.
         """
-        payload = await self._post_json("/Home/GetAllVehicleSelectList", {
-            "page": 1,
-            "pageSize": 10,
-            "search": kapino,
-        })
+        payload = await self._post_json(
+            "/Home/GetAllVehicleSelectList",
+            {
+                "page": 1,
+                "pageSize": 10,
+                "search": kapino,
+            },
+        )
         if not isinstance(payload, dict) or not payload.get("isSuccess"):
             msg = f"GetAllVehicleSelectList failed for {kapino}"
             status_code = 502
@@ -219,9 +225,7 @@ class AracClient:
             raise AracApiError("Captcha response missing captchaImage")
 
         # Generate a captchaId from the session cookie
-        cookies = self._session.cookie_jar.filter_cookies(
-            URL(_ARAC_BASE)
-        )
+        cookies = self._session.cookie_jar.filter_cookies(URL(_ARAC_BASE))
         captcha_session_key = ""
         for key, cookie in cookies.items():
             if key == "Captcha_Session_Key":
@@ -235,17 +239,18 @@ class AracClient:
             "captchaImage": captcha_image,
         }
 
-    async def submit_captcha(
-        self, vehicle_hash: str, captcha_text: str
-    ) -> bool:
+    async def submit_captcha(self, vehicle_hash: str, captcha_text: str) -> bool:
         """Submit captcha answer with the vehicle hash to /Home/Control.
 
         Returns True if verification succeeded.
         """
-        payload = await self._post_json("/Home/Control", {
-            "DoorNumber": vehicle_hash,
-            "CaptchaText": captcha_text,
-        })
+        payload = await self._post_json(
+            "/Home/Control",
+            {
+                "DoorNumber": vehicle_hash,
+                "CaptchaText": captcha_text,
+            },
+        )
         if isinstance(payload, dict) and payload.get("isSuccess"):
             return True
         return False
@@ -257,9 +262,12 @@ class AracClient:
         session cookies. Requires a FRESH vehicle_hash (call
         get_vehicle_hash again — hashes are single-use/dynamic).
         """
-        payload = await self._post_json("/Home/GetDetail", {
-            "DoorNumber": vehicle_hash,
-        })
+        payload = await self._post_json(
+            "/Home/GetDetail",
+            {
+                "DoorNumber": vehicle_hash,
+            },
+        )
         if not isinstance(payload, dict) or not payload.get("isSuccess"):
             msg = "GetDetail failed"
             if isinstance(payload, dict):
@@ -311,10 +319,12 @@ class AracClient:
         for item in data_task:
             if not isinstance(item, dict):
                 continue
-            missions.append(AracMissionItem(
-                line_code=_as_text(item.get("lineCode")),
-                first_stop=_as_text(item.get("firstStop")),
-                departure_time=_as_text(item.get("orer")),
-                state=_as_text(item.get("state")),
-            ))
+            missions.append(
+                AracMissionItem(
+                    line_code=_as_text(item.get("lineCode")),
+                    first_stop=_as_text(item.get("firstStop")),
+                    departure_time=_as_text(item.get("orer")),
+                    state=_as_text(item.get("state")),
+                )
+            )
         return missions

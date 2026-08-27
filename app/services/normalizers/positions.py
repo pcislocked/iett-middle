@@ -42,9 +42,7 @@ def from_iett_soap_fleet(item: dict[str, Any]) -> CanonicalBusPosition:
         lon=_safe_float(item.get("Boylam")),
         speed_kmh=_safe_int(speed_raw),
         last_seen=str(item.get("Saat") or ""),
-        route_code=(
-            item.get("HatKodu") or item.get("HATKODU") or item.get("hatkodu") or None
-        ),
+        route_code=(item.get("HatKodu") or item.get("HATKODU") or item.get("hatkodu") or None),
         direction=None,
         nearest_stop_code=None,
         _source="iett_soap_fleet",
@@ -73,9 +71,7 @@ def from_iett_soap_route_fleet(item: dict[str, Any]) -> CanonicalBusPosition:
         last_seen=str(item.get("son_konum_zamani") or ""),
         route_code=item.get("hatkodu") or None,
         direction=item.get("yon") or None,
-        nearest_stop_code=str(item.get("yakinDurakKodu"))
-        if item.get("yakinDurakKodu")
-        else None,
+        nearest_stop_code=str(item.get("yakinDurakKodu")) if item.get("yakinDurakKodu") else None,
         _source="iett_soap_route_fleet",
     )
 

@@ -22,9 +22,7 @@ def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     dlat = math.radians(lat2 - lat1)
     dlon = math.radians(lon2 - lon1)
     a = math.sin(dlat / 2) ** 2 + (
-        math.cos(math.radians(lat1))
-        * math.cos(math.radians(lat2))
-        * math.sin(dlon / 2) ** 2
+        math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
     )
     return 2 * math.asin(math.sqrt(a)) * 6371
 
@@ -62,9 +60,7 @@ async def osrm_route(
     Returns None on any error (caller should fall back to haversine).
     Uses overview=full&geometries=geojson — required to get Leaflet-ready coords.
     """
-    url = (
-        f"{settings.osrm_base}/route/v1/driving/{from_lon},{from_lat};{to_lon},{to_lat}"
-    )
+    url = f"{settings.osrm_base}/route/v1/driving/{from_lon},{from_lat};{to_lon},{to_lat}"
     try:
         async with session.get(
             url,

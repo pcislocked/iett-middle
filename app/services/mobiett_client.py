@@ -30,18 +30,12 @@ class MobiettClient:
 
     async def _ensure_token(self) -> str:
         """Fetch and cache OAuth2 token if missing or expired."""
-        if (
-            MobiettClient._access_token
-            and time.monotonic() < MobiettClient._token_expires_at
-        ):
+        if MobiettClient._access_token and time.monotonic() < MobiettClient._token_expires_at:
             return MobiettClient._access_token
 
         async with MobiettClient._auth_lock:
             # Check again inside lock
-            if (
-                MobiettClient._access_token
-                and time.monotonic() < MobiettClient._token_expires_at
-            ):
+            if MobiettClient._access_token and time.monotonic() < MobiettClient._token_expires_at:
                 return MobiettClient._access_token
 
             payload = {
@@ -61,9 +55,7 @@ class MobiettClient:
                     MobiettClient._access_token = data["access_token"]
                     # Token expires in 3600 seconds, refresh a bit early (3500)
                     expires_in = data.get("expires_in", 3600)
-                    MobiettClient._token_expires_at = time.monotonic() + (
-                        expires_in - 100
-                    )
+                    MobiettClient._token_expires_at = time.monotonic() + (expires_in - 100)
                     return MobiettClient._access_token  # type: ignore
             except Exception as e:
                 raise MobiettApiError(f"OAuth2 failed: {e}") from e
@@ -150,9 +142,7 @@ class MobiettClient:
 
     async def get_stop_detail(self, dcode: str) -> dict[str, Any] | None:
         """Get stop details (name, coordinates) using mainGetBusStop."""
-        res = await self._post_service(
-            "mainGetBusStop", {"HATYONETIM.DURAK.DURAK_KODU": dcode}
-        )
+        res = await self._post_service("mainGetBusStop", {"HATYONETIM.DURAK.DURAK_KODU": dcode})
 
         if not res or not isinstance(res, list):
             return None

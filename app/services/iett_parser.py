@@ -66,9 +66,7 @@ def parse_all_fleet_xml(xml_text: str) -> list[BusPosition]:
                     speed=speed,
                     operator=r.get("Operator"),
                     last_seen=r.get("Saat", ""),
-                    route_code=(
-                        r.get("HatKodu") or r.get("HATKODU") or r.get("hatkodu") or None
-                    ),
+                    route_code=(r.get("HatKodu") or r.get("HATKODU") or r.get("hatkodu") or None),
                 )
             )
         except (TypeError, ValueError):
@@ -397,11 +395,7 @@ def parse_garages_xml(xml_text: str) -> list[Garage]:
         try:
             # Try various name key conventions
             name = (
-                r.get("GarajAdi")
-                or r.get("GarajAd")
-                or r.get("GARAJ_ADI")
-                or r.get("Adi")
-                or ""
+                r.get("GarajAdi") or r.get("GarajAd") or r.get("GARAJ_ADI") or r.get("Adi") or ""
             ).strip()
             if not name:
                 continue
@@ -433,11 +427,7 @@ def parse_stop_detail_xml(xml_text: str, dcode: str) -> StopDetail | None:
     r = records[0]
     try:
         name = (
-            r.get("DurakAdi")
-            or r.get("DURAK_ADI")
-            or r.get("Ad")
-            or r.get("SDURAKADI")
-            or ""
+            r.get("DurakAdi") or r.get("DURAK_ADI") or r.get("Ad") or r.get("SDURAKADI") or ""
         ).strip()
         if not name:
             return None

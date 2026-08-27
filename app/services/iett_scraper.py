@@ -55,9 +55,7 @@ async def _fetch_official_footnotes(
     soup = BeautifulSoup(html, "lxml")
     tables = soup.select("table.line-table")
 
-    mapping: dict[str, dict[str, dict[str, str]]] = defaultdict(
-        lambda: defaultdict(dict)
-    )
+    mapping: dict[str, dict[str, dict[str, str]]] = defaultdict(lambda: defaultdict(dict))
 
     for table in tables:
         th = table.select_one("th.routedetailstartend")
@@ -104,9 +102,7 @@ async def get_official_footnotes(
     async def _fetch() -> dict:
         return await _fetch_official_footnotes(hat_kodu, session)
 
-    result = await cache_get_or_fetch(
-        key, _CACHE_TTL, _fetch, stale_ttl=_CACHE_TTL, jitter=True
-    )
+    result = await cache_get_or_fetch(key, _CACHE_TTL, _fetch, stale_ttl=_CACHE_TTL, jitter=True)
     return result if isinstance(result, dict) else {}
 
 

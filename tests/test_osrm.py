@@ -91,9 +91,7 @@ class TestOsrmRoute:
 
         assert result is None
 
-    async def test_network_exception_returns_none(
-        self, session: aiohttp.ClientSession
-    ) -> None:
+    async def test_network_exception_returns_none(self, session: aiohttp.ClientSession) -> None:
         from app.config import settings
 
         url = f"{settings.osrm_base}/route/v1/driving/29.0,41.0;29.01,41.01?overview=full&geometries=geojson"

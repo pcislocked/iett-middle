@@ -137,9 +137,7 @@ async def get_route_buses(hat_kodu: str):
                 logger.warning("Failed to get route metadata for hat_id: %s", exc)
                 hat_id = None
             if hat_id is not None:
-                buses = await ntcapi_client.get_route_buses_ybs(
-                    hat_id, hat_kodu, session
-                )
+                buses = await ntcapi_client.get_route_buses_ybs(hat_id, hat_kodu, session)
                 if buses:
                     from app.deps import update_fleet
 
@@ -172,9 +170,7 @@ async def get_route_buses(hat_kodu: str):
         await ensure_fleet_fresh()
         return get_buses_by_route(hat_kodu)
 
-    return await cache_get_or_fetch(
-        key, 5, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True
-    )
+    return await cache_get_or_fetch(key, 5, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
 
 
 @router.get("/{hat_kodu}/stops", response_model=list[RouteStop])
@@ -198,8 +194,7 @@ async def get_route_stops(hat_kodu: str):
                 ntcapi_client.get_route_stops(hat_kodu, "D", session),
             )
             canonical = [
-                normalizers.route_stops.from_ntcapi_route_processed(r)
-                for r in raw_g + raw_d
+                normalizers.route_stops.from_ntcapi_route_processed(r) for r in raw_g + raw_d
             ]
             stops = [
                 RouteStop(
@@ -224,17 +219,13 @@ async def get_route_stops(hat_kodu: str):
         has_null_coords = any(s.latitude is None or s.longitude is None for s in stops)
         if not stops or has_null_coords:
             if has_null_coords:
-                logger.warning(
-                    "ntcapi stops missing coords for %s, trying SOAP fallback", hat_kodu
-                )
+                logger.warning("ntcapi stops missing coords for %s, trying SOAP fallback", hat_kodu)
             client = IettClient(session)
             try:
                 soap_stops = await client.get_route_stops(hat_kodu)
                 if soap_stops:
                     stops = soap_stops
-                    has_null_coords = any(
-                        s.latitude is None or s.longitude is None for s in stops
-                    )
+                    has_null_coords = any(s.latitude is None or s.longitude is None for s in stops)
             except IettApiError as exc:
                 if not stops:
                     logger.warning("get_route_stops failed for %s: %s", hat_kodu, exc)
@@ -299,10 +290,11 @@ async def get_route_schedule(hat_kodu: str):
                 schedule = await client.get_route_schedule(hat_kodu)
             except IettApiError as exc:
                 logger.warning("get_route_schedule failed for %s: %s", hat_kodu, exc)
-                raise HTTPException(502, detail="Hat sefer saatleri servisine ulaşılamadı.") from exc
+                raise HTTPException(
+                    502, detail="Hat sefer saatleri servisine ulaşılamadı."
+                ) from exc
             data = [  # type: ignore
-                normalizers.schedule.from_iett_soap_schedule(d.model_dump())
-                for d in schedule
+                normalizers.schedule.from_iett_soap_schedule(d.model_dump()) for d in schedule
             ]
             data = [{k: v for k, v in d.items() if k != "_source"} for d in data]
         return data
@@ -406,9 +398,7 @@ async def get_route_announcements(hat_kodu: str):
         try:
             stops = await get_route_stops(hat_kodu)
         except Exception as exc:
-            logger.warning(
-                "Failed to get route stops for announcements enrichment: %s", exc
-            )
+            logger.warning("Failed to get route stops for announcements enrichment: %s", exc)
 
         stops_to_check = []
         if stops:
@@ -436,14 +426,10 @@ async def get_route_announcements(hat_kodu: str):
                 try:
                     return await m_client.get_stop_announcements(dcode)
                 except Exception as exc:
-                    logger.warning(
-                        "Failed to fetch stop announcements for %s: %s", dcode, exc
-                    )
+                    logger.warning("Failed to fetch stop announcements for %s: %s", dcode, exc)
                     return []
 
-            results = await asyncio.gather(
-                *[_fetch_stop(code) for code in stops_to_check]
-            )
+            results = await asyncio.gather(*[_fetch_stop(code) for code in stops_to_check])
             for res_list in results:
                 for item in res_list:
                     if item.get("HAT") == hat_kodu:
@@ -458,9 +444,7 @@ async def get_route_announcements(hat_kodu: str):
                                             "route_code": hat_kodu,
                                             "route_name": "",
                                             "type": "Güzergah Duyurusu",
-                                            "updated_at": item.get(
-                                                "GUNCELLEME_SAATI", ""
-                                            ),
+                                            "updated_at": item.get("GUNCELLEME_SAATI", ""),
                                             "message": sub_msg,
                                         }
                                     )

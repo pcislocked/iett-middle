@@ -38,16 +38,19 @@ def _status_from_arac_error(exc: AracApiError, fallback: int = 502) -> int:
 
 def _as_bool(val: Any) -> bool | None:
     from app.utils.coerce import _to_bool
+
     return _to_bool(val)
 
 
 def _as_int(val: Any) -> int | None:
     from app.services.arac_client import _to_int
+
     return _to_int(val)
 
 
 def _as_str(val: Any) -> str | None:
     from app.utils.coerce import _as_text
+
     return _as_text(val)
 
 
@@ -55,6 +58,7 @@ def _ms_to_iso(val: Any) -> str | None:
     if val is None:
         return None
     from datetime import datetime, timezone
+
     try:
         fval = float(val)
         if fval < 0 or fval > 1e15:
@@ -74,10 +78,16 @@ def _require_arac_session_headers(
     x_session_key: str | None = None,
 ) -> dict[str, str] | tuple[str, str]:
     if request is not None:
-        session_key_raw = request.headers.get("X-Arac-Session-Key") or request.headers.get("X-Session-Key")
+        session_key_raw = request.headers.get("X-Arac-Session-Key") or request.headers.get(
+            "X-Session-Key"
+        )
         if not session_key_raw:
-            raise HTTPException(401, detail="Missing X-Arac-Session-Key header. Detail: X-Arac-Session-Id X-Arac-Session-Key X-Session-Id X-Session-Key")
+            raise HTTPException(
+                401,
+                detail="Missing X-Arac-Session-Key header. Detail: X-Arac-Session-Id X-Arac-Session-Key X-Session-Id X-Session-Key",
+            )
         import json
+
         try:
             return json.loads(session_key_raw)
         except (ValueError, TypeError):
@@ -86,7 +96,9 @@ def _require_arac_session_headers(
     sid = x_arac_session_id or x_session_id
     skey = x_arac_session_key or x_session_key
     if not sid or not skey:
-        raise HTTPException(401, detail="Missing X-Arac-Session-Id X-Arac-Session-Key X-Session-Id X-Session-Key")
+        raise HTTPException(
+            401, detail="Missing X-Arac-Session-Id X-Arac-Session-Key X-Session-Id X-Session-Key"
+        )
     return (sid, skey)
 
 
@@ -126,6 +138,7 @@ async def get_arac_captcha(request: Request) -> AracCaptchaResponse:
         captchaImageBase64=captcha_image,
         suggestedAnswer=suggested,
     )
+
 
 @router.post("/session/create", response_model=AracSessionCreateResponse)
 @limiter.limit("60/minute")
@@ -177,10 +190,12 @@ async def create_arac_session(
             raise HTTPException(status, detail=detail_msg) from exc
 
     import json
+
     return AracSessionCreateResponse(
         sessionId=payload.kapino,  # kapino as session identifier
         sessionKey=json.dumps(result_cookies),  # cookies as JSON string
     )
+
 
 @router.get("/fleet/{kapino}/detail")
 async def get_arac_bus_detail(
@@ -196,6 +211,7 @@ async def get_arac_bus_detail(
         raise HTTPException(401, detail="Missing X-Arac-Session-Key header.")
 
     import json as _json
+
     try:
         cookies_dict = _json.loads(session_key_raw)
     except (ValueError, TypeError):

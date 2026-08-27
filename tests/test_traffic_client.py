@@ -46,9 +46,7 @@ class TestTrafficClient:
             result = await tc.get_traffic_index()
         assert result.percent == 0
 
-    async def test_get_traffic_index_raises_on_http_error(
-        self, tc: TrafficClient
-    ) -> None:
+    async def test_get_traffic_index_raises_on_http_error(self, tc: TrafficClient) -> None:
         from app.config import settings
 
         url = f"{settings.trafik_base}/TrafficIndex_Sc1_Cont"
@@ -74,9 +72,7 @@ class TestTrafficClient:
         assert result[0].congestion == 3
         assert result[1].segment_id == 1002
 
-    async def test_get_traffic_segments_returns_empty_on_non_list(
-        self, tc: TrafficClient
-    ) -> None:
+    async def test_get_traffic_segments_returns_empty_on_non_list(self, tc: TrafficClient) -> None:
         from app.config import settings
 
         url = f"{settings.trafik_base}/SegmentData"
@@ -85,9 +81,7 @@ class TestTrafficClient:
             result = await tc.get_traffic_segments()
         assert result == []
 
-    async def test_get_traffic_segments_skips_malformed_entry(
-        self, tc: TrafficClient
-    ) -> None:
+    async def test_get_traffic_segments_skips_malformed_entry(self, tc: TrafficClient) -> None:
         from app.config import settings
 
         url = f"{settings.trafik_base}/SegmentData"
@@ -102,9 +96,7 @@ class TestTrafficClient:
         assert len(result) == 1
         assert result[0].segment_id == 2001
 
-    async def test_get_traffic_segments_raises_on_http_error(
-        self, tc: TrafficClient
-    ) -> None:
+    async def test_get_traffic_segments_raises_on_http_error(self, tc: TrafficClient) -> None:
         from app.config import settings
 
         url = f"{settings.trafik_base}/SegmentData"

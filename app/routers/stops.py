@@ -23,9 +23,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _haversine_m(
-    user_lat: float, user_lon: float, stop_lat: float, stop_lon: float
-) -> float:
+def _haversine_m(user_lat: float, user_lon: float, stop_lat: float, stop_lon: float) -> float:
     """Haversine distance in metres."""
     R = 6_371_000.0
     p1, p2 = _math.radians(user_lat), _math.radians(stop_lat)
@@ -80,12 +78,8 @@ async def nearby_stops(
 
     # ———————————————————————— primary: ntcapi mainGetBusStopNearby ————————————————————————
     try:
-        raw_stops = await ntcapi_client.get_nearby_stops(
-            lat, lon, radius / 1000, session
-        )
-        canonical = [
-            normalizers.stops.from_ntcapi_nearby_processed(r) for r in raw_stops
-        ]
+        raw_stops = await ntcapi_client.get_nearby_stops(lat, lon, radius / 1000, session)
+        canonical = [normalizers.stops.from_ntcapi_nearby_processed(r) for r in raw_stops]
         nearby_results: list[NearbyStop] = []
         for c in canonical:
             try:
@@ -134,9 +128,7 @@ async def nearby_stops(
     from app.deps import get_stop_index_updated_at
 
     if get_stop_index_updated_at() is None:
-        raise HTTPException(
-            503, detail="Stop index not ready yet — try again in a moment"
-        )
+        raise HTTPException(503, detail="Stop index not ready yet — try again in a moment")
     results = _get_nearby(lat, lon, radius)
     return results[:limit]
 
@@ -231,9 +223,7 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
             )
             arrivals_data = list(canonical)
         except NtcApiError as exc:
-            logger.warning(
-                "ntcapi arrivals failed for %s, falling back to HTML: %s", dcode, exc
-            )
+            logger.warning("ntcapi arrivals failed for %s, falling back to HTML: %s", dcode, exc)
 
         # ———————————————————————— fallback: legacy IETT HTML (no kapino, no location) ————————
         if not arrivals_data:
@@ -247,8 +237,7 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
                 logger.warning("HTML arrivals fallback failed for %s: %s", dcode, exc)
                 raise HTTPException(502, detail="İETT durak varış servisine ulaşılamadı.") from exc
             arrivals_data = [
-                normalizers.arrivals.from_iett_html(a.model_dump())
-                for a in iett_arrivals
+                normalizers.arrivals.from_iett_html(a.model_dump()) for a in iett_arrivals
             ]
 
         # ———————————————————————— via filter (applied after ntcapi fetch if needed) ——————————
@@ -257,9 +246,7 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
                 routes_via = await get_routes_at_stop(via)
                 routes_via_upper = {r.upper() for r in routes_via}  # type: ignore
                 arrivals_data = [
-                    a
-                    for a in arrivals_data
-                    if a.get("route_code", "").upper() in routes_via_upper
+                    a for a in arrivals_data if a.get("route_code", "").upper() in routes_via_upper
                 ]
             except Exception as exc:
                 logger.warning(
@@ -390,17 +377,13 @@ async def get_stop_announcements(dcode: str):
             )
 
             if isinstance(global_anns, Exception):
-                logger.warning(
-                    f"Global announcements failed for stop {dcode}: {global_anns}"
-                )
+                logger.warning(f"Global announcements failed for stop {dcode}: {global_anns}")
                 global_anns = []
             elif not global_anns:
                 global_anns = []
 
             if isinstance(stop_anns, Exception):
-                logger.warning(
-                    f"Stop announcements failed for stop {dcode}: {stop_anns}"
-                )
+                logger.warning(f"Stop announcements failed for stop {dcode}: {stop_anns}")
                 stop_anns = []
             elif not stop_anns:
                 stop_anns = []

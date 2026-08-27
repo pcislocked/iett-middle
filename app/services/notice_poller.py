@@ -31,9 +31,7 @@ async def notice_poll_loop() -> None:
                 stale_ttl=poll_interval * 2,
             )
 
-            logger.debug(
-                f"notice_poller: fetched and cached {len(notices)} global notices"
-            )
+            logger.debug(f"notice_poller: fetched and cached {len(notices)} global notices")
         except asyncio.CancelledError:
             logger.info("notice_poller: cancelled")
             break

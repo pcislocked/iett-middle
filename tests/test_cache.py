@@ -289,10 +289,7 @@ class TestCacheGetOrFetch:
             raise ValueError("fetch failed")
 
         results = await asyncio.gather(
-            *(
-                cache_mod.cache_get_or_fetch("ns:fail", 60, fail_fetch)
-                for _ in range(3)
-            ),
+            *(cache_mod.cache_get_or_fetch("ns:fail", 60, fail_fetch) for _ in range(3)),
             return_exceptions=True,
         )
 
@@ -326,9 +323,7 @@ class TestCacheGetOrFetch:
             return "new_data"
 
         # First call should return stale data immediately
-        result = await cache_mod.cache_get_or_fetch(
-            "ns:swr", 60, background_fetcher, stale_ttl=60
-        )
+        result = await cache_mod.cache_get_or_fetch("ns:swr", 60, background_fetcher, stale_ttl=60)
         assert result == "old_data"
         assert fetch_count == 0  # not finished yet
 
@@ -337,9 +332,7 @@ class TestCacheGetOrFetch:
         assert fetch_count == 1
 
         # Next call should return new data (which is now fresh)
-        result2 = await cache_mod.cache_get_or_fetch(
-            "ns:swr", 60, background_fetcher, stale_ttl=60
-        )
+        result2 = await cache_mod.cache_get_or_fetch("ns:swr", 60, background_fetcher, stale_ttl=60)
         assert result2 == "new_data"
 
     @pytest.mark.asyncio
@@ -350,9 +343,7 @@ class TestCacheGetOrFetch:
             await asyncio.sleep(0.01)
             raise cache_mod.SkipCache("fallback")
 
-        result = await cache_mod.cache_get_or_fetch(
-            "ns:swr_skip", 60, skip_fetcher, stale_ttl=60
-        )
+        result = await cache_mod.cache_get_or_fetch("ns:swr_skip", 60, skip_fetcher, stale_ttl=60)
         assert result == "old"
         await asyncio.sleep(0.05)
         # It skipped cache, so background task set result but didn't cache. Wait, skipcache doesn't overwrite.
@@ -367,9 +358,7 @@ class TestCacheGetOrFetch:
             await asyncio.sleep(0.01)
             raise ValueError("fetch err")
 
-        result = await cache_mod.cache_get_or_fetch(
-            "ns:swr_err", 60, err_fetcher, stale_ttl=60
-        )
+        result = await cache_mod.cache_get_or_fetch("ns:swr_err", 60, err_fetcher, stale_ttl=60)
         assert result == "old"
         await asyncio.sleep(0.05)
 
@@ -382,9 +371,7 @@ class TestCacheGetOrFetch:
             return "new"
 
         # First call triggers background task
-        await cache_mod.cache_get_or_fetch(
-            "ns:swr_cncl", 60, cncl_fetcher, stale_ttl=60
-        )
+        await cache_mod.cache_get_or_fetch("ns:swr_cncl", 60, cncl_fetcher, stale_ttl=60)
 
         # Manually cancel the inflight future to trigger cancellation logic in finally block
         async with cache_mod._lock:

@@ -98,9 +98,7 @@ class IettClient:
         except Exception as exc:
             raise IettApiError(f"GET {url} failed: {exc}") from exc
 
-    async def _get_json(
-        self, url: str, params: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    async def _get_json(self, url: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         try:
             async with self._session.get(
                 url,
@@ -160,9 +158,7 @@ class IettClient:
                 if not b.kapino:
                     continue
                 if b.kapino in buses:
-                    buses[b.kapino] = buses[b.kapino].model_copy(
-                        update={"plate": b.plate}
-                    )
+                    buses[b.kapino] = buses[b.kapino].model_copy(update={"plate": b.plate})
                 else:
                     buses[b.kapino] = b
 
@@ -191,9 +187,7 @@ class IettClient:
         )
         return parse_routes_from_html(html)
 
-    async def get_stop_arrivals_via(
-        self, dcode_origin: str, dcode_via: str
-    ) -> list[Arrival]:
+    async def get_stop_arrivals_via(self, dcode_origin: str, dcode_via: str) -> list[Arrival]:
         """Arrivals at origin that will also pass through via stop."""
         routes_origin, routes_via = await asyncio.gather(
             self.get_routes_at_stop(dcode_origin),
@@ -220,9 +214,7 @@ class IettClient:
             res = []
 
         return [
-            StopSearchResult(
-                dcode=str(r.get("DURAK_DURAK_KODU", "")), name=r.get("DURAK_ADI", "")
-            )
+            StopSearchResult(dcode=str(r.get("DURAK_DURAK_KODU", "")), name=r.get("DURAK_ADI", ""))
             for r in res
             if r.get("DURAK_DURAK_KODU")
         ]
@@ -280,12 +272,8 @@ class IettClient:
             detail = json_res
 
         if isinstance(json_res, Exception) and isinstance(soap_res, Exception):
-            logger.error(
-                f"get_stop_detail failed for {dcode}: SOAP={soap_res}, JSON={json_res}"
-            )
-            raise IettApiError(
-                f"Both SOAP and JSON failed for stop {dcode}"
-            ) from json_res
+            logger.error(f"get_stop_detail failed for {dcode}: SOAP={soap_res}, JSON={json_res}")
+            raise IettApiError(f"Both SOAP and JSON failed for stop {dcode}") from json_res
 
         if detail is not None and (
             detail.latitude in (None, 0.0) or detail.longitude in (None, 0.0)  # type: ignore
@@ -332,9 +320,7 @@ class IettClient:
             res = []
 
         return [
-            RouteSearchResult(
-                hat_kodu=r.get("HAT_HAT_KODU", ""), name=r.get("HAT_HAT_ADI", "")
-            )
+            RouteSearchResult(hat_kodu=r.get("HAT_HAT_KODU", ""), name=r.get("HAT_HAT_ADI", ""))
             for r in res
             if r.get("HAT_HAT_KODU")
         ]
@@ -388,9 +374,7 @@ class IettClient:
         )
         return parse_route_schedule_xml(xml)
 
-    async def get_announcements(
-        self, hat_kodu: str | None = None
-    ) -> list[Announcement]:
+    async def get_announcements(self, hat_kodu: str | None = None) -> list[Announcement]:
         """Active disruption announcements. Optionally filter by route."""
         xml = await self._soap_post(
             f"{settings.iett_soap_base}/UlasimDinamikVeri/Duyurular.asmx",
@@ -400,7 +384,5 @@ class IettClient:
         announcements = parse_announcements_xml(xml)
         if hat_kodu:
             hat_upper = hat_kodu.upper().strip()
-            announcements = [
-                a for a in announcements if a.route_code.upper().strip() == hat_upper
-            ]
+            announcements = [a for a in announcements if a.route_code.upper().strip() == hat_upper]
         return announcements

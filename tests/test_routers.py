@@ -191,9 +191,7 @@ class TestFleetRefresh:
         with (
             patch("app.config.settings.fleet_manual_refresh_cooldown", 0),
             patch("app.routers.fleet._manual_refresh_last_triggered", 0.0),
-            patch(
-                "app.routers.fleet.ensure_fleet_fresh", AsyncMock()
-            ) as mocked_refresh,
+            patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()) as mocked_refresh,
         ):
             resp = client.post("/v1/fleet/refresh")
         assert resp.status_code == 202
@@ -205,9 +203,7 @@ class TestFleetRefresh:
         with (
             patch("app.config.settings.fleet_manual_refresh_cooldown", 600),
             patch("app.routers.fleet._manual_refresh_last_triggered", 0.0),
-            patch(
-                "app.routers.fleet.ensure_fleet_fresh", AsyncMock()
-            ) as mocked_refresh,
+            patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()) as mocked_refresh,
         ):
             first = client.post("/v1/fleet/refresh")
             second = client.post("/v1/fleet/refresh")
@@ -256,9 +252,7 @@ class TestFleetDetailRouter:
             patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
             patch("app.routers.fleet.get_trail", return_value=[]),
-            patch(
-                "app.routers.fleet.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.fleet.get_session", return_value=MagicMock(), create=True),
             patch(
                 "app.services.cache._cache_get_internal",
                 AsyncMock(return_value=([], True)),
@@ -280,9 +274,7 @@ class TestFleetDetailRouter:
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
             patch("app.routers.fleet.get_trail", return_value=[]),
             patch("app.routers.fleet.get_last_route_by_kapino", return_value="15F"),
-            patch(
-                "app.routers.fleet.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.fleet.get_session", return_value=MagicMock(), create=True),
             patch(
                 "app.services.cache._cache_get_internal",
                 AsyncMock(return_value=([], True)),
@@ -314,9 +306,7 @@ class TestFleetDetailRouter:
             patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
             patch("app.routers.fleet.get_trail", return_value=[]),
-            patch(
-                "app.routers.fleet.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.fleet.get_session", return_value=MagicMock(), create=True),
             patch(
                 "app.services.cache._cache_get_internal",
                 AsyncMock(return_value=(cached_stops, True)),
@@ -335,12 +325,8 @@ class TestFleetDetailRouter:
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
             patch("app.routers.fleet.get_trail", return_value=[]),
             patch("app.routers.fleet.get_last_route_by_kapino", return_value=None),
-            patch(
-                "app.routers.fleet.get_session", return_value=MagicMock(), create=True
-            ),
-            patch(
-                "app.services.cache._cache_get_internal", AsyncMock(return_value=None)
-            ),
+            patch("app.routers.fleet.get_session", return_value=MagicMock(), create=True),
+            patch("app.services.cache._cache_get_internal", AsyncMock(return_value=None)),
             patch("app.services.cache.cache_set", AsyncMock()),
         ):
             resp = client.get("/v1/fleet/A-001/detail")
@@ -359,13 +345,9 @@ class TestStopsSearch:
         mock_client = MagicMock()
         mock_client.search_stops = AsyncMock(return_value=[_stop_search()])
         with (
-            patch(
-                "app.routers.stops.cache_get", AsyncMock(return_value=None), create=True
-            ),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None), create=True),
             patch("app.routers.stops.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.stops.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.stops.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/stops/search?q=ahmet")
@@ -381,9 +363,7 @@ class TestStopsNearby:
         # ntcapi fails â†’ fallback to index â†’ index not ready â†’ 503
         with (
             patch("app.routers.stops.ntcapi_client.get_nearby_stops", _NTCAPI_DOWN),
-            patch(
-                "app.routers.stops.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.deps.get_stop_index_updated_at", return_value=None),
         ):
             resp = client.get("/v1/stops/nearby?lat=41.0&lon=29.0")
@@ -394,9 +374,7 @@ class TestStopsNearby:
         # ntcapi fails â†’ fallback to in-memory index â†’ returns results
         with (
             patch("app.routers.stops.ntcapi_client.get_nearby_stops", _NTCAPI_DOWN),
-            patch(
-                "app.routers.stops.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.deps.get_stop_index_updated_at", return_value=now),
             patch("app.deps.get_nearby_stops", return_value=[_nearby_stop()]),
         ):
@@ -408,9 +386,7 @@ class TestStopsNearby:
         resp = client.get("/v1/stops/nearby")
         assert resp.status_code == 422
 
-    def test_haversine_used_when_ntcapi_gives_no_distance(
-        self, client: TestClient
-    ) -> None:
+    def test_haversine_used_when_ntcapi_gives_no_distance(self, client: TestClient) -> None:
         """When ntcapi returns a stop with distance_m=None, haversine computes a positive distance."""
         normalised = {
             "stop_code": "301341",
@@ -430,17 +406,13 @@ class TestStopsNearby:
                 "app.services.normalizers.stops.from_ntcapi_nearby_processed",
                 return_value=normalised,
             ),
-            patch(
-                "app.routers.stops.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
         ):
             resp = client.get("/v1/stops/nearby?lat=41.0&lon=29.0")
         assert resp.status_code == 200
         body = resp.json()
         assert len(body) == 1
-        assert body[0]["distance_m"] > 0, (
-            "haversine should compute a positive distance, not 0"
-        )
+        assert body[0]["distance_m"] > 0, "haversine should compute a positive distance, not 0"
 
 
 class TestHaversine:
@@ -473,13 +445,9 @@ class TestStopArrivals:
         mock_client.get_stop_arrivals = AsyncMock(return_value=[_arrival()])
         with (
             patch("app.routers.stops.ntcapi_client.get_stop_arrivals", _NTCAPI_DOWN),
-            patch(
-                "app.routers.stops.cache_get", AsyncMock(return_value=None), create=True
-            ),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None), create=True),
             patch("app.routers.stops.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.stops.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.stops.IettClient", return_value=mock_client),
             patch("app.routers.stops.get_plate_by_kapino", return_value=None),
         ):
@@ -492,13 +460,9 @@ class TestStopArrivals:
         mock_client.get_stop_arrivals = AsyncMock(return_value=[])
         with (
             patch("app.routers.stops.ntcapi_client.get_stop_arrivals", _NTCAPI_DOWN),
-            patch(
-                "app.routers.stops.cache_get", AsyncMock(return_value=None), create=True
-            ),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None), create=True),
             patch("app.routers.stops.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.stops.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.stops.IettClient", return_value=mock_client),
             patch("app.routers.stops.get_plate_by_kapino", return_value=None),
         ):
@@ -512,13 +476,9 @@ class TestStopDetail:
         mock_client = MagicMock()
         mock_client.get_stop_detail = AsyncMock(return_value=_stop_detail())
         with (
-            patch(
-                "app.routers.stops.cache_get", AsyncMock(return_value=None), create=True
-            ),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None), create=True),
             patch("app.routers.stops.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.stops.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.stops.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/stops/220602")
@@ -528,13 +488,9 @@ class TestStopDetail:
         mock_client = MagicMock()
         mock_client.get_stop_detail = AsyncMock(return_value=None)
         with (
-            patch(
-                "app.routers.stops.cache_get", AsyncMock(return_value=None), create=True
-            ),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None), create=True),
             patch("app.routers.stops.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.stops.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.stops.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/stops/000000")
@@ -557,9 +513,7 @@ class TestRoutesSearch:
                 create=True,
             ),
             patch("app.routers.routes.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.routes.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.routes.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/routes/search?q=500T")
@@ -583,9 +537,7 @@ class TestRoutesMeta:
                 create=True,
             ),
             patch("app.routers.routes.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.routes.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.routes.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/routes/500T")
@@ -604,9 +556,7 @@ class TestRoutesBuses:
                 create=True,
             ),
             patch("app.routers.routes.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.routes.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.routes.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/routes/500T/buses")
@@ -635,9 +585,7 @@ class TestRoutesSchedule:
                 create=True,
             ),
             patch("app.routers.routes.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.routes.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.routes.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/routes/500T/schedule")
@@ -662,9 +610,7 @@ class TestRoutesAnnouncements:
                 create=True,
             ),
             patch("app.routers.routes.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.routes.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.routes.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/routes/500T/announcements")
@@ -703,9 +649,7 @@ class TestRoutesBatchAnnouncements:
                 create=True,
             ),
             patch("app.routers.routes.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.routes.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.routes.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/routes/announcements/batch?routes=500T,15F,15F")
@@ -728,9 +672,7 @@ class TestRoutesBatchAnnouncements:
                 create=True,
             ),
             patch("app.routers.routes.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.routes.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.routes.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/routes/announcements/batch?routes=,,,")
@@ -749,9 +691,7 @@ class TestRoutesBatchAnnouncements:
                 create=True,
             ),
             patch("app.routers.routes.cache_set", mock_cache_set, create=True),
-            patch(
-                "app.routers.routes.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.routes.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/routes/announcements/batch?routes=500T")
@@ -781,9 +721,7 @@ class TestGaragesList:
                 create=True,
             ),
             patch("app.routers.garages.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.garages.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.garages.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.garages.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/garages")
@@ -801,9 +739,7 @@ class TestGaragesList:
                 create=True,
             ),
             patch("app.routers.garages.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.garages.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.garages.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.garages.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/garages")
@@ -827,9 +763,7 @@ class TestTrafficIndex:
                 create=True,
             ),
             patch("app.routers.traffic.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.traffic.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.traffic.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.traffic.TrafficClient", return_value=mock_tc),
         ):
             resp = client.get("/v1/traffic/index")
@@ -857,9 +791,7 @@ class TestTrafficIndex:
                 create=True,
             ),
             patch("app.routers.traffic.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.traffic.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.traffic.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.traffic.TrafficClient", return_value=mock_tc),
         ):
             resp = client.get("/v1/traffic/index")
@@ -880,9 +812,7 @@ class TestTrafficSegments:
                 create=True,
             ),
             patch("app.routers.traffic.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.traffic.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.traffic.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.traffic.TrafficClient", return_value=mock_tc),
         ):
             resp = client.get("/v1/traffic/segments")
@@ -893,9 +823,7 @@ class TestTrafficSegments:
         assert body[0]["speed_kmh"] == 40
 
     def test_200_returns_from_cache(self, client: TestClient) -> None:
-        cached = [
-            {"segment_id": 99, "speed_kmh": 60, "congestion": 2, "timestamp": "t"}
-        ]
+        cached = [{"segment_id": 99, "speed_kmh": 60, "congestion": 2, "timestamp": "t"}]
         with patch("app.routers.traffic.cache_get", AsyncMock(return_value=cached)):
             resp = client.get("/v1/traffic/segments")
         assert resp.status_code == 200
@@ -913,9 +841,7 @@ class TestTrafficSegments:
                 create=True,
             ),
             patch("app.routers.traffic.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.traffic.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.traffic.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.traffic.TrafficClient", return_value=mock_tc),
         ):
             resp = client.get("/v1/traffic/segments")
@@ -939,9 +865,7 @@ class TestRoutesBusesFallbacks:
                 create=True,
             ),
             patch("app.routers.routes.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.routes.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.routes.ntcapi_client.get_route_metadata", _NTCAPI_DOWN),
             patch("app.routers.routes.IettClient", return_value=mock_client),
         ):
@@ -949,9 +873,7 @@ class TestRoutesBusesFallbacks:
         assert resp.status_code == 200
         assert resp.json()[0]["kapino"] == "A-001"
 
-    def test_200_fleet_fallback_when_all_external_fail(
-        self, client: TestClient
-    ) -> None:
+    def test_200_fleet_fallback_when_all_external_fail(self, client: TestClient) -> None:
         """Both ntcapi and SOAP fail â†’ falls back to in-memory fleet."""
         from app.services.iett_client import IettApiError
 
@@ -964,9 +886,7 @@ class TestRoutesBusesFallbacks:
                 create=True,
             ),
             patch("app.routers.routes.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.routes.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.routes.ntcapi_client.get_route_metadata", _NTCAPI_DOWN),
             patch("app.routers.routes.IettClient", return_value=mock_client),
             patch("app.deps.ensure_fleet_fresh", AsyncMock()),
@@ -999,9 +919,7 @@ class TestRoutesStopsFallback:
                 create=True,
             ),
             patch("app.routers.routes.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.routes.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.routes.ntcapi_client.get_route_stops", _NTCAPI_DOWN),
             patch("app.routers.routes.IettClient", return_value=mock_client),
         ):
@@ -1021,9 +939,7 @@ class TestRoutesStopsFallback:
                 create=True,
             ),
             patch("app.routers.routes.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.routes.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.routes.ntcapi_client.get_route_stops", _NTCAPI_DOWN),
             patch("app.routers.routes.IettClient", return_value=mock_client),
         ):
@@ -1043,9 +959,7 @@ class TestRoutesStopsFallback:
                 "district": None,
             }
         ]
-        with patch(
-            "app.routers.routes.cache_get_or_fetch", AsyncMock(return_value=cached)
-        ):
+        with patch("app.routers.routes.cache_get_or_fetch", AsyncMock(return_value=cached)):
             resp = client.get("/v1/routes/500T/stops")
         assert resp.status_code == 200
         assert resp.json()[0]["stop_code"] == "301341"
@@ -1057,9 +971,7 @@ class TestRoutesStopsFallback:
 class TestStopsExtra:
     """Additional stops router coverage: caching, routes endpoint, via filter."""
 
-    def test_nearby_returns_from_ntcapi_when_available(
-        self, client: TestClient
-    ) -> None:
+    def test_nearby_returns_from_ntcapi_when_available(self, client: TestClient) -> None:
         processed = [
             {
                 "stop_code": "301341",
@@ -1080,9 +992,7 @@ class TestStopsExtra:
                 "app.services.normalizers.stops.from_ntcapi_nearby_processed",
                 return_value=processed[0],
             ),
-            patch(
-                "app.routers.stops.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
         ):
             resp = client.get("/v1/stops/nearby?lat=41.08&lon=29.01")
         assert resp.status_code == 200
@@ -1093,13 +1003,9 @@ class TestStopsExtra:
         mock_client = MagicMock()
         mock_client.get_routes_at_stop = AsyncMock(return_value=["500T", "15F"])
         with (
-            patch(
-                "app.routers.stops.cache_get", AsyncMock(return_value=None), create=True
-            ),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None), create=True),
             patch("app.routers.stops.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.stops.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.stops.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/stops/301341/routes")
@@ -1108,9 +1014,7 @@ class TestStopsExtra:
         assert "500T" in body
 
     def test_get_routes_at_stop_returns_cached(self, client: TestClient) -> None:
-        with patch(
-            "app.routers.stops.cache_get_or_fetch", AsyncMock(return_value=["500T"])
-        ):
+        with patch("app.routers.stops.cache_get_or_fetch", AsyncMock(return_value=["500T"])):
             resp = client.get("/v1/stops/301341/routes")
         assert resp.status_code == 200
         assert resp.json() == ["500T"]
@@ -1156,21 +1060,15 @@ class TestStopsExtra:
                 "app.services.normalizers.arrivals.from_ntcapi_ybs",
                 return_value=canonical[0],
             ),
-            patch(
-                "app.routers.stops.cache_get", AsyncMock(return_value=None), create=True
-            ),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None), create=True),
             patch("app.routers.stops.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.stops.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.stops.get_plate_by_kapino", return_value=None),
         ):
             resp = client.get("/v1/stops/220602/arrivals")
         assert resp.status_code == 200
 
-    def test_arrivals_ntcapi_parses_semicolon_son_konum(
-        self, client: TestClient
-    ) -> None:
+    def test_arrivals_ntcapi_parses_semicolon_son_konum(self, client: TestClient) -> None:
         raw = [
             {
                 "hatkodu": "500T",
@@ -1192,13 +1090,9 @@ class TestStopsExtra:
                 "app.routers.stops.ntcapi_client.get_stop_arrivals",
                 AsyncMock(return_value=raw),
             ),
-            patch(
-                "app.routers.stops.cache_get", AsyncMock(return_value=None), create=True
-            ),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None), create=True),
             patch("app.routers.stops.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.stops.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.stops.get_plate_by_kapino", return_value="34 HO 1000"),
         ):
             resp = client.get("/v1/stops/220602/arrivals")
@@ -1226,9 +1120,7 @@ class TestStopsExtra:
             }
         ]
         with (
-            patch(
-                "app.routers.stops.cache_get_or_fetch", AsyncMock(return_value=cached)
-            ),
+            patch("app.routers.stops.cache_get_or_fetch", AsyncMock(return_value=cached)),
             patch("app.routers.stops.get_plate_by_kapino", return_value=None),
         ):
             resp = client.get("/v1/stops/220602/arrivals")
@@ -1242,9 +1134,7 @@ class TestStopsExtra:
 class TestFleetDetailFallbacks:
     """Cover the ntcapi fetch + IettClient SOAP fallback paths in /detail."""
 
-    def test_detail_fetches_stops_via_ntcapi_when_cache_miss(
-        self, client: TestClient
-    ) -> None:
+    def test_detail_fetches_stops_via_ntcapi_when_cache_miss(self, client: TestClient) -> None:
         bus = _bus("A-001", "500T")
         processed = {
             "route_code": "500T",
@@ -1260,12 +1150,8 @@ class TestFleetDetailFallbacks:
             patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
             patch("app.routers.fleet.get_trail", return_value=[]),
-            patch(
-                "app.routers.routes.get_session", return_value=MagicMock(), create=True
-            ),
-            patch(
-                "app.services.cache._cache_get_internal", AsyncMock(return_value=None)
-            ),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
+            patch("app.services.cache._cache_get_internal", AsyncMock(return_value=None)),
             patch("app.services.cache.cache_set", AsyncMock()),
             patch(
                 "app.services.ntcapi_client.get_route_stops",
@@ -1283,9 +1169,7 @@ class TestFleetDetailFallbacks:
         # route_stops should be populated from the ntcapi fetch
         assert isinstance(body["route_stops"], list)
 
-    def test_detail_falls_back_to_iett_soap_when_ntcapi_fails(
-        self, client: TestClient
-    ) -> None:
+    def test_detail_falls_back_to_iett_soap_when_ntcapi_fails(self, client: TestClient) -> None:
         from app.services.ntcapi_client import NtcApiError as NE
 
         bus = _bus("A-001", "500T")
@@ -1305,12 +1189,8 @@ class TestFleetDetailFallbacks:
             patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
             patch("app.routers.fleet.get_trail", return_value=[]),
-            patch(
-                "app.routers.routes.get_session", return_value=MagicMock(), create=True
-            ),
-            patch(
-                "app.services.cache._cache_get_internal", AsyncMock(return_value=None)
-            ),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
+            patch("app.services.cache._cache_get_internal", AsyncMock(return_value=None)),
             patch("app.services.cache.cache_set", AsyncMock()),
             patch(
                 "app.services.ntcapi_client.get_route_stops",
@@ -1325,9 +1205,7 @@ class TestFleetDetailFallbacks:
         assert len(body["route_stops"]) == 1
         assert body["route_stops"][0]["stop_code"] == "301341"
 
-    def test_detail_returns_empty_stops_when_all_sources_fail(
-        self, client: TestClient
-    ) -> None:
+    def test_detail_returns_empty_stops_when_all_sources_fail(self, client: TestClient) -> None:
         """Both ntcapi and IETT SOAP fail â†’ 200 with empty route_stops list."""
         from app.services.iett_client import IettApiError
         from app.services.ntcapi_client import NtcApiError as NE
@@ -1339,12 +1217,8 @@ class TestFleetDetailFallbacks:
             patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
             patch("app.routers.fleet.get_trail", return_value=[]),
-            patch(
-                "app.routers.routes.get_session", return_value=MagicMock(), create=True
-            ),
-            patch(
-                "app.services.cache._cache_get_internal", AsyncMock(return_value=None)
-            ),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
+            patch("app.services.cache._cache_get_internal", AsyncMock(return_value=None)),
             patch("app.services.cache.cache_set", AsyncMock()),
             patch(
                 "app.services.ntcapi_client.get_route_stops",
@@ -1396,9 +1270,7 @@ class TestStopsViaFilter:
         "amenities": None,
     }
 
-    def test_via_filter_narrows_arrivals_to_routes_at_via_stop(
-        self, client: TestClient
-    ) -> None:
+    def test_via_filter_narrows_arrivals_to_routes_at_via_stop(self, client: TestClient) -> None:
         """?via= supplied and via-stop lookup succeeds â†’ only matching routes returned."""
         mock_via = MagicMock()
         mock_via.get_routes_at_stop = AsyncMock(return_value=["500T"])
@@ -1411,13 +1283,9 @@ class TestStopsViaFilter:
                 "app.services.normalizers.arrivals.from_ntcapi_ybs",
                 side_effect=[self._CANONICAL_500T, self._CANONICAL_15F],
             ),
-            patch(
-                "app.routers.stops.cache_get", AsyncMock(return_value=None), create=True
-            ),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None), create=True),
             patch("app.routers.stops.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.stops.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.stops.IettClient", return_value=mock_via),
             patch("app.routers.stops.get_plate_by_kapino", return_value=None),
         ):
@@ -1446,13 +1314,9 @@ class TestStopsViaFilter:
                 "app.services.normalizers.arrivals.from_ntcapi_ybs",
                 side_effect=[self._CANONICAL_500T, self._CANONICAL_15F],
             ),
-            patch(
-                "app.routers.stops.cache_get", AsyncMock(return_value=None), create=True
-            ),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None), create=True),
             patch("app.routers.stops.cache_set", AsyncMock(), create=True),
-            patch(
-                "app.routers.stops.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.stops.IettClient", return_value=mock_via),
             patch("app.routers.stops.get_plate_by_kapino", return_value=None),
             caplog.at_level(logging.WARNING, logger="app.routers.stops"),
@@ -1471,9 +1335,7 @@ class TestStopsArrivalsRaw:
         mock_client = MagicMock()
         mock_client._get_text = AsyncMock(return_value="<html>arrivals</html>")
         with (
-            patch(
-                "app.routers.stops.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.stops.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/stops/220602/arrivals/raw")
@@ -1486,9 +1348,7 @@ class TestStopsArrivalsRaw:
         mock_client = MagicMock()
         mock_client._get_text = AsyncMock(side_effect=IettApiError("timeout"))
         with (
-            patch(
-                "app.routers.stops.get_session", return_value=MagicMock(), create=True
-            ),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.stops.IettClient", return_value=mock_client),
         ):
             resp = client.get("/v1/stops/220602/arrivals/raw")
@@ -1569,6 +1429,7 @@ class TestAracFleet:
 
     def test_200_returns_single_vehicle(self, client: TestClient) -> None:
         from app.services.arac_client import AracClient
+
         mock_arac = MagicMock()
         mock_arac.get_vehicle_hash = AsyncMock(return_value="hash_123")
         mock_arac.get_detail = AsyncMock(
@@ -1585,8 +1446,14 @@ class TestAracFleet:
         )
         with (
             patch("app.routers.arac.AracClient", return_value=mock_arac),
-            patch("app.routers.arac.AracClient.normalize_bus_position", side_effect=AracClient.normalize_bus_position),
-            patch("app.routers.arac.AracClient.normalize_missions", side_effect=AracClient.normalize_missions),
+            patch(
+                "app.routers.arac.AracClient.normalize_bus_position",
+                side_effect=AracClient.normalize_bus_position,
+            ),
+            patch(
+                "app.routers.arac.AracClient.normalize_missions",
+                side_effect=AracClient.normalize_missions,
+            ),
         ):
             resp = client.get(
                 "/v1/arac/fleet/C-1753/detail",
@@ -1613,10 +1480,7 @@ class TestAracRouterHelpers:
         from app.services.arac_client import AracApiError
 
         assert _status_from_arac_error(AracApiError("x", status_code=401)) == 401
-        assert (
-            _status_from_arac_error(AracApiError("x", status_code=700), fallback=503)
-            == 503
-        )
+        assert _status_from_arac_error(AracApiError("x", status_code=700), fallback=503) == 503
 
     def test_coercion_helpers(self) -> None:
         from app.routers.arac import _as_bool, _as_int, _as_str
@@ -1690,9 +1554,7 @@ class TestStopAnnouncements:
             return [{"HAT": "135T", "BILGI": "Local Delay"}]
 
         monkeypatch.setattr("app.routers.stops.get_routes_at_stop", mock_get_routes)
-        monkeypatch.setattr(
-            "app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered
-        )
+        monkeypatch.setattr("app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered)
         monkeypatch.setattr(
             "app.services.mobiett_client.MobiettClient.get_stop_announcements",
             mock_get_stop_anns,
@@ -1732,9 +1594,7 @@ class TestStopAnnouncements:
             return [{"HAT": "135T", "BILGI": "Duplicate Delay"}]
 
         monkeypatch.setattr("app.routers.stops.get_routes_at_stop", mock_get_routes)
-        monkeypatch.setattr(
-            "app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered
-        )
+        monkeypatch.setattr("app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered)
         monkeypatch.setattr(
             "app.services.mobiett_client.MobiettClient.get_stop_announcements",
             mock_get_stop_anns,
@@ -1772,9 +1632,7 @@ class TestStopAnnouncements:
             raise Exception("ybs is down")
 
         monkeypatch.setattr("app.routers.stops.get_routes_at_stop", mock_get_routes)
-        monkeypatch.setattr(
-            "app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered
-        )
+        monkeypatch.setattr("app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered)
         monkeypatch.setattr(
             "app.services.mobiett_client.MobiettClient.get_stop_announcements",
             mock_get_stop_anns,
@@ -1804,9 +1662,7 @@ class TestStopAnnouncements:
             return [{"HAT": "135T", "BILGI": "Local Only"}]
 
         monkeypatch.setattr("app.routers.stops.get_routes_at_stop", mock_get_routes)
-        monkeypatch.setattr(
-            "app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered
-        )
+        monkeypatch.setattr("app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered)
         monkeypatch.setattr(
             "app.services.mobiett_client.MobiettClient.get_stop_announcements",
             mock_get_stop_anns,
@@ -1844,9 +1700,7 @@ class TestStopAnnouncements:
             return [{"HAT": "136B", "BILGI": "Duplicate Delay"}]
 
         monkeypatch.setattr("app.routers.stops.get_routes_at_stop", mock_get_routes)
-        monkeypatch.setattr(
-            "app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered
-        )
+        monkeypatch.setattr("app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered)
         monkeypatch.setattr(
             "app.services.mobiett_client.MobiettClient.get_stop_announcements",
             mock_get_stop_anns,
@@ -1878,9 +1732,7 @@ class TestStopAnnouncements:
             return [{"HAT": None, "BILGI": None}]
 
         monkeypatch.setattr("app.routers.stops.get_routes_at_stop", mock_get_routes)
-        monkeypatch.setattr(
-            "app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered
-        )
+        monkeypatch.setattr("app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered)
         monkeypatch.setattr(
             "app.services.mobiett_client.MobiettClient.get_stop_announcements",
             mock_get_stop_anns,
@@ -1905,14 +1757,10 @@ class TestStopAnnouncements:
             return []
 
         async def mock_get_stop_anns(*args, **kwargs):
-            return (
-                None  # This happens if "duyuru" key is absent and it defaults to None
-            )
+            return None  # This happens if "duyuru" key is absent and it defaults to None
 
         monkeypatch.setattr("app.routers.stops.get_routes_at_stop", mock_get_routes)
-        monkeypatch.setattr(
-            "app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered
-        )
+        monkeypatch.setattr("app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered)
         monkeypatch.setattr(
             "app.services.mobiett_client.MobiettClient.get_stop_announcements",
             mock_get_stop_anns,
@@ -1950,9 +1798,7 @@ class TestStopAnnouncements:
             return [{"HAT": "135T", "BILGI": "Local Only"}]
 
         monkeypatch.setattr("app.routers.stops.get_routes_at_stop", mock_get_routes)
-        monkeypatch.setattr(
-            "app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered
-        )
+        monkeypatch.setattr("app.routers.routes.fetch_filtered_announcements", mock_fetch_filtered)
         monkeypatch.setattr(
             "app.services.mobiett_client.MobiettClient.get_stop_announcements",
             mock_get_stop_anns,

@@ -19,7 +19,7 @@ def _bus(
     kapino: str,
     lat: float,
     lon: float,
-    route_code: str = "500T",
+    route_code: str | None = "500T",
     nearest: str = "301341",
 ) -> BusPosition:
     return BusPosition(
