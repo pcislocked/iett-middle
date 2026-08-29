@@ -1,4 +1,4 @@
-fastapi>=0.115
+fastapi>=0.141.1
 uvicorn[standard]>=0.52.4
 aiohttp>=3.10.11,<=3.11.12
 beautifulsoup4>=4.15.0
