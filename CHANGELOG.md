@@ -5,6 +5,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.4] - 2026-09-07
+
+### Dependencies & Maintenance
+- **Dependency Upgrades:**
+  - Upgraded `fastapi` to `>=0.141.1`.
+  - Upgraded `lxml` to `>=6.1.2`.
+  - Upgraded `slowapi` to `>=0.1.10`.
+  - Upgraded `ruff` dev dependency to `>=0.16.4`.
+- **CI/CD Action Updates:**
+  - Updated `actions/checkout` to `v7`.
+  - Updated `actions/setup-python` to `v7`.
+- **Quality & Verification:**
+  - Maintained 100% green test suite (370/370 pytest tests passing).
+  - 0 Pyright type errors, 0 Ruff lint errors.
+
+---
+
 ## [0.4.3] - 2026-08-27
 
 ### Added & Improved
