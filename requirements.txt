@@ -7,5 +7,5 @@ ddddocr>=1.6.1
 opencv-python-headless>=4.0
 pydantic>=2.13.4
 pydantic-settings>=2.14.2
-slowapi>=0.1.9
+slowapi>=0.1.10
 cachetools>=7.1.6
