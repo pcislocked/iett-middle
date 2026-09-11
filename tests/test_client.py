@@ -239,7 +239,13 @@ class TestSearchStops:
             )
             m.post(
                 "https://ntcapi.iett.istanbul/service",
-                payload=[{"DURAK_DURAK_KODU": "220602", "DURAK_ADI": "AHMET MITHAT"}],
+                payload=[
+                    {"DURAK_DURAK_KODU": "220602", "DURAK_ADI": "AHMET MITHAT"},
+                    {"DURAK_DURAK_KODU": "-12345", "DURAK_ADI": "INTERNAL"},
+                    {"DURAK_DURAK_KODU": "123", "DURAK_ADI": "SHORT"},
+                    {"DURAK_DURAK_KODU": "1234567", "DURAK_ADI": "LONG"},
+                    {"DURAK_DURAK_KODU": "ABCDEF", "DURAK_ADI": "ALPHA"},
+                ],
             )
             results = await client.search_stops("ahmet mithat")
         assert len(results) == 1

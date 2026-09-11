@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any
 
 import aiohttp
@@ -213,11 +214,19 @@ class IettClient:
         if not isinstance(res, list):
             res = []
 
-        return [
-            StopSearchResult(dcode=str(r.get("DURAK_DURAK_KODU", "")), name=r.get("DURAK_ADI", ""))
-            for r in res
-            if r.get("DURAK_DURAK_KODU")
-        ]
+        dcode_pattern = re.compile(r"^\d{6}$")
+        stops: list[StopSearchResult] = []
+        for r in res:
+            dcode = str(r.get("DURAK_DURAK_KODU", ""))
+            if dcode_pattern.match(dcode):
+                stops.append(
+                    StopSearchResult(
+                        dcode=dcode,
+                        name=r.get("DURAK_DURAK_ADI", r.get("DURAK_ADI", "")),
+                        ilce=r.get("DURAK_ILCE_ADI", ""),
+                    )
+                )
+        return stops
 
     async def get_stop_detail(self, dcode: str) -> StopDetail | None:
         """Stop name + coordinates via SOAP or JSON fallback.
