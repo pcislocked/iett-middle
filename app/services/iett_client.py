@@ -408,18 +408,18 @@ class IettClient:
         }
 
         headers = soup.find_all("div", class_="departure-times-header")
-        
+
         for header in headers:
             # We want the one that has "HAT BİLGİSİ"
             header_text = header.get_text()
             if "HAT BİLGİSİ" not in header_text and "Hat Tipi" not in header_text:
                 continue
-                
+
             for p_tag in header.find_all("p"):
                 text = p_tag.get_text(separator=" ", strip=True)
                 if text:
                     info["details"].append(text.replace(" :", ":").replace(" : ", ": "))
-                    
+
                 b_tag = p_tag.find("b")
                 if not b_tag:
                     continue
