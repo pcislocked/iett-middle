@@ -129,8 +129,6 @@ class IettClient:
     async def get_route_buses(self, hat_kodu: str) -> list[BusPosition]:
         """Fetch live bus positions for a specific route."""
         if str(hat_kodu) == "31AMK":
-            from app.models.canonical import BusPosition
-
             return [
                 BusPosition(
                     kapino="TEST1",
@@ -220,8 +218,6 @@ class IettClient:
         if str(dcode) == "676767":
             from datetime import datetime, timedelta, timezone
 
-            from app.models.canonical import Arrival
-
             now = datetime.now(timezone.utc)
             stale = now - timedelta(minutes=10)
             return [
@@ -295,8 +291,6 @@ class IettClient:
     async def search_stops(self, query: str) -> list[StopSearchResult]:
         """Stop search via Mobiett HTML."""
         if query == "676767" or query.upper() == "TEST":
-            from app.models.canonical import StopSearchResult
-
             return [
                 StopSearchResult(
                     dcode="676767", name="TEST DURAĞI", ilce="TEST İLÇESİ", direction="TEST YÖNÜ"
@@ -330,8 +324,6 @@ class IettClient:
         response omits or zeroes them out.
         """
         if str(dcode) == "676767":
-            from app.models.canonical import StopDetail
-
             return StopDetail(
                 dcode="676767", name="TEST DURAĞI", latitude=41.045, longitude=29.0, is_smart=True
             )
@@ -457,6 +449,18 @@ class IettClient:
         the long-lived cache: results are only stored when *all* stops carry
         valid coordinates, so coord-less responses are never persisted.
         """
+        if str(hat_kodu) == "31AMK":
+            return [
+                RouteStop(
+                    dcode="676767",
+                    name="TEST DURAĞI",
+                    direction="G",
+                    index=1,
+                    latitude=41.045,
+                    longitude=29.0,
+                )
+            ]
+
         from app.deps import get_stop_coords  # noqa: PLC0415
 
         html = await self._get_text(
