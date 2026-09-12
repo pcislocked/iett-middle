@@ -42,3 +42,10 @@ class NearbyStop(BaseModel):
     district: str | None = None
     direction: str | None = None
     distance_m: float = 0.0
+
+
+class StopInfo(BaseModel):
+    dcode: str
+    ilce: str | None
+    fiziki_durum: str | None
+    akilli_durak: bool | None
