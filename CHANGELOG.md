@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.5.3] - 2026-09-12
+### Changed
+- Bumped version to `0.4.5.3` in FastAPI definition to stay in sync with frontend release.
+
 ## [0.4.5.2] - 2026-09-12
 ### Added
 - Injected `676767` and `31AMK` with extreme edge-case Mock Data (Stale GPS and Math Mismatches) to assist frontend UI testing.
