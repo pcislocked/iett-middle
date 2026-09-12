@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.5.2] - 2026-09-12
+### Added
+- Injected `676767` and `31AMK` with extreme edge-case Mock Data (Stale GPS and Math Mismatches) to assist frontend UI testing.
+### Fixed
+- Preserved missing `lat` and `lon` fields in IETT HTML fallback normalizer, allowing fallback positions to successfully reach the client.
+- Fixed `scrape_route_info` to adapt to IETT website DOM and param changes (`hkod` instead of `hatKodu`, extracting single string array).
+
+## [0.4.5.1] - 2026-09-12
+### Fixed
+- Fixed bug causing false positive Math Mismatches by updating frontend formula (this is a PWA-centric fix, but version bumped to stay in sync).
+
 ## [0.4.5] - 2026-09-12
 - Exclude internal/hidden stops from search results entirely (BUG-01).
 - Added RouteInfo and StopInfo endpoints for detailed physical properties (BUG-04).
