@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.5] - 2026-09-12
+- Exclude internal/hidden stops from search results entirely (BUG-01).
+- Added RouteInfo and StopInfo endpoints for detailed physical properties (BUG-04).
+
 ## [0.4.4] - 2026-09-07
 
 ### Dependencies & Maintenance
