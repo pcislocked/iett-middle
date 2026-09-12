@@ -394,7 +394,7 @@ class IettClient:
         """Scrape route info (type, duration, tariff) from iett.istanbul/RouteDetail."""
         from bs4 import BeautifulSoup
 
-        url = f"https://iett.istanbul/RouteDetail?hatKodu={hat_kodu}"
+        url = f"https://iett.istanbul/RouteDetail?hkod={hat_kodu}"
         async with self._session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
             html = await resp.text()
 
@@ -404,16 +404,30 @@ class IettClient:
             "trip_duration_min": None,
             "hat_tipi": None,
             "tarife": None,
+            "details": [],
         }
 
-        header = soup.select_one("div.departure-times-header > p")
-        if header:
-            for b_tag in header.find_all("b"):
+        headers = soup.find_all("div", class_="departure-times-header")
+        
+        for header in headers:
+            # We want the one that has "HAT BİLGİSİ"
+            header_text = header.get_text()
+            if "HAT BİLGİSİ" not in header_text and "Hat Tipi" not in header_text:
+                continue
+                
+            for p_tag in header.find_all("p"):
+                text = p_tag.get_text(separator=" ", strip=True)
+                if text:
+                    info["details"].append(text.replace(" :", ":").replace(" : ", ": "))
+                    
+                b_tag = p_tag.find("b")
+                if not b_tag:
+                    continue
                 key = b_tag.get_text(strip=True).replace(":", "")
                 val = b_tag.next_sibling
                 if val and isinstance(val, str):
                     val = val.strip()
-                    if "Tek Yön Sefer Süresi" in key:
+                    if "Tek Yön Sefer Süresi" in key or "Tek yön sefer süresi" in key:
                         try:
                             info["trip_duration_min"] = int(val.split()[0])
                         except Exception:
@@ -422,6 +436,8 @@ class IettClient:
                         info["hat_tipi"] = val
                     elif "Tarife Bilgisi" in key:
                         info["tarife"] = val
+            break
+
         return info
 
     async def scrape_stop_info(self, dcode: str) -> dict[str, Any]:
