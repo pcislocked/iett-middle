@@ -390,3 +390,70 @@ class IettClient:
             hat_upper = hat_kodu.upper().strip()
             announcements = [a for a in announcements if a.route_code.upper().strip() == hat_upper]
         return announcements
+
+    async def scrape_route_info(self, hat_kodu: str) -> dict[str, Any]:
+        """Scrape route info (type, duration, tariff) from iett.istanbul/RouteDetail."""
+        from bs4 import BeautifulSoup
+
+        url = f"https://iett.istanbul/RouteDetail?hatKodu={hat_kodu}"
+        async with self._session.get(url, timeout=self.timeout) as resp:
+            html = await resp.text()
+
+        soup = BeautifulSoup(html, "html.parser")
+        info = {
+            "hat_kodu": hat_kodu,
+            "trip_duration_min": None,
+            "hat_tipi": None,
+            "tarife": None,
+        }
+
+        header = soup.select_one("div.departure-times-header > p")
+        if header:
+            for b_tag in header.find_all("b"):
+                key = b_tag.get_text(strip=True).replace(":", "")
+                val = b_tag.next_sibling
+                if val and isinstance(val, str):
+                    val = val.strip()
+                    if "Tek Yön Sefer Süresi" in key:
+                        try:
+                            info["trip_duration_min"] = int(val.split()[0])
+                        except Exception:
+                            pass
+                    elif "Hat Tipi" in key:
+                        info["hat_tipi"] = val
+                    elif "Tarife Bilgisi" in key:
+                        info["tarife"] = val
+        return info
+
+    async def scrape_stop_info(self, dcode: str) -> dict[str, Any]:
+        """Scrape stop info (district, physical status, smart status) from iett.istanbul/StationDetail."""
+        from bs4 import BeautifulSoup
+
+        url = f"https://iett.istanbul/StationDetail?dkod={dcode}"
+        async with self._session.get(url, timeout=self.timeout) as resp:
+            html = await resp.text()
+
+        soup = BeautifulSoup(html, "html.parser")
+        info = {
+            "dcode": dcode,
+            "ilce": None,
+            "fiziki_durum": None,
+            "akilli_durak": None,
+        }
+
+        tab = soup.find(id="info")
+        if tab:
+            items = tab.find_all("div", class_="station-item")
+            for item in items:
+                b_tag = item.find("b")
+                p_tag = item.find("p")
+                if b_tag and p_tag:
+                    key = b_tag.get_text(strip=True)
+                    val = p_tag.get_text(strip=True)
+                    if "İlçe" in key:
+                        info["ilce"] = val
+                    elif "Fiziki Durum" in key:
+                        info["fiziki_durum"] = val
+                    elif "Akıllı Durak" in key:
+                        info["akilli_durak"] = val == "VAR"
+        return info

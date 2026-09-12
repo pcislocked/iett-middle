@@ -37,3 +37,10 @@ class RouteMetadata(BaseModel):
 class RouteSearchResult(BaseModel):
     hat_kodu: str  # e.g. "500T"
     name: str  # e.g. "TUZLA ŞİFA MAHALLESİ - 4. LEVENT METRO"
+
+
+class RouteInfo(BaseModel):
+    hat_kodu: str
+    trip_duration_min: int | None
+    hat_tipi: str | None
+    tarife: str | None

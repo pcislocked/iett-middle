@@ -12,6 +12,7 @@ from app.deps import get_session
 from app.models.bus import BusPosition
 from app.models.route import (
     Announcement,
+    RouteInfo,
     RouteMetadata,
     RouteSearchResult,
     ScheduledDeparture,
@@ -468,4 +469,21 @@ async def get_route_announcements(hat_kodu: str):
         _fetch,
         stale_ttl=settings.cache_stale_ttl,
         jitter=True,
+    )
+
+
+@router.get("/{hat_kodu}/info", response_model=RouteInfo)
+async def get_route_info(hat_kodu: str):
+    """Scrape route metadata from iett.istanbul/RouteDetail."""
+    key = f"route:info:{hat_kodu}"
+
+    async def _fetch():
+        async with IettClient() as client:
+            return await client.scrape_route_info(hat_kodu)
+
+    return await cache_get_or_fetch(
+        key,
+        86400,  # 24 hours
+        _fetch,
+        stale_ttl=86400 * 2,
     )

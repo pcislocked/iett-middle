@@ -12,7 +12,7 @@ from app.config import settings
 from app.deps import get_plate_by_kapino, get_session
 from app.models.bus import Arrival
 from app.models.route import Announcement
-from app.models.stop import NearbyStop, StopDetail, StopSearchResult
+from app.models.stop import NearbyStop, StopDetail, StopInfo, StopSearchResult
 from app.services import normalizers, ntcapi_client
 from app.services.cache import cache_get_or_fetch
 from app.services.iett_client import IettApiError, IettClient
@@ -432,3 +432,20 @@ async def get_stop_announcements(dcode: str):
         key, 300, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True
     )
     return [Announcement(**a) for a in announcements_data]  # type: ignore
+
+
+@router.get("/{dcode}/info", response_model=StopInfo)
+async def get_stop_info(dcode: str):
+    """Scrape stop metadata from iett.istanbul/StationDetail."""
+    key = f"stop:info:{dcode}"
+
+    async def _fetch():
+        async with IettClient() as client:
+            return await client.scrape_stop_info(dcode)
+
+    return await cache_get_or_fetch(
+        key,
+        86400,  # 24 hours
+        _fetch,
+        stale_ttl=86400 * 2,
+    )
