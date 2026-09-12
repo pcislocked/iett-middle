@@ -478,8 +478,8 @@ async def get_route_info(hat_kodu: str):
     key = f"route:info:{hat_kodu}"
 
     async def _fetch():
-        async with IettClient() as client:
-            return await client.scrape_route_info(hat_kodu)
+        client = IettClient(get_session())
+        return await client.scrape_route_info(hat_kodu)
 
     return await cache_get_or_fetch(
         key,

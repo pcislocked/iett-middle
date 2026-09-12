@@ -440,8 +440,8 @@ async def get_stop_info(dcode: str):
     key = f"stop:info:{dcode}"
 
     async def _fetch():
-        async with IettClient() as client:
-            return await client.scrape_stop_info(dcode)
+        client = IettClient(get_session())
+        return await client.scrape_stop_info(dcode)
 
     return await cache_get_or_fetch(
         key,

@@ -395,7 +395,7 @@ class IettClient:
         from bs4 import BeautifulSoup
 
         url = f"https://iett.istanbul/RouteDetail?hatKodu={hat_kodu}"
-        async with self._session.get(url, timeout=self.timeout) as resp:
+        async with self._session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
             html = await resp.text()
 
         soup = BeautifulSoup(html, "html.parser")
@@ -429,7 +429,7 @@ class IettClient:
         from bs4 import BeautifulSoup
 
         url = f"https://iett.istanbul/StationDetail?dkod={dcode}"
-        async with self._session.get(url, timeout=self.timeout) as resp:
+        async with self._session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
             html = await resp.text()
 
         soup = BeautifulSoup(html, "html.parser")
