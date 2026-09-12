@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.5.4] - 2026-09-12
+### Changed
+- Bumped version to `0.4.5.4` in FastAPI definition to stay in sync with frontend release.
+
 ## [0.4.5.3] - 2026-09-12
 ### Changed
 - Bumped version to `0.4.5.3` in FastAPI definition to stay in sync with frontend release.
