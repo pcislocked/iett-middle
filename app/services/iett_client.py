@@ -13,8 +13,6 @@ from typing import Any
 
 import aiohttp
 
-_VALID_DCODE = re.compile(r"^\d{6}$")
-
 from app.config import settings
 from app.models.bus import Arrival, BusPosition
 from app.models.garage import Garage
@@ -38,6 +36,8 @@ from app.services.iett_parser import (
     parse_stop_arrivals_html,
     parse_stop_detail_xml,
 )
+
+_VALID_DCODE = re.compile(r"^\d{6}$")
 
 logger = logging.getLogger(__name__)
 
@@ -219,8 +219,7 @@ class IettClient:
         return [
             StopSearchResult(dcode=str(code), name=r.get("DURAK_ADI", ""))
             for r in res
-            if (code := r.get("DURAK_DURAK_KODU"))
-            and _VALID_DCODE.match(str(code))
+            if (code := r.get("DURAK_DURAK_KODU")) and _VALID_DCODE.match(str(code))
         ]
 
     async def get_stop_detail(self, dcode: str) -> StopDetail | None:
