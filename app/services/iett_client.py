@@ -129,42 +129,45 @@ class IettClient:
     async def get_route_buses(self, hat_kodu: str) -> list[BusPosition]:
         """Fetch live bus positions for a specific route."""
         if str(hat_kodu) == "31AMK":
+            from datetime import datetime, timezone
+
+            now_iso = datetime.now(timezone.utc).isoformat()
             return [
                 BusPosition(
                     kapino="TEST1",
                     route_code="31AMK",
-                    destination="TEST",
                     plate="TEST 1",
-                    speed_kmh=20,
+                    speed=20,
                     latitude=41.045,
                     longitude=29.0,
+                    last_seen=now_iso,
                 ),
                 BusPosition(
                     kapino="TEST2",
                     route_code="31AMK",
-                    destination="TEST",
                     plate="TEST 2",
-                    speed_kmh=20,
+                    speed=20,
                     latitude=41.045,
                     longitude=29.0,
+                    last_seen=now_iso,
                 ),
                 BusPosition(
                     kapino="TEST3",
                     route_code="31AMK",
-                    destination="TEST",
                     plate="TEST 3",
-                    speed_kmh=20,
+                    speed=20,
                     latitude=42.0,
                     longitude=30.0,
+                    last_seen=now_iso,
                 ),
                 BusPosition(
                     kapino="TEST4",
                     route_code="31AMK",
-                    destination="TEST",
                     plate="TEST 4",
-                    speed_kmh=20,
+                    speed=20,
                     latitude=42.0,
                     longitude=30.0,
+                    last_seen=now_iso,
                 ),
             ]
         from app.services.iett_parser import parse_mobiett_buses
@@ -224,40 +227,40 @@ class IettClient:
                 Arrival(
                     route_code="31AMK",
                     destination="NORMAL",
-                    is_live=True,
                     eta_minutes=10,
+                    eta_raw="10 dk",
                     kapino="TEST1",
-                    last_seen_ts=now,
+                    last_seen_ts=now.isoformat(),
                     lat=41.045,
                     lon=29.0,
                 ),
                 Arrival(
                     route_code="31AMK",
                     destination="STALE GPS",
-                    is_live=True,
                     eta_minutes=10,
+                    eta_raw="10 dk",
                     kapino="TEST2",
-                    last_seen_ts=stale,
+                    last_seen_ts=stale.isoformat(),
                     lat=41.045,
                     lon=29.0,
                 ),
                 Arrival(
                     route_code="31AMK",
                     destination="IMPOSSIBLE",
-                    is_live=True,
                     eta_minutes=1,
+                    eta_raw="1 dk",
                     kapino="TEST3",
-                    last_seen_ts=now,
+                    last_seen_ts=now.isoformat(),
                     lat=42.0,
                     lon=30.0,
                 ),
                 Arrival(
                     route_code="31AMK",
                     destination="STALE+IMP",
-                    is_live=True,
                     eta_minutes=1,
+                    eta_raw="1 dk",
                     kapino="TEST4",
-                    last_seen_ts=stale,
+                    last_seen_ts=stale.isoformat(),
                     lat=42.0,
                     lon=30.0,
                 ),
@@ -291,11 +294,7 @@ class IettClient:
     async def search_stops(self, query: str) -> list[StopSearchResult]:
         """Stop search via Mobiett HTML."""
         if query == "676767" or query.upper() == "TEST":
-            return [
-                StopSearchResult(
-                    dcode="676767", name="TEST DURAĞI", ilce="TEST İLÇESİ", direction="TEST YÖNÜ"
-                )
-            ]
+            return [StopSearchResult(dcode="676767", name="TEST DURAĞI")]
         query = query.upper()
         if not query.endswith("%"):
             query = query + "%"
@@ -324,9 +323,7 @@ class IettClient:
         response omits or zeroes them out.
         """
         if str(dcode) == "676767":
-            return StopDetail(
-                dcode="676767", name="TEST DURAĞI", latitude=41.045, longitude=29.0, is_smart=True
-            )
+            return StopDetail(dcode="676767", name="TEST DURAĞI", latitude=41.045, longitude=29.0)
 
         from app.deps import get_stop_coords  # noqa: PLC0415
         from app.services.iett_parser import parse_mobiett_stop
@@ -452,10 +449,11 @@ class IettClient:
         if str(hat_kodu) == "31AMK":
             return [
                 RouteStop(
-                    dcode="676767",
-                    name="TEST DURAĞI",
+                    route_code="31AMK",
+                    stop_code="676767",
+                    stop_name="TEST DURAĞI",
                     direction="G",
-                    index=1,
+                    sequence=1,
                     latitude=41.045,
                     longitude=29.0,
                 )
