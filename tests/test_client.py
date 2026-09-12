@@ -245,6 +245,24 @@ class TestSearchStops:
         assert len(results) == 1
         assert results[0].dcode == "220602"
 
+    async def test_filters_internal_stops(self, client: IettClient) -> None:
+        with aioresponses() as m:
+            m.post(
+                "https://ntcapi.iett.istanbul/oauth2/v2/auth",
+                payload={"access_token": "test", "expires_in": 3600},
+            )
+            m.post(
+                "https://ntcapi.iett.istanbul/service",
+                payload=[
+                    {"DURAK_DURAK_KODU": "113321", "DURAK_ADI": "4.LEVENT"},
+                    {"DURAK_DURAK_KODU": "-394", "DURAK_ADI": "4.LEVENT"},
+                    {"DURAK_DURAK_KODU": "12345", "DURAK_ADI": "5-DIGIT"},
+                ],
+            )
+            results = await client.search_stops("4.LEVENT")
+        assert len(results) == 1
+        assert results[0].dcode == "113321"
+
     async def test_raises_on_error(self, client: IettClient) -> None:
         with aioresponses() as m:
             m.post(

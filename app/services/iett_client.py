@@ -8,9 +8,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any
 
 import aiohttp
+
+_VALID_DCODE = re.compile(r"^\d{6}$")
 
 from app.config import settings
 from app.models.bus import Arrival, BusPosition
@@ -214,9 +217,10 @@ class IettClient:
             res = []
 
         return [
-            StopSearchResult(dcode=str(r.get("DURAK_DURAK_KODU", "")), name=r.get("DURAK_ADI", ""))
+            StopSearchResult(dcode=str(code), name=r.get("DURAK_ADI", ""))
             for r in res
-            if r.get("DURAK_DURAK_KODU")
+            if (code := r.get("DURAK_DURAK_KODU"))
+            and _VALID_DCODE.match(str(code))
         ]
 
     async def get_stop_detail(self, dcode: str) -> StopDetail | None:
