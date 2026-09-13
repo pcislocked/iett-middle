@@ -34,7 +34,7 @@ def from_ntcapi_ybs(item: dict[str, Any]) -> CanonicalArrival:
         destination=str(item.get("hattip") or item.get("hatadi") or ""),
         eta_minutes=_safe_int(item.get("dakika")),
         eta_raw=str(item.get("saat") or ""),
-        kapino=item.get("kapino") or None,
+        kapino=_normalize_kapino(item.get("kapino")),
         plate=None,  # enriched by caller from fleet store
         lat=lat,
         lon=lon,
@@ -62,7 +62,7 @@ def from_iett_html(item: dict[str, Any]) -> CanonicalArrival:
         destination=str(item.get("destination") or ""),
         eta_minutes=item.get("eta_minutes"),
         eta_raw=str(item.get("eta_raw") or ""),
-        kapino=item.get("kapino") or None,
+        kapino=_normalize_kapino(item.get("kapino")),
         plate=None,
         lat=item.get("lat"),
         lon=item.get("lon"),
@@ -119,3 +119,13 @@ def _parse_son_konum(value: Any) -> tuple[float | None, float | None]:
         return lat, lon
     except (IndexError, ValueError):
         return None, None
+
+def _normalize_kapino(raw: Any) -> str | None:
+    """Ensure kapino follows the X-ZZZZ pattern if applicable."""
+    k = str(raw or "").strip()
+    if not k:
+        return None
+    m = re.match(r"^([A-Za-z]{1,2})(\d+)$", k)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}"
+    return k

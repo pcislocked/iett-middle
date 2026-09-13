@@ -197,6 +197,100 @@ async def create_arac_session(
     )
 
 
+@router.get("/suggest")
+async def suggest_arac_bus(q: str) -> list[dict[str, str]]:
+    """Suggest vehicles by Kapı No or Plaka via ARAC API."""
+    if len(q) < 2:
+        return []
+
+    connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
+    async with aiohttp.ClientSession(connector=connector) as temp_session:
+        client = AracClient(temp_session)
+        # We need to access _post_json, so we'll just implement it here or via the client
+        try:
+            payload = await client._post_json(
+                "/Home/GetAllVehicleSelectList",
+                {
+                    "page": 1,
+                    "pageSize": 20,
+                    "search": q,
+                },
+            )
+            if isinstance(payload, dict) and payload.get("isSuccess"):
+                items = payload.get("data", [])
+                return [
+                    {
+                        "doorNumber": str(item.get("doorNumber", "")),
+                        "plate": str(item.get("plate", "")),
+                    }
+                    for item in items if isinstance(item, dict)
+                ]
+        except AracApiError:
+            pass
+    return []
+
+
+@router.get("/fleet/{kapino}/auto-detail")
+async def get_arac_bus_auto_detail(
+    kapino: str = Path(..., pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,39}$"),
+) -> dict[str, Any]:
+    """Automatically fetch vehicle profile + missions by auto-solving the captcha."""
+    connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
+    async with aiohttp.ClientSession(connector=connector) as temp_session:
+        client = AracClient(temp_session)
+        try:
+            # 1. Get Captcha
+            captcha_data = await client.get_captcha()
+            captcha_image = captcha_data.get("image")
+            if not captcha_image:
+                raise HTTPException(502, detail="No captcha image returned")
+            
+            # 2. Solve Captcha
+            suggested_answer = await asyncio.to_thread(solve_captcha_image, captcha_image)
+            
+            # 3. Create Session (Submit Captcha)
+            vehicle_hash = await client.get_vehicle_hash(kapino)
+            success = await client.submit_captcha(vehicle_hash, suggested_answer)
+            if not success:
+                raise HTTPException(502, detail="Auto-captcha failed")
+                
+            # 4. Get Detail
+            detail = await client.get_detail(vehicle_hash)
+            
+            data_vehicle = detail.get("dataVehicle", {})
+            data_task = detail.get("dataTask", [])
+            
+            profile = AracClient.normalize_bus_position(data_vehicle)
+            missions = AracClient.normalize_missions(data_task)
+            
+            completed = sum(1 for m in missions if m.state == "T")
+            pending = sum(1 for m in missions if m.state == "B")
+            line_codes = sorted({m.line_code for m in missions if m.line_code})
+            
+            active_route = None
+            if data_task and len(data_task) > 0:
+                active_route = str(data_task[0].get("lineCode", "")) or None
+            profile.route_code = active_route
+            
+            return {
+                "profile": profile.model_dump(),
+                "missions": AracMissionsResponse(
+                    kapino=kapino,
+                    summary=AracMissionSummary(
+                        mission_count=len(missions),
+                        completed_count=completed,
+                        pending_count=pending,
+                        distinct_line_codes=line_codes,
+                    ),
+                    missions=missions,
+                ).model_dump(),
+            }
+        except AracApiError as exc:
+            logger.warning("get_arac_bus_auto_detail failed: %s", exc)
+            status = _status_from_arac_error(exc, 502)
+            raise HTTPException(status, detail=str(exc)) from exc
+
+
 @router.get("/fleet/{kapino}/detail")
 async def get_arac_bus_detail(
     request: Request,
@@ -241,6 +335,13 @@ async def get_arac_bus_detail(
     completed = sum(1 for m in missions if m.state == "T")
     pending = sum(1 for m in missions if m.state == "B")
     line_codes = sorted({m.line_code for m in missions if m.line_code})
+
+    # Find active route code (fallback to first task's line_code)
+    active_route = None
+    if data_task and len(data_task) > 0:
+        active_route = str(data_task[0].get("lineCode", "")) or None
+    
+    profile.route_code = active_route
 
     return {
         "profile": profile.model_dump(),

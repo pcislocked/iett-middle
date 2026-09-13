@@ -19,9 +19,16 @@ from app.models.stop import NearbyStop, RouteStop, StopDetail
 
 _TEMPURI = "http://tempuri.org/"
 
-# Kapı no (internal bus ID) pattern: one or more capital letters, dash, one or more digits.
-# Covers all observed formats: A-001, C-325, C-123456, M-999, etc. (not vehicle license plates)
-_KAPINO_RE = re.compile(r"\b[A-Z]+-\d+\b")
+# Kapı no (internal bus ID) pattern: one or more capital letters, optional dash, one or more digits.
+# Covers all observed formats: A-001, C-325, C-123456, M-999, C1753 etc. (not vehicle license plates)
+_KAPINO_RE = re.compile(r"\b[A-Z]+-?\d+\b")
+
+def _normalize_kapino(raw: Any) -> str:
+    k = str(raw or "").strip()
+    m = re.match(r"^([A-Za-z]{1,2})(\d+)$", k)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}"
+    return k
 
 
 def _extract_soap_json(xml_text: str, result_tag: str) -> list[dict[str, Any]]:
@@ -59,7 +66,7 @@ def parse_all_fleet_xml(xml_text: str) -> list[BusPosition]:
             speed = int(float(speed_raw)) if speed_raw is not None else None
             result.append(
                 BusPosition(
-                    kapino=r.get("KapiNo", ""),
+                    kapino=_normalize_kapino(r.get("KapiNo")),
                     plate=r.get("Plaka"),
                     latitude=float(r.get("Enlem", 0)),
                     longitude=float(r.get("Boylam", 0)),
@@ -93,7 +100,7 @@ def parse_route_fleet_xml(xml_text: str) -> list[BusPosition]:
                     break
             result.append(
                 BusPosition(
-                    kapino=r.get("kapino", ""),
+                    kapino=_normalize_kapino(r.get("kapino")),
                     latitude=float(r.get("enlem", 0)),
                     longitude=float(r.get("boylam", 0)),
                     last_seen=r.get("son_konum_zamani", ""),
@@ -132,7 +139,7 @@ def parse_stop_arrivals_html(html: str) -> list[Arrival]:
                 destination=p.text.replace(b.text, "").strip(),
                 eta_minutes=int(eta_match.group(1)) if eta_match else None,
                 eta_raw=b.text.strip(),
-                kapino=kapino_m.group(0) if kapino_m else None,
+                kapino=_normalize_kapino(kapino_m.group(0)) if kapino_m else None,
             )
         )
     return result
@@ -549,7 +556,7 @@ def parse_mobiett_buses(raw: list[dict[str, Any]]) -> list[BusPosition]:
 
             result.append(
                 BusPosition(
-                    kapino=r.get("K_ARAC_KAPINUMARASI", ""),
+                    kapino=_normalize_kapino(r.get("K_ARAC_KAPINUMARASI")),
                     plate=None,  # Mobiett JSON API does not provide license plates
                     latitude=float(r.get("ENLEM", 0)),
                     longitude=float(r.get("BOYLAM", 0)),

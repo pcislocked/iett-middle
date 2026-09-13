@@ -343,7 +343,7 @@ async def get_route_buses_ybs(
             stop_seq = None
         positions.append(
             BusPosition(
-                kapino=item.get("K_ARAC_KAPINUMARASI") or "",
+                kapino=_normalize_kapino(item.get("K_ARAC_KAPINUMARASI")),
                 latitude=lat,
                 longitude=lon,
                 last_seen=item.get("SISTEMSAATI") or "",

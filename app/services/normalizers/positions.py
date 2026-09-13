@@ -14,6 +14,7 @@ Both normalise into the same CanonicalBusPosition shape.
 from __future__ import annotations
 
 from typing import Any
+import re
 
 from app.models.canonical import CanonicalBusPosition
 
@@ -36,7 +37,7 @@ def from_iett_soap_fleet(item: dict[str, Any]) -> CanonicalBusPosition:
         None,
     )
     return CanonicalBusPosition(
-        kapino=str(item.get("KapiNo") or ""),
+        kapino=_normalize_kapino(item.get("KapiNo")),
         plate=item.get("Plaka") or None,
         lat=_safe_float(item.get("Enlem")),
         lon=_safe_float(item.get("Boylam")),
@@ -63,7 +64,7 @@ def from_iett_soap_route_fleet(item: dict[str, Any]) -> CanonicalBusPosition:
         yakinDurakKodu       → nearest_stop_code
     """
     return CanonicalBusPosition(
-        kapino=str(item.get("kapino") or ""),
+        kapino=_normalize_kapino(item.get("kapino")),
         plate=None,  # not present in route-fleet endpoint
         lat=_safe_float(item.get("enlem")),
         lon=_safe_float(item.get("boylam")),
@@ -93,3 +94,12 @@ def _safe_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _normalize_kapino(raw: Any) -> str:
+    """Ensure kapino follows the X-ZZZZ pattern if applicable."""
+    k = str(raw or "").strip()
+    m = re.match(r"^([A-Za-z]{1,2})(\d+)$", k)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}"
+    return k

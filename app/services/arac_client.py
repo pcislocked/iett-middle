@@ -29,6 +29,21 @@ def _clip(text: str, limit: int = 500) -> str:
     return text[:limit] + "...<truncated>"
 
 
+def _as_text(val: Any) -> str | None:
+    if val is None:
+        return None
+    s = str(val).strip()
+    return s if s else None
+
+
+def _normalize_kapino(raw: Any) -> str:
+    k = str(raw or "").strip()
+    m = re.match(r"^([A-Za-z]{1,2})(\d+)$", k)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}"
+    return k
+
+
 def _to_int(val: Any) -> int | None:
     if val is None:
         return None
@@ -179,32 +194,53 @@ class AracClient:
 
         This hash changes on every request. Do NOT cache it.
         """
-        payload = await self._post_json(
-            "/Home/GetAllVehicleSelectList",
-            {
-                "page": 1,
-                "pageSize": 10,
-                "search": kapino,
-            },
-        )
-        if not isinstance(payload, dict) or not payload.get("isSuccess"):
-            msg = f"GetAllVehicleSelectList failed for {kapino}"
-            status_code = 502
-            if isinstance(payload, dict):
-                msg = payload.get("message") or msg
-                if "çok fazla" in msg.lower():
-                    status_code = 429
-            raise AracApiError(
-                msg,
-                status_code=status_code,
-                payload=payload,
+        import re
+
+        async def _do_search(search_term, match_term):
+            payload = await self._post_json(
+                "/Home/GetAllVehicleSelectList",
+                {
+                    "page": 1,
+                    "pageSize": 20,
+                    "search": search_term,
+                },
             )
-        items = payload.get("data", [])
-        for item in items:
-            if isinstance(item, dict) and item.get("doorNumber") == kapino:
-                value = item.get("value")
-                if value:
-                    return value
+            if not isinstance(payload, dict) or not payload.get("isSuccess"):
+                msg = f"GetAllVehicleSelectList failed for {search_term}"
+                status_code = 502
+                if isinstance(payload, dict):
+                    msg = payload.get("message") or msg
+                    if "çok fazla" in msg.lower():
+                        status_code = 429
+                raise AracApiError(msg, status_code=status_code, payload=payload)
+            
+            items = payload.get("data", [])
+            for item in items:
+                if isinstance(item, dict) and item.get("doorNumber") == match_term:
+                    return item.get("value")
+            return None
+
+        # 1) Try exact match
+        val = await _do_search(kapino, kapino)
+        if val:
+            return val
+
+        # 2) Try hyphenated match for formats like C1753 -> C-1753
+        m = re.match(r"^([A-Za-z])(\d+)$", kapino)
+        if m:
+            hyphenated = f"{m.group(1).upper()}-{m.group(2)}"
+            val = await _do_search(hyphenated, hyphenated)
+            if val:
+                return val
+
+        # 3) Try searching with just the letter (the user's exact suggestion: "search: 'C-'")
+        # In case the door number is actually returned as 'C-1753' or something similar
+        if m:
+            prefix = f"{m.group(1).upper()}-"
+            val = await _do_search(prefix, hyphenated)
+            if val:
+                return val
+
         raise AracApiError(
             f"Vehicle hash not found for {kapino}",
             status_code=404,
@@ -278,7 +314,7 @@ class AracClient:
     @staticmethod
     def normalize_bus_position(data_vehicle: dict) -> BusPosition:
         """Convert dataVehicle from GetDetail into a BusPosition."""
-        kapino = _as_text(data_vehicle.get("vehicleDoorCode")) or "?"
+        kapino = _normalize_kapino(data_vehicle.get("vehicleDoorCode")) or "?"
         lat = _to_float(data_vehicle.get("latitude")) or 0.0
         lon = _to_float(data_vehicle.get("longitude")) or 0.0
 
@@ -291,22 +327,18 @@ class AracClient:
             plate=_as_text(data_vehicle.get("numberPlate")),
             latitude=lat,
             longitude=lon,
-            speed=None,  # Yeni API'de speed yok
+            speed=None,
             operator=_as_text(data_vehicle.get("operatorType")),
             last_seen=last_seen,
-            route_code=None,  # Yeni API'de route_code yok
+            route_code=None,  # Handled in get_arac_bus_detail
             operator_name=_as_text(data_vehicle.get("operatorType")),
             accessible=_to_bool(data_vehicle.get("accessibility")),
+            full_capacity=_to_int(data_vehicle.get("fullCapacity")),
+            has_bicycle_rack=_to_bool(data_vehicle.get("hasBicycleRack")),
             has_usb=_to_bool(data_vehicle.get("hasUsbCharger")),
             has_wifi=_to_bool(data_vehicle.get("hasWifi")),
-            has_bicycle_rack=_to_bool(data_vehicle.get("hasBicycleRack")),
             is_air_conditioned=_to_bool(data_vehicle.get("isAirConditioned")),
-            # Aşağıdaki alanlar yeni API'de mevcut değil:
-            vehicle_brand=None,
-            model_year=None,
-            vehicle_type=None,
             seating_capacity=None,
-            full_capacity=None,
             garage_code=None,
             garage_name=None,
             vehicle_software_version=None,
