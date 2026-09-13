@@ -227,9 +227,7 @@ class AracClient:
             if val:
                 return val
 
-        # 3) Try searching with just the letter (the user's exact suggestion: "search: 'C-'")
-        # In case the door number is actually returned as 'C-1753' or something similar
-        if m:
+            # 3) Try searching with just the letter (the user's exact suggestion: "search: 'C-'")
             prefix = f"{m.group(1).upper()}-"
             val = await _do_search(prefix, hyphenated)
             if val:

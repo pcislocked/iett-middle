@@ -248,6 +248,8 @@ async def get_arac_bus_auto_detail(
 
             # 2. Solve Captcha
             suggested_answer = await asyncio.to_thread(solve_captcha_image, captcha_image)
+            if not suggested_answer:
+                raise HTTPException(502, detail="Auto-captcha solve failed")
 
             # 3. Create Session (Submit Captcha)
             vehicle_hash = await client.get_vehicle_hash(kapino)
