@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import re
 from typing import Any
 
 import aiohttp
@@ -27,13 +28,6 @@ def _clip(text: str, limit: int = 500) -> str:
     if len(text) <= limit:
         return text
     return text[:limit] + "...<truncated>"
-
-
-def _as_text(val: Any) -> str | None:
-    if val is None:
-        return None
-    s = str(val).strip()
-    return s if s else None
 
 
 def _normalize_kapino(raw: Any) -> str:
@@ -213,7 +207,7 @@ class AracClient:
                     if "çok fazla" in msg.lower():
                         status_code = 429
                 raise AracApiError(msg, status_code=status_code, payload=payload)
-            
+
             items = payload.get("data", [])
             for item in items:
                 if isinstance(item, dict) and item.get("doorNumber") == match_term:

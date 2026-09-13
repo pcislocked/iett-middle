@@ -223,7 +223,8 @@ async def suggest_arac_bus(q: str) -> list[dict[str, str]]:
                         "doorNumber": str(item.get("doorNumber", "")),
                         "plate": str(item.get("plate", "")),
                     }
-                    for item in items if isinstance(item, dict)
+                    for item in items
+                    if isinstance(item, dict)
                 ]
         except AracApiError:
             pass
@@ -244,34 +245,34 @@ async def get_arac_bus_auto_detail(
             captcha_image = captcha_data.get("image")
             if not captcha_image:
                 raise HTTPException(502, detail="No captcha image returned")
-            
+
             # 2. Solve Captcha
             suggested_answer = await asyncio.to_thread(solve_captcha_image, captcha_image)
-            
+
             # 3. Create Session (Submit Captcha)
             vehicle_hash = await client.get_vehicle_hash(kapino)
             success = await client.submit_captcha(vehicle_hash, suggested_answer)
             if not success:
                 raise HTTPException(502, detail="Auto-captcha failed")
-                
+
             # 4. Get Detail
             detail = await client.get_detail(vehicle_hash)
-            
+
             data_vehicle = detail.get("dataVehicle", {})
             data_task = detail.get("dataTask", [])
-            
+
             profile = AracClient.normalize_bus_position(data_vehicle)
             missions = AracClient.normalize_missions(data_task)
-            
+
             completed = sum(1 for m in missions if m.state == "T")
             pending = sum(1 for m in missions if m.state == "B")
             line_codes = sorted({m.line_code for m in missions if m.line_code})
-            
+
             active_route = None
             if data_task and len(data_task) > 0:
                 active_route = str(data_task[0].get("lineCode", "")) or None
             profile.route_code = active_route
-            
+
             return {
                 "profile": profile.model_dump(),
                 "missions": AracMissionsResponse(
@@ -340,7 +341,7 @@ async def get_arac_bus_detail(
     active_route = None
     if data_task and len(data_task) > 0:
         active_route = str(data_task[0].get("lineCode", "")) or None
-    
+
     profile.route_code = active_route
 
     return {

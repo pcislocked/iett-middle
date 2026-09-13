@@ -120,6 +120,7 @@ def _parse_son_konum(value: Any) -> tuple[float | None, float | None]:
     except (IndexError, ValueError):
         return None, None
 
+
 def _normalize_kapino(raw: Any) -> str | None:
     """Ensure kapino follows the X-ZZZZ pattern if applicable."""
     k = str(raw or "").strip()

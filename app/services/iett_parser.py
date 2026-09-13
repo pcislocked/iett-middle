@@ -23,6 +23,7 @@ _TEMPURI = "http://tempuri.org/"
 # Covers all observed formats: A-001, C-325, C-123456, M-999, C1753 etc. (not vehicle license plates)
 _KAPINO_RE = re.compile(r"\b[A-Z]+-?\d+\b")
 
+
 def _normalize_kapino(raw: Any) -> str:
     k = str(raw or "").strip()
     m = re.match(r"^([A-Za-z]{1,2})(\d+)$", k)

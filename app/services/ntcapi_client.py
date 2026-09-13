@@ -36,6 +36,14 @@ _token_expiry: float = 0.0  # unix timestamp
 _token_lock = LazyLock()
 
 
+def _normalize_kapino(raw: Any) -> str:
+    k = str(raw or "").strip()
+    m = re.match(r"^([A-Za-z]{1,2})(\d+)$", k)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}"
+    return k
+
+
 async def _ensure_token(session: aiohttp.ClientSession) -> str:
     """Return a valid Bearer token, refreshing if needed."""
     global _token, _token_expiry
