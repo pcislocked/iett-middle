@@ -5,6 +5,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.8] - 2026-10-11
+### Added
+- **Persistent SQLite Vehicle & Plate Cache:** Built a thread-safe, WAL-mode persistent SQLite cache (`data/vehicles.db`) caching canonical `clean_kapino <-> clean_plate` pairs and doorNumber/plate mappings, plus upstream ARAC hashes with TTL freshness.
+- **Stop & Fleet Plate Enrichment:** Connected `get_plate_by_kapino` directly to the persistent vehicle cache. Buses offline or absent from the live 30s snapshot now reliably resolve license plates on StopPage and Fleet detail endpoints.
+- **Smart Dash/Space/Case Agnostic Matching:** Added $O(1)$ lookup via `_clean_fleet` and `_plate_fleet` in `deps.py` and `fleet.py`.
+- **Enriched Stop Search:** Added `direction` and `district` properties to `StopSearchResult` models and enriched `/v1/stops/search` responses from the in-memory stop catalog.
+- **Cold-Start Stop Search Protection:** Bypassed 300s search caching when stop index is still initializing to prevent cache poisoning with un-enriched records.
+
+### Fixed
+- **License Plate Search Flooding:** Fixed plate searches to send full plate strings instead of numeric extraction (avoiding arbitrary "34" query flooding on Istanbul transit).
+- **Search Hit Harvesting:** Every upstream query to `GetAllVehicleSelectList` now automatically batch-upserts all 50-100 returned vehicles into the persistent cache.
+- **Arac Auto-Detail Captcha Image:** Fixed `captchaImage` key lookup in `arac.py` auto-detail flow.
+
+### Tests
+- Expanded test coverage across `vehicle_cache`, `arac_client`, `stops`, and `deps` with 384 passing tests (100% green).
+
+---
+
 ## [0.4.6] - 2026-09-12
 ### Added
 - Injected 676767 and 31AMK with extreme edge-case Mock Data (Stale GPS and Math Mismatches) to assist frontend UI testing.
