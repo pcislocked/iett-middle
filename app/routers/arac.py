@@ -242,7 +242,7 @@ async def get_arac_bus_auto_detail(
         try:
             # 1. Get Captcha
             captcha_data = await client.get_captcha()
-            captcha_image = captcha_data.get("image")
+            captcha_image = captcha_data.get("captchaImage") or captcha_data.get("image")
             if not captcha_image:
                 raise HTTPException(502, detail="No captcha image returned")
 

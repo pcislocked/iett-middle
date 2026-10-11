@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 import threading
 import time
 from typing import Any, Literal, TypedDict, cast
@@ -128,16 +129,25 @@ async def get_bus_detail(kapino: str) -> dict[str, Any]:
 
     await ensure_fleet_fresh()
     snapshot = get_fleet_snapshot()
-    match = next((b for b in snapshot if b["kapino"].upper() == kapino.upper()), None)
+    clean_k = re.sub(r"[^A-Z0-9]", "", kapino.upper())
+    match = next(
+        (
+            b
+            for b in snapshot
+            if re.sub(r"[^A-Z0-9]", "", str(b.get("kapino") or "").upper()) == clean_k
+        ),
+        None,
+    )
     if match is None:
         raise HTTPException(404, detail=f"Bus {kapino!r} not found in active fleet")
 
-    bus: dict[str, Any] = {**match, "trail": get_trail(cast(str, match["kapino"]))}
+    matched_kapino = cast(str, match["kapino"])
+    bus: dict[str, Any] = {**match, "trail": get_trail(matched_kapino)}
 
     # Resolve route: prefer live field, fall back to last known
     _raw_live: str | None = match.get("route_code")
     live_route_code: str | None = _raw_live.strip().upper() if _raw_live else None
-    route_code: str | None = live_route_code or get_last_route_by_kapino(kapino)
+    route_code: str | None = live_route_code or get_last_route_by_kapino(matched_kapino)
     route_is_live: bool = bool(live_route_code)
 
     route_stops_data: list[dict[str, Any]] = []
@@ -167,7 +177,15 @@ async def get_bus(kapino: str) -> dict[str, Any]:
 
     await ensure_fleet_fresh()
     snapshot = get_fleet_snapshot()
-    match = next((b for b in snapshot if b["kapino"].upper() == kapino.upper()), None)
+    clean_k = re.sub(r"[^A-Z0-9]", "", kapino.upper())
+    match = next(
+        (
+            b
+            for b in snapshot
+            if re.sub(r"[^A-Z0-9]", "", str(b.get("kapino") or "").upper()) == clean_k
+        ),
+        None,
+    )
     if match is None:
         raise HTTPException(404, detail=f"Bus {kapino!r} not found in active fleet")
     return {**match, "trail": get_trail(cast(str, match["kapino"]))}

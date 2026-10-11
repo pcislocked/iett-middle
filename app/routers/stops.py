@@ -5,11 +5,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import math as _math
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
 from app.config import settings
-from app.deps import get_plate_by_kapino, get_session
+from app.deps import get_plate_by_kapino, get_session, get_stop_info_by_code
 from app.models.bus import Arrival
 from app.models.route import Announcement
 from app.models.stop import NearbyStop, StopDetail, StopInfo, StopSearchResult
@@ -48,7 +49,17 @@ async def search_stops(q: str = Query(..., min_length=2)):
         except IettApiError as exc:
             logger.warning("search_stops failed for q=%s: %s", q, exc)
             raise HTTPException(502, detail="Durak arama servisine ulaşılamadı.") from exc
-        return [r.model_dump() for r in results]
+        enriched: list[dict[str, Any]] = []
+        for r in results:
+            item_dict = r.model_dump()
+            cached_stop = get_stop_info_by_code(r.dcode)
+            if cached_stop:
+                if not item_dict.get("direction"):
+                    item_dict["direction"] = cached_stop.get("direction")
+                if not item_dict.get("district"):
+                    item_dict["district"] = cached_stop.get("district")
+            enriched.append(item_dict)
+        return enriched
 
     return await cache_get_or_fetch(
         key,

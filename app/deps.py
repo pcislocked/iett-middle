@@ -95,7 +95,7 @@ def get_buses_by_route(hat_kodu: str) -> list[dict[str, Any]]:
     """Return all fleet buses whose route_code matches hat_kodu (case-insensitive, prefix-tolerant)."""
     upper = hat_kodu.upper()
     result = []
-    for b in _fleet.values():
+    for b in list(_fleet.values()):
         rc = (b.get("route_code") or "").upper().strip()
         if not rc:
             continue
@@ -107,7 +107,7 @@ def get_buses_by_route(hat_kodu: str) -> list[dict[str, Any]]:
 
 def get_buses_near_stop(dcode: str) -> list[dict[str, Any]]:
     """Return all fleet buses currently with nearest_stop == dcode."""
-    return [b for b in _fleet.values() if b.get("nearest_stop") == dcode]
+    return [b for b in list(_fleet.values()) if b.get("nearest_stop") == dcode]
 
 
 async def ensure_fleet_fresh(max_age_seconds: int = 30) -> None:
@@ -247,6 +247,11 @@ def get_stop_coords(stop_code: str) -> tuple[float, float] | None:
     if s is None:
         return None
     return s["latitude"], s["longitude"]
+
+
+def get_stop_info_by_code(stop_code: str) -> dict[str, Any] | None:
+    """Return full stop dict for a stop code from in-memory catalogue, or None."""
+    return _stop_by_code.get(stop_code)
 
 
 def get_nearby_stops(lat: float, lon: float, radius_m: float = 500.0) -> list[dict[str, Any]]:

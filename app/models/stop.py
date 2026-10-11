@@ -9,6 +9,8 @@ class StopSearchResult(BaseModel):
     dcode: str
     name: str
     path: str | None = None
+    direction: str | None = None
+    district: str | None = None
 
 
 class StopDetail(BaseModel):

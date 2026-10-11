@@ -107,6 +107,40 @@ class TestAracClientMethods:
             vhash = await client.get_vehicle_hash("C-1753")
             assert vhash == "hash_123"
 
+    async def test_get_vehicle_hash_dash_agnostic_match(
+        self, session: aiohttp.ClientSession
+    ) -> None:
+        client = AracClient(session)
+        with aioresponses() as m:
+            m.post(
+                _base_url("/Home/GetAllVehicleSelectList"),
+                payload={
+                    "isSuccess": True,
+                    "data": [
+                        {"doorNumber": "C-2001", "value": "hash_c2001"},
+                        {"doorNumber": "M-2001", "value": "hash_m2001"},
+                    ],
+                },
+            )
+            # Searching for M2001 (without hyphen) must reliably match M-2001, not C-2001
+            vhash = await client.get_vehicle_hash("M2001")
+            assert vhash == "hash_m2001"
+
+    async def test_get_vehicle_hash_plate_match(self, session: aiohttp.ClientSession) -> None:
+        client = AracClient(session)
+        with aioresponses() as m:
+            m.post(
+                _base_url("/Home/GetAllVehicleSelectList"),
+                payload={
+                    "isSuccess": True,
+                    "data": [
+                        {"doorNumber": "M-2001", "plate": "34 TP 2001", "value": "hash_plate"},
+                    ],
+                },
+            )
+            vhash = await client.get_vehicle_hash("34TP2001")
+            assert vhash == "hash_plate"
+
     async def test_get_vehicle_hash_not_found(self, session: aiohttp.ClientSession) -> None:
         client = AracClient(session)
         with aioresponses() as m:
