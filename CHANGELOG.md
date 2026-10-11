@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.8.1] - 2026-10-11
+### Fixed
+- **Dynamic ARAC Challenge Hashes:** Removed single-use hash caching in `arac_client.py` and `vehicle_cache.py`. Upstream ARAC challenge hashes expire or fail upon reuse, so fresh hashes are generated per query while durable doorNumber <-> plate mappings remain persistently cached.
+- **SQLite Write Deduplication & Async Offloading:** Added in-memory deduplication `_known_plate_mappings` to prevent redundant SQLite writes for recurring fleet vehicles, and offloaded fleet batch writes to worker threads via `run_in_executor` to keep the event loop non-blocking.
+- **O(1) `find_bus_in_fleet`:** Replaced full fleet list identity comparison (`list(_fleet.values())`) with direct dictionary lookups.
+- **Configurable DB Path:** Added `vehicle_cache_path` to `app/config.py` (default: `data/vehicles.db`, `:memory:` during testing) eliminating environment inspection.
+- **Docker Persistence:** Mounted `./data:/app/data` volume in `docker-compose.yml` to preserve the persistent vehicle database across container restarts.
+
+### Tests
+- Verified 389/389 tests passing (100% green).
+
+---
+
 ## [0.4.8] - 2026-10-11
 ### Added
 - **Persistent SQLite Vehicle & Plate Cache:** Built a thread-safe, WAL-mode persistent SQLite cache (`data/vehicles.db`) caching canonical `clean_kapino <-> clean_plate` pairs and doorNumber/plate mappings, plus upstream ARAC hashes with TTL freshness.
