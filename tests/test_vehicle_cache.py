@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import time
-
 from app.services import vehicle_cache
 
 
@@ -33,11 +31,10 @@ class TestVehicleCache:
         assert res3 is not None
         assert res3["door_number"] == "M-2001"
 
-    def test_get_hash_freshness(self) -> None:
+    def test_get_hash_dynamic_no_cache(self) -> None:
         vehicle_cache.upsert_vehicle("C-1753", "34 HO 1753", "fresh_hash")
-        assert vehicle_cache.get_hash("C-1753", max_age=60.0) == "fresh_hash"
-        # Immediate expiration with max_age=0
-        time.sleep(0.01)
+        # ARAC dynamic hashes are single-use tokens; get_hash always returns None
+        assert vehicle_cache.get_hash("C-1753", max_age=60.0) is None
         assert vehicle_cache.get_hash("C-1753", max_age=0.001) is None
 
     def test_batch_upsert_and_search(self) -> None:
@@ -87,5 +84,9 @@ class TestVehicleCache:
         veh_updated = vehicle_cache.get_vehicle("B-500")
         assert veh_updated is not None
         assert veh_updated["plate"] == "34 BB 501"
-        assert veh_updated["hash_value"] == "new_hash"
-        assert vehicle_cache.get_hash("B-500") == "new_hash"
+        assert vehicle_cache.get_hash("B-500") is None
+
+        # Test close_connection and reconnect
+        vehicle_cache.close_connection()
+        conn = vehicle_cache.get_db_connection()
+        assert conn is not None

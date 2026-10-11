@@ -167,19 +167,31 @@ class TestAracClientMethods:
             await client.get_vehicle_hash("---")
         assert exc.value.status_code == 400
 
-    async def test_get_vehicle_hash_persistent_cache_hit(
+    async def test_get_vehicle_hash_persistent_cache_mapping(
         self, session: aiohttp.ClientSession
     ) -> None:
         from app.services import vehicle_cache
 
-        vehicle_cache.upsert_vehicle("K-9999", "34 KK 9999", hash_value="cached_hash_9999")
+        vehicle_cache.upsert_vehicle("K-9999", "34 KK 9999")
 
         client = AracClient(session)
         with aioresponses() as m:
-            # Resolves from persistent cache without making any HTTP request
-            vhash = await client.get_vehicle_hash("K-9999")
-            assert vhash == "cached_hash_9999"
-            assert len(m.requests) == 0
+            m.post(
+                _base_url("/Home/GetAllVehicleSelectList"),
+                payload={
+                    "isSuccess": True,
+                    "data": [
+                        {
+                            "doorNumber": "K-9999",
+                            "plate": "34 KK 9999",
+                            "value": "fresh_dynamic_hash_9999",
+                        }
+                    ],
+                },
+            )
+            # Resolves canonical door code from cache and fetches fresh dynamic hash
+            vhash = await client.get_vehicle_hash("34 KK 9999")
+            assert vhash == "fresh_dynamic_hash_9999"
 
     async def test_get_vehicle_hash_not_found(self, session: aiohttp.ClientSession) -> None:
         client = AracClient(session)

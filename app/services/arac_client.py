@@ -199,12 +199,7 @@ class AracClient:
         if not clean_target:
             raise AracApiError(f"Invalid kapino/plate: {kapino}", status_code=400)
 
-        # 1. Check persistent cache for fresh hash (< 10 minutes)
-        cached_hash = vehicle_cache.get_hash(clean_target, max_age=600.0)
-        if cached_hash:
-            return cached_hash
-
-        # 2. Check if persistent cache knows canonical vehicle door number
+        # Check if persistent cache knows canonical vehicle door number for plate/alias inputs
         known_veh = vehicle_cache.get_vehicle(clean_target)
         target_door = known_veh.get("clean_kapino") if known_veh else None
 

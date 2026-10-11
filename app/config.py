@@ -38,5 +38,7 @@ class Settings(BaseSettings):
     enable_outgoing_trace: bool = False
     port: int = 8000
 
+    vehicle_cache_path: str = "data/vehicles.db"
+
 
 settings = Settings()

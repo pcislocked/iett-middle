@@ -128,8 +128,10 @@ async def get_bus_detail(kapino: str) -> dict[str, Any]:
     """
 
     await ensure_fleet_fresh()
-    snapshot = get_fleet_snapshot()
-    match, matched_kapino = find_bus_in_fleet(kapino, snapshot=snapshot)
+    match, matched_kapino = find_bus_in_fleet(kapino)
+    if match is None:
+        snapshot = get_fleet_snapshot()
+        match, matched_kapino = find_bus_in_fleet(kapino, snapshot=snapshot)
     if match is None or not matched_kapino:
         raise HTTPException(404, detail=f"Bus {kapino!r} not found in active fleet")
 
@@ -167,8 +169,10 @@ async def get_bus(kapino: str) -> dict[str, Any]:
     """
 
     await ensure_fleet_fresh()
-    snapshot = get_fleet_snapshot()
-    match, matched_kapino = find_bus_in_fleet(kapino, snapshot=snapshot)
+    match, matched_kapino = find_bus_in_fleet(kapino)
+    if match is None:
+        snapshot = get_fleet_snapshot()
+        match, matched_kapino = find_bus_in_fleet(kapino, snapshot=snapshot)
     if match is None or not matched_kapino:
         raise HTTPException(404, detail=f"Bus {kapino!r} not found in active fleet")
     return {**match, "trail": get_trail(matched_kapino)}
