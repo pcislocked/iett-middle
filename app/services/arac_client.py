@@ -193,11 +193,22 @@ class AracClient:
         """
         import re
 
+        from app.services import vehicle_cache
+
         clean_target = re.sub(r"[^A-Z0-9]", "", kapino.upper())
         if not clean_target:
             raise AracApiError(f"Invalid kapino/plate: {kapino}", status_code=400)
 
-        async def _query_and_match(query_str: str) -> str | None:
+        # 1. Check persistent cache for fresh hash (< 10 minutes)
+        cached_hash = vehicle_cache.get_hash(clean_target, max_age=600.0)
+        if cached_hash:
+            return cached_hash
+
+        # 2. Check if persistent cache knows canonical vehicle door number
+        known_veh = vehicle_cache.get_vehicle(clean_target)
+        target_door = known_veh.get("clean_kapino") if known_veh else None
+
+        async def _query_and_match(query_str: str) -> tuple[str | None, bool]:
             payload = await self._post_json(
                 "/Home/GetAllVehicleSelectList",
                 {
@@ -216,30 +227,57 @@ class AracClient:
                 raise AracApiError(msg, status_code=status_code, payload=payload)
 
             items = payload.get("data", [])
+            if not isinstance(items, list):
+                return None, False
+
+            # Always populate / update persistent cache with returned vehicles
+            vehicle_cache.upsert_vehicles_batch(items)
+
             # 1. First priority: match on clean doorNumber (e.g. M-2001 or M2001)
             for item in items:
                 if isinstance(item, dict):
                     item_door = re.sub(r"[^A-Z0-9]", "", str(item.get("doorNumber") or "").upper())
-                    if item_door == clean_target and item.get("value"):
-                        return str(item["value"])
+                    if (
+                        item_door == clean_target or (target_door and item_door == target_door)
+                    ) and item.get("value"):
+                        return str(item["value"]), True
 
             # 2. Second priority: match on clean plate (e.g. 34 TP 2001 or 34TP2001)
             for item in items:
                 if isinstance(item, dict):
                     item_plate = re.sub(r"[^A-Z0-9]", "", str(item.get("plate") or "").upper())
                     if item_plate == clean_target and item.get("value"):
-                        return str(item["value"])
+                        return str(item["value"]), True
 
-            return None
+            return None, len(items) > 0
 
-        # Extract numeric digits (e.g. "2001" from "M-2001" or "M2001") for a single broad search
-        num_match = re.search(r"\d+", kapino)
-        search_term = num_match.group(0) if num_match else kapino.strip()
+        # Determine query term:
+        # License plates (e.g. "34 TP 2001", "34TP2001") must query with the plate, never just "34"
+        is_plate_pattern = bool(
+            re.match(r"^\d{2}[A-Z]{1,3}\d{2,4}$", clean_target)
+            or (clean_target.startswith("34") and any(c.isalpha() for c in clean_target))
+        )
+
+        if is_plate_pattern:
+            search_term = kapino.strip()
+        else:
+            # For door codes (e.g. "M-2001", "C1753"), extract numeric digits
+            num_match = re.search(r"\d+", clean_target)
+            if num_match and len(num_match.group(0)) >= 2:
+                search_term = num_match.group(0)
+            else:
+                search_term = kapino.strip()
 
         # Primary single query
-        val = await _query_and_match(search_term)
+        val, had_results = await _query_and_match(search_term)
         if val:
             return val
+
+        # Fallback query only if search_term was transformed, returned results from IETT, but none matched clean_target
+        if had_results and search_term != kapino.strip():
+            fallback_val, _ = await _query_and_match(kapino.strip())
+            if fallback_val:
+                return fallback_val
 
         raise AracApiError(
             f"Vehicle hash not found for {kapino}",

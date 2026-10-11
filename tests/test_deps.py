@@ -136,6 +136,41 @@ class TestFleetStore:
     def test_get_last_route_unknown_kapino_returns_none(self) -> None:
         assert deps.get_last_route_by_kapino("NOBODY") is None
 
+    def test_find_bus_in_fleet_case_and_dash_agnostic(self) -> None:
+        deps.update_fleet([_bus("M-2001", 41.0, 29.0)])
+        # Exact match
+        bus, kapino = deps.find_bus_in_fleet("M-2001")
+        assert bus is not None and kapino == "M-2001"
+
+        # Without dash
+        bus, kapino = deps.find_bus_in_fleet("M2001")
+        assert bus is not None and kapino == "M-2001"
+
+        # Lowercase and spaces
+        bus, kapino = deps.find_bus_in_fleet("m 2001")
+        assert bus is not None and kapino == "M-2001"
+
+    def test_find_bus_in_fleet_by_plate(self) -> None:
+        b = _bus("M-2001", 41.0, 29.0)
+        b.plate = "34 TP 2001"
+        deps.update_fleet([b])
+
+        # Plate with spaces
+        bus, kapino = deps.find_bus_in_fleet("34 TP 2001")
+        assert bus is not None and kapino == "M-2001"
+
+        # Plate without spaces
+        bus, kapino = deps.find_bus_in_fleet("34TP2001")
+        assert bus is not None and kapino == "M-2001"
+
+    def test_find_bus_in_fleet_invalid_empty(self) -> None:
+        deps.update_fleet([_bus("M-2001", 41.0, 29.0)])
+        bus, kapino = deps.find_bus_in_fleet("---")
+        assert bus is None and kapino is None
+
+        bus, kapino = deps.find_bus_in_fleet("   ")
+        assert bus is None and kapino is None
+
 
 # ---------------------------------------------------------------------------
 # Stop spatial index

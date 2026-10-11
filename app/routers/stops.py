@@ -52,7 +52,7 @@ async def search_stops(q: str = Query(..., min_length=2)):
         enriched: list[dict[str, Any]] = []
         for r in results:
             item_dict = r.model_dump()
-            cached_stop = get_stop_info_by_code(r.dcode)
+            cached_stop = get_stop_info_by_code(r.dcode.strip())
             if cached_stop:
                 if not item_dict.get("direction"):
                     item_dict["direction"] = cached_stop.get("direction")
@@ -60,6 +60,13 @@ async def search_stops(q: str = Query(..., min_length=2)):
                     item_dict["district"] = cached_stop.get("district")
             enriched.append(item_dict)
         return enriched
+
+    from app.deps import get_stop_index_updated_at
+
+    # If stop index has not yet completed initial load on startup,
+    # skip 300s caching to prevent poisoning cache with un-enriched stops.
+    if get_stop_index_updated_at() is None:
+        return await _fetch()
 
     return await cache_get_or_fetch(
         key,

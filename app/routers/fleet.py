@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 import math
-import re
 import threading
 import time
 from typing import Any, Literal, TypedDict, cast
@@ -20,6 +19,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.deps import (
     ensure_fleet_fresh,
+    find_bus_in_fleet,
     get_fleet_snapshot,
     get_fleet_updated_at,
     get_last_route_by_kapino,
@@ -129,19 +129,10 @@ async def get_bus_detail(kapino: str) -> dict[str, Any]:
 
     await ensure_fleet_fresh()
     snapshot = get_fleet_snapshot()
-    clean_k = re.sub(r"[^A-Z0-9]", "", kapino.upper())
-    match = next(
-        (
-            b
-            for b in snapshot
-            if re.sub(r"[^A-Z0-9]", "", str(b.get("kapino") or "").upper()) == clean_k
-        ),
-        None,
-    )
-    if match is None:
+    match, matched_kapino = find_bus_in_fleet(kapino, snapshot=snapshot)
+    if match is None or not matched_kapino:
         raise HTTPException(404, detail=f"Bus {kapino!r} not found in active fleet")
 
-    matched_kapino = cast(str, match["kapino"])
     bus: dict[str, Any] = {**match, "trail": get_trail(matched_kapino)}
 
     # Resolve route: prefer live field, fall back to last known
@@ -177,15 +168,7 @@ async def get_bus(kapino: str) -> dict[str, Any]:
 
     await ensure_fleet_fresh()
     snapshot = get_fleet_snapshot()
-    clean_k = re.sub(r"[^A-Z0-9]", "", kapino.upper())
-    match = next(
-        (
-            b
-            for b in snapshot
-            if re.sub(r"[^A-Z0-9]", "", str(b.get("kapino") or "").upper()) == clean_k
-        ),
-        None,
-    )
-    if match is None:
+    match, matched_kapino = find_bus_in_fleet(kapino, snapshot=snapshot)
+    if match is None or not matched_kapino:
         raise HTTPException(404, detail=f"Bus {kapino!r} not found in active fleet")
-    return {**match, "trail": get_trail(cast(str, match["kapino"]))}
+    return {**match, "trail": get_trail(matched_kapino)}

@@ -34,6 +34,15 @@ async def session() -> AsyncIterator[aiohttp.ClientSession]:
     await s.close()
 
 
+@pytest.fixture(autouse=True)
+def clean_vehicle_cache() -> None:
+    from app.services import vehicle_cache
+
+    vehicle_cache.clear_cache()
+    yield
+    vehicle_cache.clear_cache()
+
+
 def _base_url(path: str) -> str:
     return f"https://arac.iett.gov.tr{path}"
 
@@ -140,6 +149,37 @@ class TestAracClientMethods:
             )
             vhash = await client.get_vehicle_hash("34TP2001")
             assert vhash == "hash_plate"
+
+            # Verify that querying a plate searches the plate itself, NEVER just "34"
+            calls = [
+                req
+                for (_, url), req_list in m.requests.items()
+                for req in req_list
+                if "GetAllVehicleSelectList" in str(url)
+            ]
+            assert len(calls) == 1
+            assert calls[0].kwargs["json"]["search"] == "34TP2001"
+            assert calls[0].kwargs["json"]["search"] != "34"
+
+    async def test_get_vehicle_hash_invalid_input(self, session: aiohttp.ClientSession) -> None:
+        client = AracClient(session)
+        with pytest.raises(AracApiError, match="Invalid kapino/plate") as exc:
+            await client.get_vehicle_hash("---")
+        assert exc.value.status_code == 400
+
+    async def test_get_vehicle_hash_persistent_cache_hit(
+        self, session: aiohttp.ClientSession
+    ) -> None:
+        from app.services import vehicle_cache
+
+        vehicle_cache.upsert_vehicle("K-9999", "34 KK 9999", hash_value="cached_hash_9999")
+
+        client = AracClient(session)
+        with aioresponses() as m:
+            # Resolves from persistent cache without making any HTTP request
+            vhash = await client.get_vehicle_hash("K-9999")
+            assert vhash == "cached_hash_9999"
+            assert len(m.requests) == 0
 
     async def test_get_vehicle_hash_not_found(self, session: aiohttp.ClientSession) -> None:
         client = AracClient(session)
