@@ -82,6 +82,20 @@ _kapino_last_route: dict[str, str] = {}
 _kapino_updated_at: dict[str, float] = {}
 
 
+_known_plate_mappings: dict[str, str] = {}
+
+
+def clear_fleet_store() -> None:
+    """Clear all in-memory fleet state (used for test teardown)."""
+    _fleet.clear()
+    _clean_fleet.clear()
+    _plate_fleet.clear()
+    _trail.clear()
+    _kapino_last_route.clear()
+    _kapino_updated_at.clear()
+    _known_plate_mappings.clear()
+
+
 def get_fleet_snapshot() -> list[dict[str, Any]]:
     """Return current fleet as a list of dicts (thread-safe read)."""
     return list(_fleet.values())
@@ -99,28 +113,39 @@ def find_bus_in_fleet(
     if not clean_q:
         return None, None
 
-    if snapshot is None:
-        snapshot = get_fleet_snapshot()
-    # Fast path: check _clean_fleet when in normal production runtime (unmocked)
-    if (
-        len(_clean_fleet) > 0
-        and len(_clean_fleet) == len(snapshot)
-        and snapshot == list(_fleet.values())
-    ):
-        bus = _clean_fleet.get(clean_q) or _plate_fleet.get(clean_q)
-        if bus:
-            return bus, bus.get("kapino")
+    # If caller provided an explicit snapshot (e.g. test mocks), scan it
+    if snapshot is not None:
+        for b in snapshot:
+            k = str(b.get("kapino") or "")
+            pl = str(b.get("plate") or "")
+            if re.sub(r"[^A-Z0-9]", "", k.upper()) == clean_q or (
+                pl and re.sub(r"[^A-Z0-9]", "", pl.upper()) == clean_q
+            ):
+                return b, b.get("kapino")
 
-    # Direct search in current snapshot (supports mocked get_fleet_snapshot in tests)
-    for b in snapshot:
-        k = str(b.get("kapino") or "")
-        pl = str(b.get("plate") or "")
-        if re.sub(r"[^A-Z0-9]", "", k.upper()) == clean_q or (
-            pl and re.sub(r"[^A-Z0-9]", "", pl.upper()) == clean_q
-        ):
-            return b, b.get("kapino")
+        # Check persistent cache for alternate plate or door code mapping
+        try:
+            from app.services import vehicle_cache
 
-    # Check persistent cache if query is an alternate plate or door number
+            veh = vehicle_cache.get_vehicle(clean_q)
+            if veh:
+                canonical_clean = veh.get("clean_kapino")
+                if canonical_clean:
+                    for b in snapshot:
+                        k = str(b.get("kapino") or "")
+                        if re.sub(r"[^A-Z0-9]", "", k.upper()) == canonical_clean:
+                            return b, b.get("kapino")
+        except Exception:
+            pass
+
+        return None, None
+
+    # O(1) fast path: check clean kapino and plate stores
+    bus = _clean_fleet.get(clean_q) or _plate_fleet.get(clean_q)
+    if bus:
+        return bus, bus.get("kapino")
+
+    # Check persistent cache for alternate plate or door code mapping
     try:
         from app.services import vehicle_cache
 
@@ -128,10 +153,9 @@ def find_bus_in_fleet(
         if veh:
             canonical_clean = veh.get("clean_kapino")
             if canonical_clean:
-                for b in snapshot:
-                    k = str(b.get("kapino") or "")
-                    if re.sub(r"[^A-Z0-9]", "", k.upper()) == canonical_clean:
-                        return b, b.get("kapino")
+                bus = _clean_fleet.get(canonical_clean)
+                if bus:
+                    return bus, bus.get("kapino")
     except Exception:
         pass
 
@@ -307,12 +331,25 @@ def update_fleet(buses: list[BusPosition], is_full_snapshot: bool = True) -> Non
     _clean_fleet = new_clean_fleet
     _plate_fleet = new_plate_fleet
 
-    # Populate persistent vehicle cache with kapino <-> plate pairs
-    from app.services import vehicle_cache  # noqa: PLC0415
+    # Populate persistent vehicle cache only with new or changed kapino <-> plate pairs
+    new_pairs: list[dict[str, Any]] = []
+    for b in buses:
+        if not b.plate:
+            continue
+        clean_k = re.sub(r"[^A-Z0-9]", "", b.kapino.upper())
+        clean_p = re.sub(r"[^A-Z0-9]", "", b.plate.upper())
+        if clean_k and clean_p and _known_plate_mappings.get(clean_k) != clean_p:
+            _known_plate_mappings[clean_k] = clean_p
+            new_pairs.append({"door_number": b.kapino, "plate": b.plate})
 
-    vehicle_cache.upsert_vehicles_batch(
-        [{"door_number": b.kapino, "plate": b.plate} for b in buses if b.plate]
-    )
+    if new_pairs:
+        from app.services import vehicle_cache  # noqa: PLC0415
+
+        try:
+            loop = asyncio.get_running_loop()
+            loop.run_in_executor(None, vehicle_cache.upsert_vehicles_batch, new_pairs)
+        except RuntimeError:
+            vehicle_cache.upsert_vehicles_batch(new_pairs)
 
 
 # ---------------------------------------------------------------------------

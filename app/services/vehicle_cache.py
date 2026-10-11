@@ -10,6 +10,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from app.config import settings
+
 logger = logging.getLogger(__name__)
 
 DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "vehicles.db"
@@ -27,18 +29,18 @@ def _clean_str(val: str | None) -> str:
 def get_db_connection() -> sqlite3.Connection:
     global _conn
     if _conn is None:
-        import os
-        import sys
-
-        is_test = "PYTEST_CURRENT_TEST" in os.environ or "pytest" in sys.modules
+        db_target = settings.vehicle_cache_path
         try:
-            if is_test:
+            if db_target == ":memory:":
                 conn = sqlite3.connect(":memory:", check_same_thread=False)
             else:
-                DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-                conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
+                p = Path(db_target)
+                if not p.is_absolute():
+                    p = Path(__file__).resolve().parent.parent.parent / p
+                p.parent.mkdir(parents=True, exist_ok=True)
+                conn = sqlite3.connect(str(p), check_same_thread=False)
         except Exception as exc:
-            logger.warning("Could not open %s, using :memory: fallback: %s", DB_PATH, exc)
+            logger.warning("Could not open %s, using :memory: fallback: %s", db_target, exc)
             conn = sqlite3.connect(":memory:", check_same_thread=False)
 
         conn.row_factory = sqlite3.Row
@@ -63,6 +65,18 @@ def get_db_connection() -> sqlite3.Connection:
             )
         _conn = conn
     return _conn
+
+
+def close_connection() -> None:
+    """Close and release the active SQLite connection."""
+    global _conn
+    with _lock:
+        if _conn is not None:
+            try:
+                _conn.close()
+            except Exception:
+                pass
+            _conn = None
 
 
 def clear_cache() -> None:
@@ -187,15 +201,11 @@ def get_vehicle(query: str) -> dict[str, Any] | None:
     return None
 
 
-def get_hash(query: str, max_age: float = 600.0) -> str | None:
-    veh = get_vehicle(query)
-    if not veh:
-        return None
+def get_hash(query: str, max_age: float = 600.0) -> str | None:  # noqa: ARG001
+    """ARAC dynamic hashes are single-use tokens that expire immediately.
 
-    hash_val = veh.get("hash_value")
-    hash_ts = veh.get("hash_updated_at")
-    if hash_val and hash_ts and (time.time() - float(hash_ts) < max_age):
-        return str(hash_val)
+    This function is retained for API backward compatibility and always returns None.
+    """
     return None
 
 

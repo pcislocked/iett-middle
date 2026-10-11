@@ -16,13 +16,20 @@ if sys.platform == "win32":
 # ---------------------------------------------------------------------------
 import pytest
 
+from app import deps
+from app.config import settings
+from app.services import vehicle_cache
 from app.services.cache import _inflight, _store
+
+settings.vehicle_cache_path = ":memory:"
 
 
 @pytest.fixture(autouse=True)
 def clear_cache():
     _store.clear()
     _inflight.clear()
+    vehicle_cache.clear_cache()
+    deps.clear_fleet_store()
 
 
 # ---------------------------------------------------------------------------
