@@ -57,5 +57,35 @@ class TestVehicleCache:
     def test_invalid_query_returns_none_or_empty(self) -> None:
         assert vehicle_cache.get_vehicle("") is None
         assert vehicle_cache.get_vehicle("---") is None
+        assert vehicle_cache.get_vehicle("NONEXISTENT") is None
         assert vehicle_cache.get_hash("") is None
+        assert vehicle_cache.get_hash("NONEXISTENT") is None
         assert vehicle_cache.search_vehicles("") == []
+        assert vehicle_cache.search_vehicles("   ") == []
+
+    def test_batch_upsert_empty_or_invalid_items(self) -> None:
+        vehicle_cache.upsert_vehicles_batch([])
+        vehicle_cache.upsert_vehicles_batch(
+            [{}, {"doorNumber": ""}, {"doorNumber": "---"}, {"plate": "34 ONLY"}]
+        )
+        assert vehicle_cache.search_vehicles("ONLY") == []
+
+    def test_upsert_vehicle_conflict_and_hash_none(self) -> None:
+        # Upsert with empty clean string
+        vehicle_cache.upsert_vehicle("---")
+        assert vehicle_cache.get_vehicle("---") is None
+
+        # Insert without hash
+        vehicle_cache.upsert_vehicle("B-500", "34 BB 500")
+        assert vehicle_cache.get_hash("B-500") is None
+        veh = vehicle_cache.get_vehicle("B-500")
+        assert veh is not None
+        assert veh["plate"] == "34 BB 500"
+
+        # Update existing vehicle with new plate and hash
+        vehicle_cache.upsert_vehicle("B-500", "34 BB 501", "new_hash")
+        veh_updated = vehicle_cache.get_vehicle("B-500")
+        assert veh_updated is not None
+        assert veh_updated["plate"] == "34 BB 501"
+        assert veh_updated["hash_value"] == "new_hash"
+        assert vehicle_cache.get_hash("B-500") == "new_hash"
