@@ -119,6 +119,23 @@ class TestFleetStore:
         plate = deps.get_plate_by_kapino("K-999")
         assert plate == "34 HO 1000"
 
+    def test_get_plate_by_kapino_dash_agnostic(self) -> None:
+        deps.update_fleet([_bus("K-999", 41.0, 29.0)])
+        assert deps.get_plate_by_kapino("K999") == "34 HO 1000"
+        assert deps.get_plate_by_kapino("k-999") == "34 HO 1000"
+
+    def test_get_plate_by_kapino_persistent_cache_fallback(self) -> None:
+        from app.services import vehicle_cache
+
+        vehicle_cache.upsert_vehicle(
+            door_number="M-3000",
+            plate="34 TP 3000",
+        )
+        # Not in active _fleet
+        assert "M-3000" not in deps._fleet
+        assert deps.get_plate_by_kapino("M-3000") == "34 TP 3000"
+        assert deps.get_plate_by_kapino("M3000") == "34 TP 3000"
+
     def test_get_plate_by_kapino_unknown_returns_none(self) -> None:
         plate = deps.get_plate_by_kapino("NOTEXIST")
         assert plate is None

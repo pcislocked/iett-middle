@@ -209,8 +209,26 @@ async def cancel_fleet_refresh_task() -> None:
 
 
 def get_plate_by_kapino(kapino: str) -> str | None:
-    """Look up the plate for a given kapino from the in-memory fleet store."""
-    return _fleet.get(kapino, {}).get("plate")
+    """Look up the plate for a given kapino from in-memory fleet store or persistent cache."""
+    if not kapino:
+        return None
+    p = _fleet.get(kapino, {}).get("plate")
+    if p:
+        return p
+
+    clean_k = re.sub(r"[^A-Z0-9]", "", kapino.upper())
+    if clean_k:
+        bus = _clean_fleet.get(clean_k)
+        if bus and bus.get("plate"):
+            return bus["plate"]
+
+        from app.services import vehicle_cache  # noqa: PLC0415
+
+        veh = vehicle_cache.get_vehicle(clean_k)
+        if veh and veh.get("plate"):
+            return veh["plate"]
+
+    return None
 
 
 def get_last_route_by_kapino(kapino: str) -> str | None:
