@@ -184,23 +184,41 @@ class AracClient:
                 ) from exc
 
     async def get_vehicle_hash(self, kapino: str) -> str:
-        """Fetch the dynamic encrypted hash for a door number.
+        """Fetch the dynamic encrypted hash for a door number or plate.
 
+        Uses smart numeric extraction to query /Home/GetAllVehicleSelectList in a single call,
+        then accurately matches the clean alphanumeric identifier (supporting both dashed
+        and non-dashed registrations like M-2001 vs M2001, as well as license plates).
         This hash changes on every request. Do NOT cache it.
         """
         import re
 
-        async def _do_search(search_term, match_term):
+        from app.services import vehicle_cache
+
+        clean_target = re.sub(r"[^A-Z0-9]", "", kapino.upper())
+        if not clean_target:
+            raise AracApiError(f"Invalid kapino/plate: {kapino}", status_code=400)
+
+        # 1. Check persistent cache for fresh hash (< 10 minutes)
+        cached_hash = vehicle_cache.get_hash(clean_target, max_age=600.0)
+        if cached_hash:
+            return cached_hash
+
+        # 2. Check if persistent cache knows canonical vehicle door number
+        known_veh = vehicle_cache.get_vehicle(clean_target)
+        target_door = known_veh.get("clean_kapino") if known_veh else None
+
+        async def _query_and_match(query_str: str) -> tuple[str | None, bool]:
             payload = await self._post_json(
                 "/Home/GetAllVehicleSelectList",
                 {
                     "page": 1,
-                    "pageSize": 20,
-                    "search": search_term,
+                    "pageSize": 50,
+                    "search": query_str,
                 },
             )
             if not isinstance(payload, dict) or not payload.get("isSuccess"):
-                msg = f"GetAllVehicleSelectList failed for {search_term}"
+                msg = f"GetAllVehicleSelectList failed for {query_str}"
                 status_code = 502
                 if isinstance(payload, dict):
                     msg = payload.get("message") or msg
@@ -209,29 +227,57 @@ class AracClient:
                 raise AracApiError(msg, status_code=status_code, payload=payload)
 
             items = payload.get("data", [])
-            for item in items:
-                if isinstance(item, dict) and item.get("doorNumber") == match_term:
-                    return item.get("value")
-            return None
+            if not isinstance(items, list):
+                return None, False
 
-        # 1) Try exact match
-        val = await _do_search(kapino, kapino)
+            # Always populate / update persistent cache with returned vehicles
+            vehicle_cache.upsert_vehicles_batch(items)
+
+            # 1. First priority: match on clean doorNumber (e.g. M-2001 or M2001)
+            for item in items:
+                if isinstance(item, dict):
+                    item_door = re.sub(r"[^A-Z0-9]", "", str(item.get("doorNumber") or "").upper())
+                    if (
+                        item_door == clean_target or (target_door and item_door == target_door)
+                    ) and item.get("value"):
+                        return str(item["value"]), True
+
+            # 2. Second priority: match on clean plate (e.g. 34 TP 2001 or 34TP2001)
+            for item in items:
+                if isinstance(item, dict):
+                    item_plate = re.sub(r"[^A-Z0-9]", "", str(item.get("plate") or "").upper())
+                    if item_plate == clean_target and item.get("value"):
+                        return str(item["value"]), True
+
+            return None, len(items) > 0
+
+        # Determine query term:
+        # License plates (e.g. "34 TP 2001", "34TP2001") must query with the plate, never just "34"
+        is_plate_pattern = bool(
+            re.match(r"^\d{2}[A-Z]{1,3}\d{2,4}$", clean_target)
+            or (clean_target.startswith("34") and any(c.isalpha() for c in clean_target))
+        )
+
+        if is_plate_pattern:
+            search_term = kapino.strip()
+        else:
+            # For door codes (e.g. "M-2001", "C1753"), extract numeric digits
+            num_match = re.search(r"\d+", clean_target)
+            if num_match and len(num_match.group(0)) >= 2:
+                search_term = num_match.group(0)
+            else:
+                search_term = kapino.strip()
+
+        # Primary single query
+        val, had_results = await _query_and_match(search_term)
         if val:
             return val
 
-        # 2) Try hyphenated match for formats like C1753 -> C-1753
-        m = re.match(r"^([A-Za-z])(\d+)$", kapino)
-        if m:
-            hyphenated = f"{m.group(1).upper()}-{m.group(2)}"
-            val = await _do_search(hyphenated, hyphenated)
-            if val:
-                return val
-
-            # 3) Try searching with just the letter (the user's exact suggestion: "search: 'C-'")
-            prefix = f"{m.group(1).upper()}-"
-            val = await _do_search(prefix, hyphenated)
-            if val:
-                return val
+        # Fallback query only if search_term was transformed, returned results from IETT, but none matched clean_target
+        if had_results and search_term != kapino.strip():
+            fallback_val, _ = await _query_and_match(kapino.strip())
+            if fallback_val:
+                return fallback_val
 
         raise AracApiError(
             f"Vehicle hash not found for {kapino}",

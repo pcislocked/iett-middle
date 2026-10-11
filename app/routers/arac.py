@@ -199,14 +199,15 @@ async def create_arac_session(
 
 @router.get("/suggest")
 async def suggest_arac_bus(q: str) -> list[dict[str, str]]:
-    """Suggest vehicles by Kapı No or Plaka via ARAC API."""
+    """Suggest vehicles by Kapı No or Plaka via ARAC API with persistent cache fallback."""
     if len(q) < 2:
         return []
+
+    from app.services import vehicle_cache
 
     connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
     async with aiohttp.ClientSession(connector=connector) as temp_session:
         client = AracClient(temp_session)
-        # We need to access _post_json, so we'll just implement it here or via the client
         try:
             payload = await client._post_json(
                 "/Home/GetAllVehicleSelectList",
@@ -218,17 +219,28 @@ async def suggest_arac_bus(q: str) -> list[dict[str, str]]:
             )
             if isinstance(payload, dict) and payload.get("isSuccess"):
                 items = payload.get("data", [])
-                return [
-                    {
-                        "doorNumber": str(item.get("doorNumber", "")),
-                        "plate": str(item.get("plate", "")),
-                    }
-                    for item in items
-                    if isinstance(item, dict)
-                ]
+                if isinstance(items, list):
+                    vehicle_cache.upsert_vehicles_batch(items)
+                    return [
+                        {
+                            "doorNumber": str(item.get("doorNumber", "")),
+                            "plate": str(item.get("plate", "")),
+                        }
+                        for item in items
+                        if isinstance(item, dict)
+                    ]
         except AracApiError:
             pass
-    return []
+
+    # Fallback to local persistent cache if upstream fails or returns empty
+    cached_hits = vehicle_cache.search_vehicles(q, limit=20)
+    return [
+        {
+            "doorNumber": str(c.get("door_number", "")),
+            "plate": str(c.get("plate", "")),
+        }
+        for c in cached_hits
+    ]
 
 
 @router.get("/fleet/{kapino}/auto-detail")
@@ -242,7 +254,7 @@ async def get_arac_bus_auto_detail(
         try:
             # 1. Get Captcha
             captcha_data = await client.get_captcha()
-            captcha_image = captcha_data.get("image")
+            captcha_image = captcha_data.get("captchaImage") or captcha_data.get("image")
             if not captcha_image:
                 raise HTTPException(502, detail="No captcha image returned")
 

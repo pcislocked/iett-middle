@@ -119,6 +119,23 @@ class TestFleetStore:
         plate = deps.get_plate_by_kapino("K-999")
         assert plate == "34 HO 1000"
 
+    def test_get_plate_by_kapino_dash_agnostic(self) -> None:
+        deps.update_fleet([_bus("K-999", 41.0, 29.0)])
+        assert deps.get_plate_by_kapino("K999") == "34 HO 1000"
+        assert deps.get_plate_by_kapino("k-999") == "34 HO 1000"
+
+    def test_get_plate_by_kapino_persistent_cache_fallback(self) -> None:
+        from app.services import vehicle_cache
+
+        vehicle_cache.upsert_vehicle(
+            door_number="M-3000",
+            plate="34 TP 3000",
+        )
+        # Not in active _fleet
+        assert "M-3000" not in deps._fleet
+        assert deps.get_plate_by_kapino("M-3000") == "34 TP 3000"
+        assert deps.get_plate_by_kapino("M3000") == "34 TP 3000"
+
     def test_get_plate_by_kapino_unknown_returns_none(self) -> None:
         plate = deps.get_plate_by_kapino("NOTEXIST")
         assert plate is None
@@ -135,6 +152,41 @@ class TestFleetStore:
 
     def test_get_last_route_unknown_kapino_returns_none(self) -> None:
         assert deps.get_last_route_by_kapino("NOBODY") is None
+
+    def test_find_bus_in_fleet_case_and_dash_agnostic(self) -> None:
+        deps.update_fleet([_bus("M-2001", 41.0, 29.0)])
+        # Exact match
+        bus, kapino = deps.find_bus_in_fleet("M-2001")
+        assert bus is not None and kapino == "M-2001"
+
+        # Without dash
+        bus, kapino = deps.find_bus_in_fleet("M2001")
+        assert bus is not None and kapino == "M-2001"
+
+        # Lowercase and spaces
+        bus, kapino = deps.find_bus_in_fleet("m 2001")
+        assert bus is not None and kapino == "M-2001"
+
+    def test_find_bus_in_fleet_by_plate(self) -> None:
+        b = _bus("M-2001", 41.0, 29.0)
+        b.plate = "34 TP 2001"
+        deps.update_fleet([b])
+
+        # Plate with spaces
+        bus, kapino = deps.find_bus_in_fleet("34 TP 2001")
+        assert bus is not None and kapino == "M-2001"
+
+        # Plate without spaces
+        bus, kapino = deps.find_bus_in_fleet("34TP2001")
+        assert bus is not None and kapino == "M-2001"
+
+    def test_find_bus_in_fleet_invalid_empty(self) -> None:
+        deps.update_fleet([_bus("M-2001", 41.0, 29.0)])
+        bus, kapino = deps.find_bus_in_fleet("---")
+        assert bus is None and kapino is None
+
+        bus, kapino = deps.find_bus_in_fleet("   ")
+        assert bus is None and kapino is None
 
 
 # ---------------------------------------------------------------------------

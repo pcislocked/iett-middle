@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import re
 import time
 from collections import deque
 from datetime import UTC, datetime
@@ -68,6 +69,9 @@ async def close_session() -> None:
 # ---------------------------------------------------------------------------
 # kapino → latest BusPosition (as dict for JSON-serialisability)
 _fleet: dict[str, dict[str, Any]] = {}
+# Normalized clean kapino / plate -> latest BusPosition (O(1) dash/space agnostic lookup)
+_clean_fleet: dict[str, dict[str, Any]] = {}
+_plate_fleet: dict[str, dict[str, Any]] = {}
 # kapino → deque of TrailPoint dicts  {lat, lon, ts}
 _trail: dict[str, deque[dict[str, Any]]] = {}
 _fleet_updated_at: datetime | None = None
@@ -83,6 +87,57 @@ def get_fleet_snapshot() -> list[dict[str, Any]]:
     return list(_fleet.values())
 
 
+def find_bus_in_fleet(
+    query: str,
+    snapshot: list[dict[str, Any]] | None = None,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Find bus in active fleet by door number or plate in O(1) time.
+
+    Returns (bus_dict, canonical_kapino) or (None, None).
+    """
+    clean_q = re.sub(r"[^A-Z0-9]", "", query.upper())
+    if not clean_q:
+        return None, None
+
+    if snapshot is None:
+        snapshot = get_fleet_snapshot()
+    # Fast path: check _clean_fleet when in normal production runtime (unmocked)
+    if (
+        len(_clean_fleet) > 0
+        and len(_clean_fleet) == len(snapshot)
+        and snapshot == list(_fleet.values())
+    ):
+        bus = _clean_fleet.get(clean_q) or _plate_fleet.get(clean_q)
+        if bus:
+            return bus, bus.get("kapino")
+
+    # Direct search in current snapshot (supports mocked get_fleet_snapshot in tests)
+    for b in snapshot:
+        k = str(b.get("kapino") or "")
+        pl = str(b.get("plate") or "")
+        if re.sub(r"[^A-Z0-9]", "", k.upper()) == clean_q or (
+            pl and re.sub(r"[^A-Z0-9]", "", pl.upper()) == clean_q
+        ):
+            return b, b.get("kapino")
+
+    # Check persistent cache if query is an alternate plate or door number
+    try:
+        from app.services import vehicle_cache
+
+        veh = vehicle_cache.get_vehicle(clean_q)
+        if veh:
+            canonical_clean = veh.get("clean_kapino")
+            if canonical_clean:
+                for b in snapshot:
+                    k = str(b.get("kapino") or "")
+                    if re.sub(r"[^A-Z0-9]", "", k.upper()) == canonical_clean:
+                        return b, b.get("kapino")
+    except Exception:
+        pass
+
+    return None, None
+
+
 def get_trail(kapino: str) -> list[dict[str, Any]]:
     return list(_trail.get(kapino, deque()))
 
@@ -95,7 +150,7 @@ def get_buses_by_route(hat_kodu: str) -> list[dict[str, Any]]:
     """Return all fleet buses whose route_code matches hat_kodu (case-insensitive, prefix-tolerant)."""
     upper = hat_kodu.upper()
     result = []
-    for b in _fleet.values():
+    for b in get_fleet_snapshot():
         rc = (b.get("route_code") or "").upper().strip()
         if not rc:
             continue
@@ -107,7 +162,7 @@ def get_buses_by_route(hat_kodu: str) -> list[dict[str, Any]]:
 
 def get_buses_near_stop(dcode: str) -> list[dict[str, Any]]:
     """Return all fleet buses currently with nearest_stop == dcode."""
-    return [b for b in _fleet.values() if b.get("nearest_stop") == dcode]
+    return [b for b in get_fleet_snapshot() if b.get("nearest_stop") == dcode]
 
 
 async def ensure_fleet_fresh(max_age_seconds: int = 30) -> None:
@@ -154,8 +209,26 @@ async def cancel_fleet_refresh_task() -> None:
 
 
 def get_plate_by_kapino(kapino: str) -> str | None:
-    """Look up the plate for a given kapino from the in-memory fleet store."""
-    return _fleet.get(kapino, {}).get("plate")
+    """Look up the plate for a given kapino from in-memory fleet store or persistent cache."""
+    if not kapino:
+        return None
+    p = _fleet.get(kapino, {}).get("plate")
+    if p:
+        return p
+
+    clean_k = re.sub(r"[^A-Z0-9]", "", kapino.upper())
+    if clean_k:
+        bus = _clean_fleet.get(clean_k)
+        if bus and bus.get("plate"):
+            return bus["plate"]
+
+        from app.services import vehicle_cache  # noqa: PLC0415
+
+        veh = vehicle_cache.get_vehicle(clean_k)
+        if veh and veh.get("plate"):
+            return veh["plate"]
+
+    return None
 
 
 def get_last_route_by_kapino(kapino: str) -> str | None:
@@ -217,6 +290,30 @@ def update_fleet(buses: list[BusPosition], is_full_snapshot: bool = True) -> Non
         _fleet_updated_at = datetime.now(UTC)
         _fleet_updated_at_mono = now
 
+    # Rebuild O(1) clean lookup dictionaries
+    new_clean_fleet: dict[str, dict[str, Any]] = {}
+    new_plate_fleet: dict[str, dict[str, Any]] = {}
+    for k, b_dict in _fleet.items():
+        clean_k = re.sub(r"[^A-Z0-9]", "", k.upper())
+        if clean_k:
+            new_clean_fleet[clean_k] = b_dict
+        pl = b_dict.get("plate")
+        if pl:
+            clean_pl = re.sub(r"[^A-Z0-9]", "", str(pl).upper())
+            if clean_pl:
+                new_plate_fleet[clean_pl] = b_dict
+
+    global _clean_fleet, _plate_fleet  # noqa: PLW0603
+    _clean_fleet = new_clean_fleet
+    _plate_fleet = new_plate_fleet
+
+    # Populate persistent vehicle cache with kapino <-> plate pairs
+    from app.services import vehicle_cache  # noqa: PLC0415
+
+    vehicle_cache.upsert_vehicles_batch(
+        [{"door_number": b.kapino, "plate": b.plate} for b in buses if b.plate]
+    )
+
 
 # ---------------------------------------------------------------------------
 # Stop spatial index
@@ -247,6 +344,11 @@ def get_stop_coords(stop_code: str) -> tuple[float, float] | None:
     if s is None:
         return None
     return s["latitude"], s["longitude"]
+
+
+def get_stop_info_by_code(stop_code: str) -> dict[str, Any] | None:
+    """Return full stop dict for a stop code from in-memory catalogue, or None."""
+    return _stop_by_code.get(stop_code)
 
 
 def get_nearby_stops(lat: float, lon: float, radius_m: float = 500.0) -> list[dict[str, Any]]:

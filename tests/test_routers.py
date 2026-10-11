@@ -357,6 +357,38 @@ class TestStopsSearch:
         resp = client.get("/v1/stops/search?q=a")
         assert resp.status_code == 422
 
+    def test_returns_enriched_stop_info_when_index_ready(self, client: TestClient) -> None:
+        mock_client = MagicMock()
+        mock_client.search_stops = AsyncMock(return_value=[_stop_search()])
+        cached_info = {"direction": "KADIKOY", "district": "Uskudar"}
+        with (
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.stops.cache_set", AsyncMock(), create=True),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
+            patch("app.routers.stops.IettClient", return_value=mock_client),
+            patch("app.routers.stops.get_stop_info_by_code", return_value=cached_info),
+            patch("app.deps.get_stop_index_updated_at", return_value=datetime.now(timezone.utc)),
+        ):
+            resp = client.get("/v1/stops/search?q=ahmet")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["direction"] == "KADIKOY"
+        assert data[0]["district"] == "Uskudar"
+
+    def test_search_skips_cache_when_index_not_ready(self, client: TestClient) -> None:
+        mock_client = MagicMock()
+        mock_client.search_stops = AsyncMock(return_value=[_stop_search()])
+        with (
+            patch("app.routers.stops.cache_get_or_fetch") as mock_cache_fetch,
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
+            patch("app.routers.stops.IettClient", return_value=mock_client),
+            patch("app.deps.get_stop_index_updated_at", return_value=None),
+        ):
+            resp = client.get("/v1/stops/search?q=ahmet")
+        assert resp.status_code == 200
+        mock_cache_fetch.assert_not_called()
+
 
 class TestStopsNearby:
     def test_503_when_index_not_ready(self, client: TestClient) -> None:

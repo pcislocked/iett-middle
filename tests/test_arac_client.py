@@ -34,6 +34,15 @@ async def session() -> AsyncIterator[aiohttp.ClientSession]:
     await s.close()
 
 
+@pytest.fixture(autouse=True)
+def clean_vehicle_cache() -> None:
+    from app.services import vehicle_cache
+
+    vehicle_cache.clear_cache()
+    yield
+    vehicle_cache.clear_cache()
+
+
 def _base_url(path: str) -> str:
     return f"https://arac.iett.gov.tr{path}"
 
@@ -107,6 +116,71 @@ class TestAracClientMethods:
             vhash = await client.get_vehicle_hash("C-1753")
             assert vhash == "hash_123"
 
+    async def test_get_vehicle_hash_dash_agnostic_match(
+        self, session: aiohttp.ClientSession
+    ) -> None:
+        client = AracClient(session)
+        with aioresponses() as m:
+            m.post(
+                _base_url("/Home/GetAllVehicleSelectList"),
+                payload={
+                    "isSuccess": True,
+                    "data": [
+                        {"doorNumber": "C-2001", "value": "hash_c2001"},
+                        {"doorNumber": "M-2001", "value": "hash_m2001"},
+                    ],
+                },
+            )
+            # Searching for M2001 (without hyphen) must reliably match M-2001, not C-2001
+            vhash = await client.get_vehicle_hash("M2001")
+            assert vhash == "hash_m2001"
+
+    async def test_get_vehicle_hash_plate_match(self, session: aiohttp.ClientSession) -> None:
+        client = AracClient(session)
+        with aioresponses() as m:
+            m.post(
+                _base_url("/Home/GetAllVehicleSelectList"),
+                payload={
+                    "isSuccess": True,
+                    "data": [
+                        {"doorNumber": "M-2001", "plate": "34 TP 2001", "value": "hash_plate"},
+                    ],
+                },
+            )
+            vhash = await client.get_vehicle_hash("34TP2001")
+            assert vhash == "hash_plate"
+
+            # Verify that querying a plate searches the plate itself, NEVER just "34"
+            calls = [
+                req
+                for (_, url), req_list in m.requests.items()
+                for req in req_list
+                if "GetAllVehicleSelectList" in str(url)
+            ]
+            assert len(calls) == 1
+            assert calls[0].kwargs["json"]["search"] == "34TP2001"
+            assert calls[0].kwargs["json"]["search"] != "34"
+
+    async def test_get_vehicle_hash_invalid_input(self, session: aiohttp.ClientSession) -> None:
+        client = AracClient(session)
+        with pytest.raises(AracApiError, match="Invalid kapino/plate") as exc:
+            await client.get_vehicle_hash("---")
+        assert exc.value.status_code == 400
+
+    async def test_get_vehicle_hash_persistent_cache_hit(
+        self, session: aiohttp.ClientSession
+    ) -> None:
+        from app.services import vehicle_cache
+
+        vehicle_cache.upsert_vehicle("K-9999", "34 KK 9999", hash_value="cached_hash_9999")
+
+        client = AracClient(session)
+        with aioresponses() as m:
+            # Resolves from persistent cache without making any HTTP request
+            vhash = await client.get_vehicle_hash("K-9999")
+            assert vhash == "cached_hash_9999"
+            assert len(m.requests) == 0
+
     async def test_get_vehicle_hash_not_found(self, session: aiohttp.ClientSession) -> None:
         client = AracClient(session)
         with aioresponses() as m:
@@ -117,6 +191,39 @@ class TestAracClientMethods:
             with pytest.raises(AracApiError, match="Vehicle hash not found") as exc:
                 await client.get_vehicle_hash("X-999")
             assert exc.value.status_code == 404
+
+    async def test_get_vehicle_hash_fallback_when_numeric_misses(
+        self, session: aiohttp.ClientSession
+    ) -> None:
+        client = AracClient(session)
+        with aioresponses() as m:
+            # First call with numeric digits '2001' returns buses, but none match M-2001
+            m.post(
+                _base_url("/Home/GetAllVehicleSelectList"),
+                payload={
+                    "isSuccess": True,
+                    "data": [{"doorNumber": "C-2001", "value": "hash_c2001"}],
+                },
+            )
+            # Second fallback call with full query 'M-2001' returns match
+            m.post(
+                _base_url("/Home/GetAllVehicleSelectList"),
+                payload={
+                    "isSuccess": True,
+                    "data": [{"doorNumber": "M-2001", "value": "hash_m2001"}],
+                },
+            )
+            vhash = await client.get_vehicle_hash("M-2001")
+            assert vhash == "hash_m2001"
+            calls = [
+                req
+                for (_, url), req_list in m.requests.items()
+                for req in req_list
+                if "GetAllVehicleSelectList" in str(url)
+            ]
+            assert len(calls) == 2
+            assert calls[0].kwargs["json"]["search"] == "2001"
+            assert calls[1].kwargs["json"]["search"] == "M-2001"
 
     async def test_get_vehicle_hash_rate_limited(self, session: aiohttp.ClientSession) -> None:
         client = AracClient(session)
