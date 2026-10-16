@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 cache_hit_time: contextvars.ContextVar[Union[dict, float, None]] = contextvars.ContextVar(
     "cache_hit_time", default=None
 )
-_DYNAMIC_PREFIXES = ("stops:arrivals", "routes:announcements", "traffic")
+_DYNAMIC_PREFIXES = ("stops:arrivals", "routes:announcements", "traffic", "arac:autodetail")
 
 
 def _set_cache_hit_time(val: float) -> None:

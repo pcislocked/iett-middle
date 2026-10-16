@@ -16,6 +16,7 @@ from app.models.bus import Arrival, BusPosition
 from app.models.garage import Garage
 from app.models.route import Announcement, ScheduledDeparture
 from app.models.stop import NearbyStop, RouteStop, StopDetail
+from app.services.normalizers.plate import normalize_plate
 
 _TEMPURI = "http://tempuri.org/"
 
@@ -71,7 +72,7 @@ def parse_all_fleet_xml(xml_text: str) -> list[BusPosition]:
             result.append(
                 BusPosition(
                     kapino=_normalize_kapino(r.get("KapiNo")),
-                    plate=r.get("Plaka"),
+                    plate=normalize_plate(r.get("Plaka")),
                     latitude=float(r.get("Enlem", 0)),
                     longitude=float(r.get("Boylam", 0)),
                     speed=speed,

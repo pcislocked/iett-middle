@@ -30,6 +30,8 @@ class TestEndpoints:
         body = resp.json()
         assert body["status"] == "ok"
         assert "cache" in body
+        assert "version" in body
+        assert body["version"] == app.version
 
     def test_root_returns_service_name(self) -> None:
         resp = _client().get("/")
