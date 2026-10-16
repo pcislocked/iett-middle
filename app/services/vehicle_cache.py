@@ -28,42 +28,46 @@ def _clean_str(val: str | None) -> str:
 
 def get_db_connection() -> sqlite3.Connection:
     global _conn
-    if _conn is None:
-        db_target = settings.vehicle_cache_path
-        try:
-            if db_target == ":memory:":
-                conn = sqlite3.connect(":memory:", check_same_thread=False)
-            else:
-                p = Path(db_target)
-                if not p.is_absolute():
-                    p = Path(__file__).resolve().parent.parent.parent / p
-                p.parent.mkdir(parents=True, exist_ok=True)
-                conn = sqlite3.connect(str(p), check_same_thread=False)
-        except Exception as exc:
-            logger.warning("Could not open %s, using :memory: fallback: %s", db_target, exc)
-            conn = sqlite3.connect(":memory:", check_same_thread=False)
+    if _conn is not None:
+        return _conn
 
-        conn.row_factory = sqlite3.Row
-        with conn:
-            conn.execute("PRAGMA journal_mode = WAL;")
-            conn.execute("PRAGMA synchronous = NORMAL;")
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS vehicle_cache (
-                    clean_kapino TEXT PRIMARY KEY,
-                    door_number TEXT NOT NULL,
-                    plate TEXT,
-                    clean_plate TEXT,
-                    hash_value TEXT,
-                    hash_updated_at REAL,
-                    updated_at REAL NOT NULL
-                );
-                """
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_vc_clean_plate ON vehicle_cache(clean_plate);"
-            )
-        _conn = conn
+    with _lock:
+        if _conn is None:
+            db_target = settings.vehicle_cache_path
+            try:
+                if db_target == ":memory:":
+                    conn = sqlite3.connect(":memory:", check_same_thread=False)
+                else:
+                    p = Path(db_target)
+                    if not p.is_absolute():
+                        p = Path(__file__).resolve().parent.parent.parent / p
+                    p.parent.mkdir(parents=True, exist_ok=True)
+                    conn = sqlite3.connect(str(p), check_same_thread=False)
+            except Exception as exc:
+                logger.warning("Could not open %s, using :memory: fallback: %s", db_target, exc)
+                conn = sqlite3.connect(":memory:", check_same_thread=False)
+
+            conn.row_factory = sqlite3.Row
+            with conn:
+                conn.execute("PRAGMA journal_mode = WAL;")
+                conn.execute("PRAGMA synchronous = NORMAL;")
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS vehicle_cache (
+                        clean_kapino TEXT PRIMARY KEY,
+                        door_number TEXT NOT NULL,
+                        plate TEXT,
+                        clean_plate TEXT,
+                        hash_value TEXT,
+                        hash_updated_at REAL,
+                        updated_at REAL NOT NULL
+                    );
+                    """
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_vc_clean_plate ON vehicle_cache(clean_plate);"
+                )
+            _conn = conn
     return _conn
 
 

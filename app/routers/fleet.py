@@ -15,9 +15,10 @@ import threading
 import time
 from typing import Any, Literal, TypedDict, cast
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Path
 
 from app.deps import (
+    _clean_fleet,
     ensure_fleet_fresh,
     find_bus_in_fleet,
     get_fleet_snapshot,
@@ -118,7 +119,9 @@ async def refresh_fleet() -> FleetRefreshResponse:
 
 
 @router.get("/{kapino}/detail", response_model=BusDetail)
-async def get_bus_detail(kapino: str) -> dict[str, Any]:
+async def get_bus_detail(
+    kapino: str = Path(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9_ -]+$"),
+) -> dict[str, Any]:
     """Get rich details for a single bus, including its route stops.
 
     Resolves the bus's current route code (falling back to its last known route
@@ -129,7 +132,7 @@ async def get_bus_detail(kapino: str) -> dict[str, Any]:
 
     await ensure_fleet_fresh()
     match, matched_kapino = find_bus_in_fleet(kapino)
-    if match is None:
+    if match is None and not _clean_fleet:
         snapshot = get_fleet_snapshot()
         match, matched_kapino = find_bus_in_fleet(kapino, snapshot=snapshot)
     if match is None or not matched_kapino:
@@ -161,7 +164,9 @@ async def get_bus_detail(kapino: str) -> dict[str, Any]:
 
 
 @router.get("/{kapino}", response_model=BusPositionWithTrail)
-async def get_bus(kapino: str) -> dict[str, Any]:
+async def get_bus(
+    kapino: str = Path(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9_ -]+$"),
+) -> dict[str, Any]:
     """Get the live position and trail of a single bus.
 
     Looks up a bus by its door number (e.g., 'C-325') from the in-memory fleet store
@@ -170,7 +175,7 @@ async def get_bus(kapino: str) -> dict[str, Any]:
 
     await ensure_fleet_fresh()
     match, matched_kapino = find_bus_in_fleet(kapino)
-    if match is None:
+    if match is None and not _clean_fleet:
         snapshot = get_fleet_snapshot()
         match, matched_kapino = find_bus_in_fleet(kapino, snapshot=snapshot)
     if match is None or not matched_kapino:

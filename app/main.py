@@ -150,7 +150,10 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
 
     await cancel_fleet_refresh_task()
     await close_session()
-    logger.info("HTTP session closed")
+    from app.services import vehicle_cache  # noqa: PLC0415
+
+    vehicle_cache.close_connection()
+    logger.info("HTTP session and database connections closed")
 
 
 # ---------------------------------------------------------------------------
@@ -225,10 +228,13 @@ async def health(request: Request):
     tasks_status = {}
     is_healthy = True
     for name, task in bg_tasks.items():
-        if task.done():
+        if task.cancelled():
+            tasks_status[name] = "cancelled"
+        elif task.done():
             exc = task.exception()
             if exc:
-                tasks_status[name] = f"errored: {exc}"
+                logger.error("Background task %s errored: %s", name, exc)
+                tasks_status[name] = "errored"
                 is_healthy = False
             else:
                 tasks_status[name] = "stopped"

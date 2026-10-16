@@ -63,8 +63,7 @@ async def _cache_get_internal(key: str) -> tuple[Any, bool] | None:
                 if key.startswith(_DYNAMIC_PREFIXES):
                     _set_cache_hit_time(created_at)
                 return (value, False)
-            # Expired
-            _store.pop(key, None)
+            # Expired: don't pop immediately so cache_get_or_fetch can fallback if upstream fails
         if len(_misses) < MAX_STATS_SIZE or ns in _misses:
             _misses[ns] = _misses.get(ns, 0) + 1
         return None
@@ -157,6 +156,7 @@ async def cache_get_or_fetch(
                 # Already fetching in background
                 return value
             fut = asyncio.get_running_loop().create_future()
+            fut.add_done_callback(lambda f: f.exception() if not f.cancelled() else None)
             _inflight[key] = fut
 
         async def background_fetch() -> None:
@@ -191,6 +191,7 @@ async def cache_get_or_fetch(
             is_leader = False
         else:
             fut = asyncio.get_running_loop().create_future()
+            fut.add_done_callback(lambda f: f.exception() if not f.cancelled() else None)
             _inflight[key] = fut
             is_leader = True
 
@@ -231,6 +232,8 @@ async def cache_get_or_fetch(
             return value
         if not fut.done():
             fut.set_exception(e)
+        async with _lock:
+            _store.pop(key, None)
         raise
     finally:
         async with _lock:

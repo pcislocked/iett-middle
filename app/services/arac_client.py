@@ -10,6 +10,8 @@ import base64
 import json
 import logging
 import re
+import threading
+import uuid
 from typing import Any
 
 import aiohttp
@@ -111,15 +113,18 @@ class AracApiError(Exception):
 # ── OCR singleton ───────────────────────────────────────────────────────────
 
 _ocr_instance = None
+_ocr_lock = threading.Lock()
 
 
 def _get_ocr():
     """Lazy-load ddddocr. Model is loaded once and reused."""
     global _ocr_instance
     if _ocr_instance is None:
-        import ddddocr
+        with _ocr_lock:
+            if _ocr_instance is None:
+                import ddddocr
 
-        _ocr_instance = ddddocr.DdddOcr(show_ad=False)
+                _ocr_instance = ddddocr.DdddOcr(show_ad=False)
     return _ocr_instance
 
 
@@ -301,7 +306,7 @@ class AracClient:
                 captcha_session_key = cookie.value
                 break
 
-        captcha_id = captcha_session_key or "auto"
+        captcha_id = captcha_session_key or uuid.uuid4().hex
 
         return {
             "captchaId": captcha_id,

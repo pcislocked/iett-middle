@@ -62,7 +62,7 @@ class TestCacheGetSet:
         result = asyncio.run(cache_get(key))
         assert result is None
 
-    def test_expired_key_removed_from_store(self) -> None:
+    def test_expired_key_returns_none_but_preserved_for_fallback(self) -> None:
         asyncio.run(cache_set("ns:rm", "bye", ttl=60))
         key = "ns:rm"
         value, _, _, _ = cache_mod._store[key]
@@ -72,8 +72,8 @@ class TestCacheGetSet:
             time.monotonic() - 1,
             time.time(),
         )
-        asyncio.run(cache_get(key))
-        assert key not in cache_mod._store
+        assert asyncio.run(cache_get(key)) is None
+        assert key in cache_mod._store
 
     def test_overwrite_updates_value(self) -> None:
         asyncio.run(cache_set("ns:k", "first", ttl=60))
@@ -361,6 +361,19 @@ class TestCacheGetOrFetch:
         result = await cache_mod.cache_get_or_fetch("ns:swr_err", 60, err_fetcher, stale_ttl=60)
         assert result == "old"
         await asyncio.sleep(0.05)
+
+    @pytest.mark.asyncio
+    async def test_cache_get_or_fetch_expired_fallback_on_error(self) -> None:
+        key = "ns:fallback"
+        await cache_set(key, "old_data", ttl=1, stale_ttl=1)
+        val, _, _, ts = cache_mod._store[key]
+        cache_mod._store[key] = (val, time.monotonic() - 10, time.monotonic() - 5, ts)
+
+        async def failing_fetcher():
+            raise RuntimeError("Upstream 500 error")
+
+        result = await cache_mod.cache_get_or_fetch(key, 60, failing_fetcher)
+        assert result == "old_data"
 
     @pytest.mark.asyncio
     async def test_swr_background_fetch_cancel(self) -> None:
