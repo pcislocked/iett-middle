@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, cast
 
 import aiohttp
 from cachetools import TTLCache
@@ -322,7 +322,7 @@ async def get_arac_bus_auto_detail(
                 )
                 raise HTTPException(status, detail=detail_msg) from exc
 
-    return await cache_get_or_fetch(key, 30, _fetch, stale_ttl=60)
+    return cast(dict[str, Any], await cache_get_or_fetch(key, 30, _fetch, stale_ttl=60))
 
 
 @router.get("/fleet/{kapino}/detail")
