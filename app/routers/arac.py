@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 from typing import Any, cast
 
 import aiohttp
@@ -20,7 +21,7 @@ from app.models.arac import (
 )
 from app.models.bus import BusPosition
 from app.services.arac_client import AracApiError, AracClient, solve_captcha_image
-from app.services.cache import cache_get_or_fetch
+from app.services.cache import cache_get, cache_get_or_fetch
 
 logger = logging.getLogger(__name__)
 
@@ -301,6 +302,7 @@ async def get_arac_bus_auto_detail(
                     active_route = str(data_task[0].get("lineCode", "")) or None
                 profile.route_code = active_route
 
+                now_iso = datetime.now(timezone.utc).isoformat()
                 return {
                     "profile": profile.model_dump(),
                     "missions": AracMissionsResponse(
@@ -313,6 +315,8 @@ async def get_arac_bus_auto_detail(
                         ),
                         missions=missions,
                     ).model_dump(),
+                    "server_time": now_iso,
+                    "cached": False,
                 }
             except AracApiError as exc:
                 logger.warning("get_arac_bus_auto_detail failed: %s", exc)
@@ -322,7 +326,13 @@ async def get_arac_bus_auto_detail(
                 )
                 raise HTTPException(status, detail=detail_msg) from exc
 
-    return cast(dict[str, Any], await cache_get_or_fetch(key, 30, _fetch, stale_ttl=60))
+    cached_hit = await cache_get(key)
+    res = cast(dict[str, Any], await cache_get_or_fetch(key, 30, _fetch, stale_ttl=60))
+    result = dict(res)
+    result["cached"] = cached_hit is not None
+    if "server_time" not in result:
+        result["server_time"] = datetime.now(timezone.utc).isoformat()
+    return result
 
 
 @router.get("/fleet/{kapino}/detail")
@@ -383,6 +393,7 @@ async def get_arac_bus_detail(
 
     profile.route_code = active_route
 
+    now_iso = datetime.now(timezone.utc).isoformat()
     return {
         "profile": profile.model_dump(),
         "missions": AracMissionsResponse(
@@ -395,6 +406,8 @@ async def get_arac_bus_detail(
             ),
             missions=missions,
         ).model_dump(),
+        "server_time": now_iso,
+        "cached": False,
     }
 
 

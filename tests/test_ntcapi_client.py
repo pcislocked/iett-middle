@@ -213,7 +213,7 @@ class TestGetBusLocation:
             result = await get_bus_location("A-001", session)
         assert result is not None
         assert result["kapino"] == "A-001"
-        assert result["plate"] == "34HO1000"
+        assert result["plate"] == "34 HO 1000"
 
     async def test_empty_response_returns_none(self, session: aiohttp.ClientSession) -> None:
         with aioresponses() as m:

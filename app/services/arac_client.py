@@ -19,6 +19,7 @@ from yarl import URL
 
 from app.models.arac import AracMissionItem
 from app.models.bus import BusPosition
+from app.services.normalizers.plate import normalize_plate
 from app.utils.coerce import _as_text, _to_bool, _to_float
 
 logger = logging.getLogger(__name__)
@@ -252,10 +253,10 @@ class AracClient:
             return None, len(items) > 0
 
         # Determine query term:
-        # License plates (e.g. "34 TP 2001", "34TP2001") must query with the plate, never just "34"
+        # License plates (e.g. "34 TP 2001", "34TP2001", "41 BR 123") must query with the plate, never just province digits
         is_plate_pattern = bool(
-            re.match(r"^\d{2}[A-Z]{1,3}\d{2,4}$", clean_target)
-            or (clean_target.startswith("34") and any(c.isalpha() for c in clean_target))
+            re.match(r"^\d{2}[A-Z]{1,3}\d{2,5}$", clean_target)
+            or (re.match(r"^\d{2}[A-Z]", clean_target) and any(c.isalpha() for c in clean_target))
         )
 
         if is_plate_pattern:
@@ -362,7 +363,7 @@ class AracClient:
 
         return BusPosition(
             kapino=kapino,
-            plate=_as_text(data_vehicle.get("numberPlate")),
+            plate=normalize_plate(_as_text(data_vehicle.get("numberPlate"))),
             latitude=lat,
             longitude=lon,
             speed=None,

@@ -246,6 +246,7 @@ async def health(request: Request):
 
     return {
         "status": status_str,
+        "version": app.version,
         "uptime_seconds": uptime_seconds,
         "fleet": {
             "bus_count": len(get_fleet_snapshot()),

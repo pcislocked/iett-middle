@@ -6,6 +6,7 @@ Fixture data is derived from real API captures; no network calls are made.
 from __future__ import annotations
 
 from app.services.normalizers import arrivals, positions, route_stops, schedule, stops
+from app.services.normalizers.plate import normalize_plate
 
 # ===========================================================================
 # arrivals
@@ -450,3 +451,44 @@ class TestStopsFromNtcapiNearbyProcessed:
     def test_source_tag(self) -> None:
         result = stops.from_ntcapi_nearby_processed(self.ITEM)
         assert result["_source"] == "ntcapi_nearby"
+
+
+# ===========================================================================
+# plate normalizer
+# ===========================================================================
+
+
+class TestNormalizePlate:
+    """normalize_plate maps varied raw license plate strings to canonical format."""
+
+    def test_standard_spaces(self) -> None:
+        assert normalize_plate("34  HO  3448") == "34 HO 3448"
+
+    def test_compact(self) -> None:
+        assert normalize_plate("34TN2229") == "34 TN 2229"
+
+    def test_hyphenated_and_lowercase(self) -> None:
+        assert normalize_plate("34-tn-2229") == "34 TN 2229"
+
+    def test_other_provinces(self) -> None:
+        assert normalize_plate("41BR123") == "41 BR 123"
+        assert normalize_plate("06BJK123") == "06 BJK 123"
+
+    def test_single_letter_and_five_digits(self) -> None:
+        assert normalize_plate("34a12345") == "34 A 12345"
+
+    def test_three_letters_and_two_digits(self) -> None:
+        assert normalize_plate("34AAA12") == "34 AAA 12"
+
+    def test_turkish_i_normalization(self) -> None:
+        assert normalize_plate("34-ti-123") == "34 TI 123"
+        assert normalize_plate("34-tı-123") == "34 TI 123"
+        assert normalize_plate("34Tİ123") == "34 TI 123"
+
+    def test_fallback_custom(self) -> None:
+        assert normalize_plate("TEST 123") == "TEST 123"
+
+    def test_empty_and_none(self) -> None:
+        assert normalize_plate(None) is None
+        assert normalize_plate("") is None
+        assert normalize_plate("   ") is None
