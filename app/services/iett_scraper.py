@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import re
 from collections import defaultdict
+from typing import Any
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -166,3 +167,97 @@ def match_footnote(
         return all_matches[0]
 
     return None
+
+
+IETT_BASE_URL = "https://iett.istanbul"
+IETT_ANNOUNCEMENT_URL = "https://iett.istanbul/tr/Announcement"
+
+
+async def fetch_official_announcements(
+    page: int = 0,
+    session: aiohttp.ClientSession | None = None,
+) -> dict[str, Any]:
+    """Fetch official announcements from iett.istanbul via AJAX form endpoint.
+
+    POST https://iett.istanbul/tr/Announcement with Page={page}&lngid=1.
+    """
+    payload = {"Page": str(page), "lngid": "1"}
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/131.0.0.0 Safari/537.36"
+        ),
+        "X-Requested-With": "XMLHttpRequest",
+    }
+
+    close_session_at_end = False
+    if session is None:
+        connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
+        session = aiohttp.ClientSession(connector=connector)
+        close_session_at_end = True
+
+    try:
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with session.post(
+            IETT_ANNOUNCEMENT_URL,
+            data=payload,
+            headers=headers,
+            timeout=timeout,
+        ) as resp:
+            if resp.status != 200:
+                logger.warning("iett.istanbul announcements returned HTTP %s", resp.status)
+                return {"page": page, "total_items": 0, "items": []}
+            html = await resp.text()
+
+        soup = BeautifulSoup(html, "html.parser")
+
+        # Check total items input if present
+        total_items = 0
+        total_el = soup.select_one("input#totalItems")
+        if total_el and total_el.get("value"):
+            try:
+                total_items = int(total_el["value"])
+            except ValueError:
+                total_items = 0
+
+        items: list[dict[str, str]] = []
+        for a in soup.select("a.mini-news-row"):
+            href = str(a.get("href", "")).strip()
+            date_el = a.select_one(".date")
+            info_el = a.select_one(".info")
+
+            title = info_el.get_text(strip=True) if info_el else ""
+            date_str = date_el.get_text(strip=True) if date_el else ""
+            item_id = href.rstrip("/").split("/")[-1] if "/" in href else href
+
+            url = (
+                f"{IETT_BASE_URL}{href}"
+                if href.startswith("/")
+                else (href if href.startswith("http") else f"{IETT_BASE_URL}/{href}")
+            )
+
+            if title or date_str:
+                items.append(
+                    {
+                        "id": item_id,
+                        "title": title,
+                        "date": date_str,
+                        "url": url,
+                    }
+                )
+
+        if total_items == 0 and items:
+            total_items = len(items)
+
+        return {
+            "page": page,
+            "total_items": total_items,
+            "items": items,
+        }
+    except Exception as exc:
+        logger.warning("Failed to fetch/parse official announcements: %s", exc)
+        return {"page": page, "total_items": 0, "items": []}
+    finally:
+        if close_session_at_end:
+            await session.close()

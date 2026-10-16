@@ -17,6 +17,7 @@ import re
 from typing import Any
 
 from app.models.canonical import CanonicalBusPosition
+from app.services.normalizers.plate import normalize_plate
 
 
 def from_iett_soap_fleet(item: dict[str, Any]) -> CanonicalBusPosition:
@@ -38,7 +39,7 @@ def from_iett_soap_fleet(item: dict[str, Any]) -> CanonicalBusPosition:
     )
     return CanonicalBusPosition(
         kapino=_normalize_kapino(item.get("KapiNo")),
-        plate=item.get("Plaka") or None,
+        plate=normalize_plate(item.get("Plaka")),
         lat=_safe_float(item.get("Enlem")),
         lon=_safe_float(item.get("Boylam")),
         speed_kmh=_safe_int(speed_raw),

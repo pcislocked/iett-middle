@@ -21,6 +21,7 @@ from fastapi import Request
 from slowapi import Limiter
 
 from app.models.stop import NearbyStop
+from app.services.normalizers.plate import normalize_plate
 
 
 def get_real_ip(request: Request) -> str:
@@ -340,7 +341,8 @@ def update_fleet(buses: list[BusPosition], is_full_snapshot: bool = True) -> Non
         clean_p = re.sub(r"[^A-Z0-9]", "", b.plate.upper())
         if clean_k and clean_p and _known_plate_mappings.get(clean_k) != clean_p:
             _known_plate_mappings[clean_k] = clean_p
-            new_pairs.append({"door_number": b.kapino, "plate": b.plate})
+            norm_p = normalize_plate(b.plate) or b.plate
+            new_pairs.append({"door_number": b.kapino, "plate": norm_p})
 
     if new_pairs:
         from app.services import vehicle_cache  # noqa: PLC0415

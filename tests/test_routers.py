@@ -1492,7 +1492,10 @@ class TestAracFleet:
                 headers=self._HEADERS,
             )
         assert resp.status_code == 200
-        assert resp.json()["profile"]["kapino"] == "C-1753"
+        body = resp.json()
+        assert body["profile"]["kapino"] == "C-1753"
+        assert "server_time" in body
+        assert "cached" in body
 
     def test_single_vehicle_error_passthrough(self, client: TestClient) -> None:
         from app.services.arac_client import AracApiError
