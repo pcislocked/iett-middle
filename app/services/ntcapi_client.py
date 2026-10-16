@@ -62,18 +62,25 @@ async def _ensure_token(session: aiohttp.ClientSession) -> str:
             "grant_type": "client_credentials",
             "scope": settings.ntcapi_scope,
         }
-        async with session.post(
-            _TOKEN_URL,
-            json=payload,
-            headers={"User-Agent": "okhttp/5.0.0-alpha.11"},
-            timeout=aiohttp.ClientTimeout(total=10),
-        ) as resp:
-            if resp.status != 200:
-                text = await resp.text()
-                raise NtcApiError(f"Token fetch failed {resp.status}: {text[:200]}")
-            data = await resp.json()
+        try:
+            async with session.post(
+                _TOKEN_URL,
+                json=payload,
+                headers={"User-Agent": "okhttp/5.0.0-alpha.11"},
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                if resp.status != 200:
+                    text = await resp.text()
+                    raise NtcApiError(f"Token fetch failed {resp.status}: {text[:200]}")
+                data = await resp.json()
+        except NtcApiError:
+            raise
+        except Exception as exc:
+            raise NtcApiError(f"Token request failed: {exc}") from exc
 
-        _token = data["access_token"]
+        _token = data.get("access_token")
+        if not _token:
+            raise NtcApiError(f"Token response missing access_token: {data}")
         if "expires_in" in data:
             _token_expiry = time.monotonic() + data["expires_in"]
         elif "expire_date" in data:
@@ -96,19 +103,24 @@ async def _call_service(
     """POST /service with the given alias and data, returning parsed JSON."""
     token = await _ensure_token(session)
     body = {"alias": alias, "data": data}
-    async with session.post(
-        _SERVICE_URL,
-        json=body,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "User-Agent": "okhttp/5.0.0-alpha.11",
-        },
-        timeout=aiohttp.ClientTimeout(total=10),
-    ) as resp:
-        if resp.status != 200:
-            text = await resp.text()
-            raise NtcApiError(f"Service call '{alias}' failed {resp.status}: {text[:200]}")
-        return await resp.json()
+    try:
+        async with session.post(
+            _SERVICE_URL,
+            json=body,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "User-Agent": "okhttp/5.0.0-alpha.11",
+            },
+            timeout=aiohttp.ClientTimeout(total=10),
+        ) as resp:
+            if resp.status != 200:
+                text = await resp.text()
+                raise NtcApiError(f"Service call '{alias}' failed {resp.status}: {text[:200]}")
+            return await resp.json()
+    except NtcApiError:
+        raise
+    except Exception as exc:
+        raise NtcApiError(f"Service call '{alias}' request failed: {exc}") from exc
 
 
 # ── public helpers ─────────────────────────────────────────────────────────
@@ -137,6 +149,8 @@ async def get_stop_arrivals(
         "path": ["real-time-information", "stop-arrivals", dcode],
     }
     raw: list[dict] = await _call_service(session, "ybs", payload)
+    if not isinstance(raw, list):
+        return []
     valid: list[dict] = []
     for item in raw:
         if not isinstance(item, dict):
@@ -159,7 +173,7 @@ async def get_bus_location(
     """
     payload = {"AKYOLBILYENI.K_ARAC.KAPINUMARASI": kapino}
     raw: list[dict] = await _call_service(session, "mainGetBusLocation_basic", payload)
-    if not raw:
+    if not isinstance(raw, list) or not raw:
         return None
     item = raw[0]
     return {
@@ -193,6 +207,8 @@ async def get_route_stops(
         "HATYONETIM.HAT.HAT_KODU": hat_kodu,
     }
     raw: list[dict] = await _call_service(session, "mainGetRoute", payload)
+    if not isinstance(raw, list):
+        return []
 
     # Group all stops by their route variant code (e.g. "14M_G_D0", "14M_G_D1991", …).
     # ntcapi returns every service-pattern variant for this direction; we want only the
@@ -329,6 +345,8 @@ async def get_route_buses_ybs(
         "path": ["real-time-information", "point-passing", str(hat_id)],
     }
     raw: list[dict] = await _call_service(session, "ybs", payload)
+    if not isinstance(raw, list):
+        return []
     positions: list[BusPosition] = []
     for item in raw:
         if not isinstance(item, dict):
@@ -372,7 +390,8 @@ async def get_timetable(
     Returns raw list — callers parse K_ORER_* fields.
     """
     payload = {"HATYONETIM.GUZERGAH.HAT_KODU": hat_kodu}
-    return await _call_service(session, "akyolbilGetTimeTable", payload)
+    res = await _call_service(session, "akyolbilGetTimeTable", payload)
+    return res if isinstance(res, list) else []
 
 
 async def get_nearby_stops(
@@ -394,6 +413,8 @@ async def get_nearby_stops(
         }
     }
     raw: list[dict] = await _call_service(session, "mainGetBusStopNearby", payload)
+    if not isinstance(raw, list):
+        return []
     stops = []
     for item in raw:
         geoloc = item.get("DURAK_GEOLOC") or {}

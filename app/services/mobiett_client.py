@@ -7,6 +7,7 @@ from typing import Any
 import aiohttp
 
 from app.config import settings
+from app.services.iett_client import IettApiError
 from app.utils.lock import LazyLock
 
 logger = logging.getLogger(__name__)
@@ -15,7 +16,7 @@ MOBIETT_AUTH_URL = "https://ntcapi.iett.istanbul/oauth2/v2/auth"
 MOBIETT_SERVICE_URL = "https://ntcapi.iett.istanbul/service"
 
 
-class MobiettApiError(Exception):
+class MobiettApiError(IettApiError):
     """Raised when an API call fails."""
 
 
