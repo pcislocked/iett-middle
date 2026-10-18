@@ -231,11 +231,14 @@ async def fetch_official_announcements(
             date_str = date_el.get_text(strip=True) if date_el else ""
             item_id = href.rstrip("/").split("/")[-1] if "/" in href else href
 
-            url = (
-                f"{IETT_BASE_URL}{href}"
-                if href.startswith("/")
-                else (href if href.startswith("http") else f"{IETT_BASE_URL}/{href}")
-            )
+            if href.startswith("/"):
+                url = f"{IETT_BASE_URL}{href}"
+            elif href.startswith(("https://", "http://")):
+                url = href
+            elif href and not href.lower().startswith(("javascript:", "data:", "vbscript:")):
+                url = f"{IETT_BASE_URL}/{href}"
+            else:
+                url = IETT_BASE_URL
 
             if title or date_str:
                 items.append(
