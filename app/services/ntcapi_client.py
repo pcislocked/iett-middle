@@ -299,7 +299,8 @@ async def get_route_metadata(
         seen.add(code)
         yon = item.get("GUZERGAH_YON", 119)
         direction_letter = "D" if yon == 120 else "G"
-        direction_name = (item.get("GUZERGAH_GUZERGAH_ADI") or "").strip()
+        raw_direction = (item.get("GUZERGAH_GUZERGAH_ADI") or "").strip()
+        direction_name = re.sub(r"\s+", " ", re.sub(r"\s*-\s*", " - ", raw_direction)).strip()
         results.append(
             {
                 "direction_name": direction_name,

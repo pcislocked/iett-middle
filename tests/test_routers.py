@@ -1135,6 +1135,44 @@ class TestStopsExtra:
         assert body[0]["lon"] == pytest.approx(29.0109)
         assert body[0]["plate"] == "34 HO 1000"
 
+    def test_arrivals_enriches_incomplete_destination(self, client: TestClient) -> None:
+        raw = [
+            {
+                "hatkodu": "DT1",
+                "hattip": "VADİ -",
+                "dakika": 4,
+                "saat": "4 dk",
+                "kapino": "B-285",
+                "son_konum": "29.0109,41.0819",
+                "son_hiz": 20,
+                "son_konum_saati": "2026-10-18 19:00:00",
+            }
+        ]
+        mock_route = MagicMock()
+        mock_route.hat_kodu = "DT1"
+        mock_route.name = "VADİ -  TAKSİM"
+
+        mock_iett = MagicMock()
+        mock_iett.search_routes = AsyncMock(return_value=[mock_route])
+
+        with (
+            patch(
+                "app.routers.stops.ntcapi_client.get_stop_arrivals",
+                AsyncMock(return_value=raw),
+            ),
+            patch("app.routers.stops.IettClient", return_value=mock_iett),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.stops.cache_set", AsyncMock(), create=True),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
+            patch("app.routers.stops.get_plate_by_kapino", return_value="34 HO 2400"),
+        ):
+            resp = client.get("/v1/stops/114044/arrivals")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["destination"] == "VADİ - TAKSİM"
+
     def test_arrivals_returns_cached(self, client: TestClient) -> None:
         cached = [
             {

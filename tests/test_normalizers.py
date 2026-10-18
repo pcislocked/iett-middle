@@ -151,6 +151,48 @@ class TestArrivalsFromIettHtml:
         assert result["_source"] == "iett_html"
 
 
+class TestDestinationCleaning:
+    """clean_destination and is_destination_incomplete tests."""
+
+    def test_clean_destination_collapses_whitespace(self) -> None:
+        assert arrivals.clean_destination("VADİ -  TAKSİM") == "VADİ - TAKSİM"
+        assert (
+            arrivals.clean_destination("FATİH SULTAN MEHMET  -   ŞİŞLİ")
+            == "FATİH SULTAN MEHMET - ŞİŞLİ"
+        )
+
+    def test_clean_destination_standardizes_spacing_around_hyphens(self) -> None:
+        assert arrivals.clean_destination("VADİ -") == "VADİ -"
+        assert arrivals.clean_destination(" - TAKSİM") == "- TAKSİM"
+        assert arrivals.clean_destination(" - ") == ""
+        assert arrivals.clean_destination("-") == ""
+
+    def test_clean_destination_handles_single_and_empty(self) -> None:
+        assert arrivals.clean_destination("4.LEVENT METRO") == "4.LEVENT METRO"
+        assert arrivals.clean_destination("") == ""
+        assert arrivals.clean_destination(None) == ""
+        assert arrivals.clean_destination("   ") == ""
+
+    def test_is_destination_incomplete(self) -> None:
+        assert arrivals.is_destination_incomplete("") is True
+        assert arrivals.is_destination_incomplete(None) is True
+        assert arrivals.is_destination_incomplete("-") is True
+        assert arrivals.is_destination_incomplete(" - ") is True
+        assert arrivals.is_destination_incomplete("VADİ -") is True
+        assert arrivals.is_destination_incomplete("- TAKSİM") is True
+        assert arrivals.is_destination_incomplete("VADİ - TAKSİM") is False
+        assert arrivals.is_destination_incomplete("4.LEVENT METRO") is False
+
+    def test_from_ntcapi_ybs_cleans_destination(self) -> None:
+        item = {"hatkodu": "DT1", "hattip": "VADİ -  TAKSİM"}
+        result = arrivals.from_ntcapi_ybs(item)
+        assert result["destination"] == "VADİ - TAKSİM"
+
+        item_truncated = {"hatkodu": "DT1", "hattip": "VADİ -"}
+        result_truncated = arrivals.from_ntcapi_ybs(item_truncated)
+        assert result_truncated["destination"] == "VADİ -"
+
+
 # ===========================================================================
 # positions
 # ===========================================================================
