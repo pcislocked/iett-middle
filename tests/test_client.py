@@ -134,6 +134,15 @@ class TestGetRouteBuses:
             buses = await client.get_route_buses("500T")
         assert buses[0].nearest_stop == "113333"
 
+    async def test_raises_when_both_json_and_soap_fail(self, client: IettClient) -> None:
+        from app.services.mobiett_client import MOBIETT_SERVICE_URL
+
+        with pytest.raises(IettApiError):
+            with aioresponses() as m:
+                m.post(FLEET_URL, status=500)
+                m.post(MOBIETT_SERVICE_URL, status=500)
+                await client.get_route_buses("500T")
+
 
 class TestGetStopArrivals:
     async def test_returns_arrivals(self, client: IettClient) -> None:
@@ -383,6 +392,16 @@ class TestGetStopDetail:
         # coordinates remain 0.0 (the SOAP value) when index has no entry
         assert detail.latitude == 0.0
         assert detail.longitude == 0.0
+
+    async def test_raises_when_both_soap_and_json_fail(self, client: IettClient) -> None:
+        from app.services.mobiett_client import MOBIETT_AUTH_URL, MOBIETT_SERVICE_URL
+
+        with pytest.raises(IettApiError):
+            with aioresponses() as m:
+                m.post(HAT_DURAK_URL, exception=TimeoutError("SOAP down"))
+                m.post(MOBIETT_AUTH_URL, payload={"access_token": "token", "expires_in": 3600})
+                m.post(MOBIETT_SERVICE_URL, status=500)
+                await client.get_stop_detail("220602")
 
 
 class TestGetAllStops:
