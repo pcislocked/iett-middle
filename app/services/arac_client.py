@@ -6,6 +6,7 @@ Captcha images are solved automatically via ddddocr with manual fallback.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
@@ -206,7 +207,7 @@ class AracClient:
             raise AracApiError(f"Invalid kapino/plate: {kapino}", status_code=400)
 
         # Check if persistent cache knows canonical vehicle door number for plate/alias inputs
-        known_veh = vehicle_cache.get_vehicle(clean_target)
+        known_veh = await asyncio.to_thread(vehicle_cache.get_vehicle, clean_target)
         target_door = known_veh.get("clean_kapino") if known_veh else None
 
         async def _query_and_match(query_str: str) -> tuple[str | None, bool]:
@@ -232,7 +233,7 @@ class AracClient:
                 return None, False
 
             # Always populate / update persistent cache with returned vehicles
-            vehicle_cache.upsert_vehicles_batch(items)
+            await asyncio.to_thread(vehicle_cache.upsert_vehicles_batch, items)
 
             # 1. First priority: match on clean doorNumber (e.g. M-2001 or M2001)
             for item in items:

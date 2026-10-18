@@ -784,17 +784,14 @@ class TestGaragesList:
 
 class TestTrafficIndex:
     def test_200_returns_traffic_index(self, client: TestClient) -> None:
+        from app.services.cache import _store
+
+        _store.pop("traffic:index", None)
         mock_tc = MagicMock()
         mock_tc.get_traffic_index = AsyncMock(
             return_value=TrafficIndex(percent=45, description="Moderate")
         )
         with (
-            patch(
-                "app.routers.traffic.cache_get",
-                AsyncMock(return_value=None),
-                create=True,
-            ),
-            patch("app.routers.traffic.cache_set", AsyncMock(), create=True),
             patch("app.routers.traffic.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.traffic.TrafficClient", return_value=mock_tc),
         ):
@@ -806,23 +803,19 @@ class TestTrafficIndex:
 
     def test_200_returns_cached_index(self, client: TestClient) -> None:
         cached = {"percent": 30, "description": "Open"}
-        with patch("app.routers.traffic.cache_get", AsyncMock(return_value=cached)):
+        with patch("app.routers.traffic.cache_get_or_fetch", AsyncMock(return_value=cached)):
             resp = client.get("/v1/traffic/index")
         assert resp.status_code == 200
         assert resp.json()["percent"] == 30
 
     def test_502_when_traffic_api_fails(self, client: TestClient) -> None:
+        from app.services.cache import _store
         from app.services.iett_client import IettApiError
 
+        _store.pop("traffic:index", None)
         mock_tc = MagicMock()
         mock_tc.get_traffic_index = AsyncMock(side_effect=IettApiError("timeout"))
         with (
-            patch(
-                "app.routers.traffic.cache_get",
-                AsyncMock(return_value=None),
-                create=True,
-            ),
-            patch("app.routers.traffic.cache_set", AsyncMock(), create=True),
             patch("app.routers.traffic.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.traffic.TrafficClient", return_value=mock_tc),
         ):
@@ -832,18 +825,15 @@ class TestTrafficIndex:
 
 class TestTrafficSegments:
     def test_200_returns_segments(self, client: TestClient) -> None:
+        from app.services.cache import _store
+
+        _store.pop("traffic:segments", None)
         seg = TrafficSegment(
             segment_id=1, speed_kmh=40, congestion=3, timestamp="2026-03-02T01:00:00"
         )
         mock_tc = MagicMock()
         mock_tc.get_traffic_segments = AsyncMock(return_value=[seg])
         with (
-            patch(
-                "app.routers.traffic.cache_get",
-                AsyncMock(return_value=None),
-                create=True,
-            ),
-            patch("app.routers.traffic.cache_set", AsyncMock(), create=True),
             patch("app.routers.traffic.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.traffic.TrafficClient", return_value=mock_tc),
         ):
@@ -856,28 +846,54 @@ class TestTrafficSegments:
 
     def test_200_returns_from_cache(self, client: TestClient) -> None:
         cached = [{"segment_id": 99, "speed_kmh": 60, "congestion": 2, "timestamp": "t"}]
-        with patch("app.routers.traffic.cache_get", AsyncMock(return_value=cached)):
+        with patch("app.routers.traffic.cache_get_or_fetch", AsyncMock(return_value=cached)):
             resp = client.get("/v1/traffic/segments")
         assert resp.status_code == 200
         assert resp.json()[0]["segment_id"] == 99
 
     def test_502_when_traffic_api_fails(self, client: TestClient) -> None:
+        from app.services.cache import _store
         from app.services.iett_client import IettApiError
 
+        _store.pop("traffic:segments", None)
         mock_tc = MagicMock()
         mock_tc.get_traffic_segments = AsyncMock(side_effect=IettApiError("down"))
         with (
-            patch(
-                "app.routers.traffic.cache_get",
-                AsyncMock(return_value=None),
-                create=True,
-            ),
-            patch("app.routers.traffic.cache_set", AsyncMock(), create=True),
             patch("app.routers.traffic.get_session", return_value=MagicMock(), create=True),
             patch("app.routers.traffic.TrafficClient", return_value=mock_tc),
         ):
             resp = client.get("/v1/traffic/segments")
         assert resp.status_code == 502
+
+    @pytest.mark.asyncio
+    async def test_traffic_segments_cache_stampede_single_flight(self) -> None:
+        import asyncio
+
+        from app.routers.traffic import get_traffic_segments
+        from app.services.cache import _store
+
+        _store.pop("traffic:segments", None)
+        seg = TrafficSegment(
+            segment_id=1, speed_kmh=40, congestion=3, timestamp="2026-03-02T01:00:00"
+        )
+        mock_tc = MagicMock()
+
+        async def _slow_fetch():
+            await asyncio.sleep(0.05)
+            return [seg]
+
+        mock_tc.get_traffic_segments = AsyncMock(side_effect=_slow_fetch)
+
+        with (
+            patch("app.routers.traffic.get_session", return_value=MagicMock(), create=True),
+            patch("app.routers.traffic.TrafficClient", return_value=mock_tc),
+        ):
+            results = await asyncio.gather(*[get_traffic_segments() for _ in range(10)])
+
+        assert len(results) == 10
+        assert mock_tc.get_traffic_segments.call_count == 1
+        assert results[0] is not None
+        assert results[0][0]["segment_id"] == 1
 
 
 # ===========================  extra /v1/routes  =============================
@@ -1196,6 +1212,71 @@ class TestStopsExtra:
             resp = client.get("/v1/stops/220602/arrivals")
         assert resp.status_code == 200
         assert resp.json()[0]["eta_minutes"] == 5
+
+    def test_arrivals_ntcapi_empty_list_does_not_trigger_html_fallback(
+        self, client: TestClient
+    ) -> None:
+        """When NTCAPI returns [] (no approaching buses), HTML fallback must NOT be called."""
+        from app.services.iett_client import IettApiError
+
+        mock_iett = MagicMock()
+        mock_iett.get_stop_arrivals = AsyncMock(side_effect=IettApiError("Timeout"))
+
+        with (
+            patch(
+                "app.routers.stops.ntcapi_client.get_stop_arrivals",
+                AsyncMock(return_value=[]),
+            ),
+            patch("app.routers.stops.IettClient", return_value=mock_iett),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
+            patch("app.routers.stops.get_plate_by_kapino", return_value=None),
+        ):
+            resp = client.get("/v1/stops/114044/arrivals")
+
+        assert resp.status_code == 200
+        assert resp.json() == []
+        mock_iett.get_stop_arrivals.assert_not_called()
+
+    def test_resolve_route_name_empty_does_not_cache_24h(self, client: TestClient) -> None:
+        """When route search yields no match, SkipCache ensures empty name is not cached for 24h."""
+        from app.services.cache import _store
+
+        raw = [
+            {
+                "hatkodu": "999Z",
+                "hattip": "",
+                "hatadi": "",
+                "dakika": "5",
+                "saat": "5 dk",
+                "kapino": "C-1234",
+                "son_konum": "29.0,41.0",
+                "son_hiz": "20",
+                "son_konum_saati": "2026-03-01 12:00:00",
+                "usb": "0",
+                "wifi": "0",
+                "klima": "1",
+                "engelli": None,
+            }
+        ]
+        mock_iett = MagicMock()
+        mock_iett.search_routes = AsyncMock(return_value=[])
+
+        cache_key = "routes:name:999Z"
+        _store.pop(cache_key, None)
+
+        with (
+            patch(
+                "app.routers.stops.ntcapi_client.get_stop_arrivals",
+                AsyncMock(return_value=raw),
+            ),
+            patch("app.routers.stops.IettClient", return_value=mock_iett),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
+            patch("app.routers.stops.get_plate_by_kapino", return_value=None),
+        ):
+            resp = client.get("/v1/stops/114044/arrivals")
+
+        assert resp.status_code == 200
+        assert cache_key not in _store
 
 
 # ===========================  extra /v1/fleet detail  =======================

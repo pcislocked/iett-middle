@@ -242,7 +242,7 @@ async def suggest_arac_bus(
             pass
 
     # Fallback to local persistent cache if upstream fails or returns empty
-    cached_hits = vehicle_cache.search_vehicles(q, limit=20)
+    cached_hits = await asyncio.to_thread(vehicle_cache.search_vehicles, q, 20)
     return [
         {
             "doorNumber": str(c.get("door_number", "")),

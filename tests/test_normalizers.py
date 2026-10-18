@@ -166,6 +166,10 @@ class TestDestinationCleaning:
         assert arrivals.clean_destination(" - TAKSİM") == "- TAKSİM"
         assert arrivals.clean_destination(" - ") == ""
         assert arrivals.clean_destination("-") == ""
+        assert arrivals.clean_destination("A -- B") == "A - B"
+        assert arrivals.clean_destination("A - - B") == "A - B"
+        assert arrivals.clean_destination(" - - ") == ""
+        assert arrivals.clean_destination("--") == ""
 
     def test_clean_destination_handles_single_and_empty(self) -> None:
         assert arrivals.clean_destination("4.LEVENT METRO") == "4.LEVENT METRO"
