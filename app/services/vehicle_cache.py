@@ -16,8 +16,14 @@ logger = logging.getLogger(__name__)
 
 DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "vehicles.db"
 
-_lock = threading.Lock()
-_conn: sqlite3.Connection | None = None
+_local = threading.local()
+_init_lock = threading.Lock()
+_write_lock = threading.Lock()
+_initialized = False
+_primary_conn: sqlite3.Connection | None = None
+
+
+_is_memory = False
 
 
 def _clean_str(val: str | None) -> str:
@@ -27,31 +33,56 @@ def _clean_str(val: str | None) -> str:
 
 
 def get_db_connection() -> sqlite3.Connection:
-    global _conn
-    if _conn is not None:
-        return _conn
+    global _primary_conn, _initialized, _is_memory
+    conn = getattr(_local, "conn", None)
+    if conn is not None:
+        try:
+            conn.execute("SELECT 1;")
+            return conn
+        except Exception:
+            conn = None
 
-    with _lock:
-        if _conn is None:
-            db_target = settings.vehicle_cache_path
-            try:
-                if db_target == ":memory:":
-                    conn = sqlite3.connect(":memory:", check_same_thread=False)
-                else:
-                    p = Path(db_target)
-                    if not p.is_absolute():
-                        p = Path(__file__).resolve().parent.parent.parent / p
-                    p.parent.mkdir(parents=True, exist_ok=True)
-                    conn = sqlite3.connect(str(p), check_same_thread=False)
-            except Exception as exc:
-                logger.warning("Could not open %s, using :memory: fallback: %s", db_target, exc)
-                conn = sqlite3.connect(":memory:", check_same_thread=False)
+    db_target = settings.vehicle_cache_path
+    _is_memory = db_target == ":memory:"
 
-            conn.row_factory = sqlite3.Row
-            with conn:
-                conn.execute("PRAGMA journal_mode = WAL;")
-                conn.execute("PRAGMA synchronous = NORMAL;")
-                conn.execute(
+    if _is_memory:
+        conn_str = "file:vehicle_cache_mem?mode=memory&cache=shared"
+        uri = True
+    else:
+        p = Path(db_target)
+        if not p.is_absolute():
+            p = Path(__file__).resolve().parent.parent.parent / p
+        p.parent.mkdir(parents=True, exist_ok=True)
+        conn_str = str(p)
+        uri = False
+
+    try:
+        new_conn = sqlite3.connect(
+            conn_str,
+            uri=uri,
+            timeout=30.0,
+            check_same_thread=False,
+        )
+    except Exception as exc:
+        logger.warning("Could not open %s, using in-memory fallback: %s", db_target, exc)
+        new_conn = sqlite3.connect(
+            "file:vehicle_cache_fallback?mode=memory&cache=shared",
+            uri=True,
+            timeout=30.0,
+            check_same_thread=False,
+        )
+
+    new_conn.row_factory = sqlite3.Row
+
+    with _init_lock:
+        if not _initialized:
+            if _is_memory and _primary_conn is None:
+                _primary_conn = new_conn
+            with new_conn:
+                if not _is_memory:
+                    new_conn.execute("PRAGMA journal_mode = WAL;")
+                    new_conn.execute("PRAGMA synchronous = NORMAL;")
+                new_conn.execute(
                     """
                     CREATE TABLE IF NOT EXISTS vehicle_cache (
                         clean_kapino TEXT PRIMARY KEY,
@@ -64,28 +95,39 @@ def get_db_connection() -> sqlite3.Connection:
                     );
                     """
                 )
-                conn.execute(
+                new_conn.execute(
                     "CREATE INDEX IF NOT EXISTS idx_vc_clean_plate ON vehicle_cache(clean_plate);"
                 )
-            _conn = conn
-    return _conn
+            _initialized = True
+
+    _local.conn = new_conn
+    return new_conn
 
 
 def close_connection() -> None:
-    """Close and release the active SQLite connection."""
-    global _conn
-    with _lock:
-        if _conn is not None:
+    """Close and release the active SQLite connection(s)."""
+    global _primary_conn, _initialized, _is_memory
+    with _init_lock:
+        conn = getattr(_local, "conn", None)
+        if conn is not None:
             try:
-                _conn.close()
+                conn.close()
             except Exception:
                 pass
-            _conn = None
+            _local.conn = None
+
+        if _primary_conn is not None:
+            try:
+                _primary_conn.close()
+            except Exception:
+                pass
+            _primary_conn = None
+        _initialized = False
 
 
 def clear_cache() -> None:
     conn = get_db_connection()
-    with _lock, conn:
+    with _write_lock, conn:
         conn.execute("DELETE FROM vehicle_cache;")
 
 
@@ -103,7 +145,7 @@ def upsert_vehicle(
     hash_ts = now if hash_value else None
 
     conn = get_db_connection()
-    with _lock, conn:
+    with _write_lock, conn:
         conn.execute(
             """
             INSERT INTO vehicle_cache (
@@ -164,7 +206,7 @@ def upsert_vehicles_batch(items: list[dict[str, Any]]) -> None:
         return
 
     conn = get_db_connection()
-    with _lock, conn:
+    with _write_lock, conn:
         conn.executemany(
             """
             INSERT INTO vehicle_cache (
@@ -189,7 +231,18 @@ def get_vehicle(query: str) -> dict[str, Any] | None:
         return None
 
     conn = get_db_connection()
-    with _lock:
+    if _is_memory:
+        with _write_lock:
+            row = conn.execute(
+                """
+                SELECT clean_kapino, door_number, plate, clean_plate, hash_value, hash_updated_at, updated_at
+                FROM vehicle_cache
+                WHERE clean_kapino = ? OR clean_plate = ?
+                LIMIT 1;
+                """,
+                (clean_q, clean_q),
+            ).fetchone()
+    else:
         row = conn.execute(
             """
             SELECT clean_kapino, door_number, plate, clean_plate, hash_value, hash_updated_at, updated_at
@@ -220,7 +273,21 @@ def search_vehicles(query: str, limit: int = 10) -> list[dict[str, Any]]:
 
     conn = get_db_connection()
     like_pattern = f"%{clean_q}%"
-    with _lock:
+    if _is_memory:
+        with _write_lock:
+            rows = conn.execute(
+                """
+                SELECT clean_kapino, door_number, plate, clean_plate, hash_value, updated_at
+                FROM vehicle_cache
+                WHERE clean_kapino LIKE ? OR clean_plate LIKE ?
+                ORDER BY
+                    CASE WHEN clean_kapino = ? OR clean_plate = ? THEN 0 ELSE 1 END,
+                    updated_at DESC
+                LIMIT ?;
+                """,
+                (like_pattern, like_pattern, clean_q, clean_q, limit),
+            ).fetchall()
+    else:
         rows = conn.execute(
             """
             SELECT clean_kapino, door_number, plate, clean_plate, hash_value, updated_at

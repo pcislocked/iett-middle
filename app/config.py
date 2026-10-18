@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     enable_outgoing_trace: bool = False
     port: int = 8000
 
+    environment: str = "production"
+    allow_test_backdoors: bool = False
+
     vehicle_cache_path: str = "data/vehicles.db"
 
 

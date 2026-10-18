@@ -16,7 +16,7 @@ from app.models.bus import Arrival
 from app.models.route import Announcement
 from app.models.stop import NearbyStop, StopDetail, StopInfo, StopSearchResult
 from app.services import normalizers, ntcapi_client
-from app.services.cache import cache_get_or_fetch
+from app.services.cache import SkipCache, cache_get_or_fetch
 from app.services.iett_client import IettApiError, IettClient
 from app.services.ntcapi_client import NtcApiError
 
@@ -198,6 +198,7 @@ async def get_arrivals(
     async def _fetch():
         session = get_session()
         arrivals_data = []
+        ntcapi_failed = False
 
         # ———————————————————————— primary: ntcapi ybs (has kapino + live bus location) ———————
         try:
@@ -225,8 +226,10 @@ async def get_arrivals(
                     res = await client.search_routes(rc)
                     for r in res:
                         if r.hat_kodu.upper() == rc.upper():
-                            return normalizers.arrivals.clean_destination(r.name)
-                    return ""
+                            cleaned = normalizers.arrivals.clean_destination(r.name)
+                            if cleaned:
+                                return cleaned
+                    raise SkipCache("")
 
                 try:
                     name = await cache_get_or_fetch(
@@ -264,10 +267,11 @@ async def get_arrivals(
             )
             arrivals_data = list(canonical)
         except NtcApiError as exc:
+            ntcapi_failed = True
             logger.warning("ntcapi arrivals failed for %s, falling back to HTML: %s", dcode, exc)
 
         # ———————————————————————— fallback: legacy IETT HTML (no kapino, no location) ————————
-        if not arrivals_data:
+        if ntcapi_failed:
             client = IettClient(session)
             try:
                 if via:

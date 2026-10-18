@@ -55,6 +55,10 @@ class IettApiError(Exception):
     """Raised when an IETT API call fails."""
 
 
+def _is_test_mode() -> bool:
+    return settings.environment == "development" or getattr(settings, "allow_test_backdoors", False)
+
+
 class IettClient:
     def __init__(self, session: aiohttp.ClientSession) -> None:
         self._session = session
@@ -119,11 +123,11 @@ class IettClient:
             '<GetFiloAracKonum_json xmlns="http://tempuri.org/"/>',
             '"http://tempuri.org/GetFiloAracKonum_json"',
         )
-        return parse_all_fleet_xml(xml)
+        return await asyncio.to_thread(parse_all_fleet_xml, xml)
 
     async def get_route_buses(self, hat_kodu: str) -> list[BusPosition]:
         """Fetch live bus positions for a specific route."""
-        if str(hat_kodu) == "31AMK":
+        if _is_test_mode() and str(hat_kodu) == "31AMK":
             from datetime import datetime, timezone
 
             now_iso = datetime.now(timezone.utc).isoformat()
@@ -214,7 +218,7 @@ class IettClient:
 
     async def get_stop_arrivals(self, dcode: str) -> list[Arrival]:
         """Live arrivals at a stop via kapino or fallback API."""
-        if str(dcode) == "676767":
+        if _is_test_mode() and str(dcode) == "676767":
             from datetime import datetime, timedelta, timezone
 
             now = datetime.now(timezone.utc)
@@ -269,7 +273,7 @@ class IettClient:
 
     async def get_routes_at_stop(self, dcode: str) -> set[str]:
         """Routes passing through a stop."""
-        if str(dcode) == "676767":
+        if _is_test_mode() and str(dcode) == "676767":
             return {"31AMK"}
         html = await self._get_text(
             f"{settings.iett_rest_base}/tr/RouteStation/GetRouteByStation",
@@ -289,7 +293,7 @@ class IettClient:
 
     async def search_stops(self, query: str) -> list[StopSearchResult]:
         """Stop search via Mobiett HTML."""
-        if query == "676767" or query.upper() == "TEST":
+        if _is_test_mode() and (query == "676767" or query.upper() == "TEST"):
             return [StopSearchResult(dcode="676767", name="TEST DURAĞI")]
         query = query.upper()
         if not query.endswith("%"):
@@ -322,7 +326,7 @@ class IettClient:
         Falls back to the in-memory stop index for coordinates when the SOAP
         response omits or zeroes them out.
         """
-        if str(dcode) == "676767":
+        if _is_test_mode() and str(dcode) == "676767":
             return StopDetail(dcode="676767", name="TEST DURAĞI", latitude=41.045, longitude=29.0)
 
         from app.deps import get_stop_coords  # noqa: PLC0415
@@ -393,7 +397,7 @@ class IettClient:
             '<GetDurak_json xmlns="http://tempuri.org/"><DurakKodu></DurakKodu></GetDurak_json>',
             '"http://tempuri.org/GetDurak_json"',
         )
-        return parse_all_stops_json(xml)
+        return await asyncio.to_thread(parse_all_stops_json, xml)
 
     async def get_garages(self) -> list[Garage]:
         """All IETT bus garage locations via GetGaraj_json."""
@@ -451,7 +455,7 @@ class IettClient:
         the long-lived cache: results are only stored when *all* stops carry
         valid coordinates, so coord-less responses are never persisted.
         """
-        if str(hat_kodu) == "31AMK":
+        if _is_test_mode() and str(hat_kodu) == "31AMK":
             return [
                 RouteStop(
                     route_code="31AMK",
@@ -508,7 +512,7 @@ class IettClient:
 
     async def scrape_route_info(self, hat_kodu: str) -> dict[str, Any]:
         """Scrapes gidis, donus, and details from iett.istanbul/RouteDetail"""
-        if str(hat_kodu) == "31AMK":
+        if _is_test_mode() and str(hat_kodu) == "31AMK":
             return {
                 "hat_kodu": "31AMK",
                 "gidis": "TEST GİDİŞ",
@@ -566,7 +570,7 @@ class IettClient:
 
     async def scrape_stop_info(self, dcode: str) -> dict[str, Any]:
         """Scrapes 'İlçe', 'Fiziki Durum', 'Akıllı Durak' from iett.istanbul/StationDetail."""
-        if str(dcode) == "676767":
+        if _is_test_mode() and str(dcode) == "676767":
             return {
                 "dcode": "676767",
                 "ilce": "TEST İLÇESİ",

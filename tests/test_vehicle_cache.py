@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
+
 from app.services import vehicle_cache
 
 
@@ -90,3 +94,48 @@ class TestVehicleCache:
         vehicle_cache.close_connection()
         conn = vehicle_cache.get_db_connection()
         assert conn is not None
+
+    @pytest.mark.asyncio
+    async def test_vehicle_cache_concurrent_read_write_no_event_loop_stall(
+        self, tmp_path: Path
+    ) -> None:
+        import asyncio
+
+        from app.config import settings
+
+        db_file = tmp_path / "wal_vehicles.db"
+        orig_path = settings.vehicle_cache_path
+        settings.vehicle_cache_path = str(db_file)
+        vehicle_cache.close_connection()
+
+        try:
+            # Prepopulate with 1 vehicle so reader can query it
+            vehicle_cache.upsert_vehicle("TARGET-1", "34 TARGET 1")
+
+            # 1,000 items to batch insert in background thread
+            batch = [
+                {"doorNumber": f"BUS-{i}", "plate": f"34 BUS {i}", "value": f"hash_{i}"}
+                for i in range(1000)
+            ]
+
+            async def _reader():
+                # Perform 50 rapid reads while batch write is proceeding
+                for _ in range(50):
+                    v = await asyncio.to_thread(vehicle_cache.get_vehicle, "TARGET-1")
+                    assert v is not None
+                    assert v["door_number"] == "TARGET-1"
+                    await asyncio.sleep(0.001)
+
+            async def _writer():
+                await asyncio.to_thread(vehicle_cache.upsert_vehicles_batch, batch)
+
+            # Run concurrently in WAL mode
+            await asyncio.gather(_writer(), _reader())
+
+            # Verify batch was written
+            res = vehicle_cache.get_vehicle("BUS-500")
+            assert res is not None
+            assert res["plate"] == "34 BUS 500"
+        finally:
+            vehicle_cache.close_connection()
+            settings.vehicle_cache_path = orig_path

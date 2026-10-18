@@ -27,7 +27,7 @@ def clean_destination(raw: Any) -> str:
     s = re.sub(r"\s+", " ", str(raw)).strip()
     if not s or s == "-":
         return ""
-    s = re.sub(r"\s*-\s*", " - ", s).strip()
+    s = re.sub(r"(\s*-\s*)+", " - ", s).strip()
     if s == "-":
         return ""
     return s

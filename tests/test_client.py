@@ -419,3 +419,39 @@ class TestGetGarages:
             m.post(HAT_DURAK_URL, exception=ConnectionError("refused"))  # type: ignore[misc]
             with pytest.raises(IettApiError):
                 await client.get_garages()
+
+
+class TestBackdoorGating:
+    async def test_backdoor_disabled_in_production(self, client: IettClient) -> None:
+        from app.config import settings
+
+        original_env = settings.environment
+        original_backdoor = settings.allow_test_backdoors
+        try:
+            settings.environment = "production"
+            settings.allow_test_backdoors = False
+            with aioresponses() as m:
+                m.post(
+                    f"{settings.iett_soap_base}/FiloDurum/SeferGerceklesme.asmx",
+                    exception=Exception("Network call triggered"),
+                )
+                with pytest.raises(IettApiError):
+                    await client.get_route_buses("31AMK")
+        finally:
+            settings.environment = original_env
+            settings.allow_test_backdoors = original_backdoor
+
+    async def test_backdoor_enabled_when_explicitly_allowed(self, client: IettClient) -> None:
+        from app.config import settings
+
+        original_env = settings.environment
+        original_backdoor = settings.allow_test_backdoors
+        try:
+            settings.environment = "production"
+            settings.allow_test_backdoors = True
+            buses = await client.get_route_buses("31AMK")
+            assert len(buses) == 4
+            assert buses[0].route_code == "31AMK"
+        finally:
+            settings.environment = original_env
+            settings.allow_test_backdoors = original_backdoor

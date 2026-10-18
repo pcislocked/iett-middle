@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Generator
 
 import aiohttp
 import pytest
@@ -35,7 +35,7 @@ async def session() -> AsyncIterator[aiohttp.ClientSession]:
 
 
 @pytest.fixture(autouse=True)
-def clean_vehicle_cache() -> None:
+def clean_vehicle_cache() -> Generator[None, None, None]:
     from app.services import vehicle_cache
 
     vehicle_cache.clear_cache()
