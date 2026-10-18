@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.9.1] - 2026-10-18
+### Fixed & Resilient Fallbacks
+- **Stop Arrivals SOAP Failover:** Implemented automatic fallback to SOAP `GetHatOtoKonum_json` in `app/routers/stops.py` and `app/services/iett_client.py` when NTCAPI fails or returns empty/invalid arrivals, preventing empty stop arrival screens during upstream NTCAPI outages.
+- **Bounded In-Memory Vehicle Cache (LRU):** Converted in-memory dictionaries in `app/services/vehicle_cache.py` to `collections.OrderedDict` with bounded size (`max_size=500`, configurable via `app/config.py`) and LRU eviction, eliminating potential memory leaks under high-volume traffic.
+- **Synchronized 401 Token Refresh:** Added `asyncio.Lock` synchronization to `iett_client.py` and `arac_client.py` token invalidation and refresh logic to prevent concurrent request stampedes and 401 cascading retry storms.
+- **Pre-computed Normalizations:** Optimized arrival dataclasses and traffic speed normalizations across `app/routers/traffic.py` and `app/services/normalizers/arrivals.py`.
+
+---
+
 ## [0.4.9] - 2026-10-18
 ### Added
 - **Official IETT Announcements Endpoint (`GET /v1/announcements/official`):** Scrapes and normalizes official corporate announcements from `iett.istanbul/announcement/Index` with pagination (`page=0..100`), 1-hour in-memory TTL caching, 24-hour stale fallback resilience, URL scheme hardening, and `20/minute` rate limiting.
