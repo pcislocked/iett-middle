@@ -2038,6 +2038,7 @@ class TestAracAutoDetailAndSuggest:
             patch("app.routers.arac.solve_captcha_image", return_value="12345"),
         ):
             from app.services.arac_client import AracClient as RealAracClient
+
             mock_arac_cls.return_value = mock_arac
             mock_arac_cls.normalize_bus_position = RealAracClient.normalize_bus_position
             mock_arac_cls.normalize_missions = RealAracClient.normalize_missions
