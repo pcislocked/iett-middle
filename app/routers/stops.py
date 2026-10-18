@@ -244,10 +244,9 @@ async def get_arrivals(
                 await asyncio.gather(*[_resolve_route(rc) for rc in missing_routes])
                 for a in canonical:
                     dest = a.get("destination")
-                    if (
-                        not dest
-                        or normalizers.arrivals.is_destination_incomplete(dest)
-                    ) and a.get("route_code") in route_names:
+                    if (not dest or normalizers.arrivals.is_destination_incomplete(dest)) and a.get(
+                        "route_code"
+                    ) in route_names:
                         enriched = route_names[a["route_code"]]
                         if enriched:
                             a["destination"] = enriched  # type: ignore

@@ -156,7 +156,10 @@ class TestDestinationCleaning:
 
     def test_clean_destination_collapses_whitespace(self) -> None:
         assert arrivals.clean_destination("VADİ -  TAKSİM") == "VADİ - TAKSİM"
-        assert arrivals.clean_destination("FATİH SULTAN MEHMET  -   ŞİŞLİ") == "FATİH SULTAN MEHMET - ŞİŞLİ"
+        assert (
+            arrivals.clean_destination("FATİH SULTAN MEHMET  -   ŞİŞLİ")
+            == "FATİH SULTAN MEHMET - ŞİŞLİ"
+        )
 
     def test_clean_destination_standardizes_spacing_around_hyphens(self) -> None:
         assert arrivals.clean_destination("VADİ -") == "VADİ -"
