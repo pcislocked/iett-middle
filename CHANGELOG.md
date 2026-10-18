@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.9.2] - 2026-10-18
+### Fixed & Hardened
+- **CI/CD Action Versions & Caching:** Upgraded GitHub Actions to valid stable versions (`checkout@v4`, `setup-python@v5`), scoped concurrency cancellation to preserve tag builds, and enabled `cache-to: type=gha,mode=max` in Docker workflows.
+- **Async Event Loop Offloading:** Offloaded all CPU-bound BeautifulSoup HTML tree parsing routines to worker threads via `asyncio.to_thread`.
+- **Session Lifecycle:** Reused FastAPI shared `aiohttp.ClientSession` in `arac.py` with transient session fallback for isolated tests.
+- **Cache Thread Safety:** Added bounded retry loop to `get_cache_stats()` for dictionary mutation resilience.
+- **Test Coverage:** Added direct unit tests for route/stop scraping and vehicle details (overall coverage increased to 89%).
+
+---
+
 ## [0.4.9.1] - 2026-10-18
 ### Fixed & Resilient Fallbacks
 - **Stop Arrivals SOAP Failover:** Implemented automatic fallback to SOAP `GetHatOtoKonum_json` in `app/routers/stops.py` and `app/services/iett_client.py` when NTCAPI fails or returns empty/invalid arrivals, preventing empty stop arrival screens during upstream NTCAPI outages.
