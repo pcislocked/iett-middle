@@ -217,7 +217,7 @@ async def fetch_official_announcements(
         total_el = soup.select_one("input#totalItems")
         if total_el and total_el.get("value"):
             try:
-                total_items = int(total_el["value"])
+                total_items = int(str(total_el["value"]))
             except ValueError:
                 total_items = 0
 
