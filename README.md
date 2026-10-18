@@ -1,9 +1,9 @@
 # iett-middle
 
-[![Tests](https://img.shields.io/badge/tests-389%20passed-brightgreen)](#testleri-çalıştırma)
+[![Tests](https://img.shields.io/badge/tests-401%20passed-brightgreen)](#testleri-çalıştırma)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
-[![Version](https://img.shields.io/badge/version-0.4.8.1-orange)](./CHANGELOG.md)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.141-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
+[![Version](https://img.shields.io/badge/version-0.4.9-orange)](./CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-CC%20BY%204.0-blue)](https://data.ibb.gov.tr/license)
 
 [🇹🇷 Türkçe (Turkish)](#türkçe) | [🇬🇧 English](#english)
@@ -27,12 +27,13 @@
 
 - **🔀 Tek İstekte Çoklu Veri Konsolidasyonu (API Data Aggregator):**
   İETT SOAP servisleri, Mobiett JSON altyapısı ve `arac.iett.gov.tr` şifreli API'lerindeki parçalı verileri arka planda harmanlayarak ön yüze **tek bir HTTP yanıtında** (ör: `/v1/fleet/{kapino}/detail` ile anlık konum, hat bilgisi, sıralı durak listesi ve araç teknik donanımı) sunar. Mobil cihazların ardışık onlarca ağ isteği yapmasını (N+1 problemi) ve hücresel veri gecikmelerini engeller.
-- **⚡ Akıllı Bellek İçi TTL Önbellekleme (In-Memory Cache):** Filo (~7k araç: 15s), Durak Varışları (20s), Sefer Saatleri (1sa), Duyurular (5dk) ve Garajlar (24sa) için optimize edilmiş TTL önbellekleme.
+- **⚡ Akıllı Bellek İçi TTL Önbellekleme (In-Memory Cache):** Filo (~7k araç: 15s), Durak Varışları (20s), Sefer Saatleri (1sa), Duyurular (5dk), Resmi Duyurular (1sa + 24sa stale) ve Garajlar (24sa) için optimize edilmiş TTL önbellekleme.
 - **🔄 Otomatik Mobiett & SOAP Fallback (Failover):** İBB açık verilerindeki SOAP kısıtlamalarını ve veri karartmalarını aşmak için arka planda Mobiett JSON servisleri, SOAP XML ve BeautifulSoup HTML kazıma altyapıları arasında otomatik veri birleştirme ve kesintisiz geçiş.
-- **🔒 ARAÇ Oturum & Otomatik Captcha Çözücü (`arac.iett.gov.tr`):** Dahili `ddddocr` OCR modeli ile otomatik captcha yanıtı üretme, istemci bazlı izole oturum yönetimi (`X-Arac-Session-Key`) ve manuel captcha doğrulaması.
+- **🔒 ARAÇ Oturum & Otomatik Captcha Çözücü (`arac.iett.gov.tr`):** Dahili `ddddocr` OCR modeli ile otomatik captcha yanıtı üretme, istemci bazlı izole oturum yönetimi (`X-Arac-Session-Key`), manuel captcha doğrulaması ve `server_time` / `cached` zaman damgası metaverisi.
 - **📍 Ultra Hızlı Yakın Durak İndeksi (Spatial R-Tree Indexing):** Sunucu başlangıcında yüklenen R-Tree mekansal indeksi sayesinde kullanıcının koordinatına en yakın durakları milisaniyeler içinde hesaplama (`GET /v1/stops/nearby`).
-- **🛡️ Güvenlik & Rate Limiting:** SlowAPI ile uç nokta bazlı hız sınırlaması, hata kalkanı (error shielding) ve ASP.NET iç hata sızıntılarını engelleme.
-- **📊 Canlı Sistem Durumu & Metrikler:** `/health` uç noktası üzerinden sistem çalışma süresi (uptime) ve bellek önbellek istatistikleri sunumu.
+- **🪪 Standart TR Plaka Normalizasyonu:** Tüm SOAP, NTCAPI, ARAÇ ve SQLite katmanlarında plakaları standart `34 HO 1900` formatına dönüştürme ve boşluk/tire bağımsız $O(1)$ sorgulama.
+- **🛡️ Güvenlik & Rate Limiting:** SlowAPI ile genel (`120/dk`) ve uç nokta bazlı hız sınırlaması, sıkı parametre doğrulaması, hata kalkanı (error shielding) ve ASP.NET iç hata sızıntılarını engelleme.
+- **📊 Canlı Sistem Durumu & Metrikler:** `/health` uç noktası üzerinden uygulama sürümü (`version`), sistem çalışma süresi (`uptime`) ve bellek önbellek istatistikleri sunumu.
 
 ---
 
@@ -83,6 +84,7 @@ GET  /v1/fleet/{kapino}/detail                 kapı numarasına göre tek otob�
 
 POST /v1/arac/session/captcha                 captcha doğrulama görseli ve önerilen OCR yanıtı al
 POST /v1/arac/session/create                  captcha cevabından ARAÇ oturumu oluştur
+GET  /v1/arac/fleet/{kapino}/auto-detail      otomatik OCR captcha ile ARAÇ araç profili ve görevleri (30s önbellek)
 GET  /v1/arac/fleet/{kapino}/detail           ARAÇ otobüs detayları, görevleri ve özellikleri (oturum başlıkları gerektirir)
 
 GET  /v1/stops/search?q={name}                 durak arama
@@ -100,9 +102,10 @@ GET  /v1/routes/{hat_kodu}/schedule            planlanan kalkış saatleri (1sa 
 GET  /v1/routes/{hat_kodu}/announcements       aktif aksama duyuruları
 
 GET  /v1/announcements/global                  önbelleğe alınmış genel sistem duyuruları
+GET  /v1/announcements/official?page={n}       iett.istanbul resmi kurumsal duyuruları (1sa önbellek, 24sa stale)
 GET  /v1/garages                               tüm İETT otobüs garaj konumları (24sa önbellek)
 GET  /v1/traffic/index                         şehir geneli trafik yoğunluk % indeksi (30s önbellek)
-GET  /health                                   çalışma süresi + önbellek istatistikleri
+GET  /health                                   sürüm, çalışma süresi + önbellek istatistikleri
 ```
 
 ---
@@ -110,7 +113,7 @@ GET  /health                                   çalışma süresi + önbellek is
 ### 🧪 Testleri Çalıştırma
 
 ```bash
-pytest                                         # Tüm backend testlerini çalıştır (363/363 green)
+pytest                                         # Tüm backend testlerini çalıştır (401/401 green)
 ruff check                                     # Linter denetimi
 pyright                                        # Statik tip denetimi
 ```

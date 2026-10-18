@@ -5,6 +5,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.9] - 2026-10-18
+### Added
+- **Official IETT Announcements Endpoint (`GET /v1/announcements/official`):** Scrapes and normalizes official corporate announcements from `iett.istanbul/announcement/Index` with pagination (`page=0..100`), 1-hour in-memory TTL caching, 24-hour stale fallback resilience, URL scheme hardening, and `20/minute` rate limiting.
+- **Turkish License Plate Normalization (`app/services/normalizers/plate.py`):** Added canonical `normalize_plate` formatting (`34 HO 1900`) across all SOAP, NTCAPI, ARAC, and SQLite persistence layers while maintaining dash/space-agnostic $O(1)$ lookup in `_plate_fleet`.
+- **ARAC Freshness & Cache Metadata:** Added `server_time` (ISO-8601 UTC) and `cached` boolean flags to `/v1/arac/fleet/{kapino}/auto-detail` and `/v1/arac/fleet/{kapino}/detail` responses.
+- **Health Endpoint Version Exposure:** Exposed `"version": app.version` in `GET /health` and `GET /healthz`.
+
+### Security & Hardening
+- **Global & Endpoint Rate Limiting:** Added a baseline `120/minute` global default rate limit on SlowAPI `Limiter` in addition to strict per-endpoint rate limits (`10/minute` on `/v1/stops/{dcode}/arrivals/raw` and `/v1/arac/fleet/{kapino}/auto-detail`, `20/minute` on `/v1/announcements/official`, `30/minute` on `/v1/arac/suggest` and `/v1/arac/fleet/{kapino}/detail`, `60/minute` on ARAC captcha/session creation).
+- **Strict Path & Query Validation:** Enforced regex and length bounds across all route/stop/fleet/batch endpoints (`dcode` `^\d{4,10}$`, `hat_kodu` and `kapino` `^[A-Za-z0-9_ -]+$`, search `q` `max_length=50`, batch `routes` `max_length=500`).
+- **Error Shielding & Redaction:** Wrapped `scrape_route_info` and `scrape_stop_info` upstream errors to return clean HTTP `502` responses instead of `500`, and redacted raw background task exception strings from `/health`.
+- **Thread-Safe SQLite Lifecycle:** Added double-checked locking (`_lock`) to `vehicle_cache.get_db_connection()`, clean shutdown teardown via `vehicle_cache.close_connection()`, and pre-created `/app/data` with `appuser` ownership in `Dockerfile`.
+
+### Dependencies & Tests
+- Bumped `pydantic>=2.13.5`, `pydantic-settings>=2.15.0`, `lxml>=6.1.3`, `ruff>=0.16.6`, and `pyright>=1.1.413`.
+- Expanded test suite to **401/401 passing tests** (0 Ruff lint/format issues, 0 Pyright errors).
+
+---
+
 ## [0.4.8.1] - 2026-10-11
 ### Fixed
 - **Dynamic ARAC Challenge Hashes:** Removed single-use hash caching in `arac_client.py` and `vehicle_cache.py`. Upstream ARAC challenge hashes expire or fail upon reuse, so fresh hashes are generated per query while durable doorNumber <-> plate mappings remain persistently cached.

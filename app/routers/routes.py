@@ -371,7 +371,9 @@ async def fetch_filtered_announcements(route_list: set[str]) -> list[dict]:
 
 @router.get("/announcements/batch", response_model=list[Announcement])
 async def get_batch_announcements(
-    routes: str = Query(..., description="Comma-separated route codes"),
+    routes: str = Query(
+        ..., min_length=1, max_length=500, description="Comma-separated route codes"
+    ),
 ):
     """Get active disruption announcements for multiple routes at once.
 
