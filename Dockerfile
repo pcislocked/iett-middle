@@ -35,7 +35,8 @@ COPY --from=builder /opt/venv /opt/venv
 COPY . .
 
 RUN adduser --disabled-password --gecos "" appuser \
-    && chown -R appuser /app
+    && mkdir -p /app/data \
+    && chown -R appuser:appuser /app
 USER appuser
 
 EXPOSE 8000

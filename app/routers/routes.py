@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Path, Query
 
 from app.config import settings
 from app.deps import get_session
@@ -30,7 +30,7 @@ router = APIRouter()
 
 
 @router.get("/search", response_model=list[RouteSearchResult])
-async def search_routes(q: str = Query(..., min_length=1)):
+async def search_routes(q: str = Query(..., min_length=1, max_length=50)):
     """Search for routes by code or name.
 
     Returns a list of matching routes (e.g. searching '500' returns '500T', '500L', etc.).
@@ -56,7 +56,9 @@ async def search_routes(q: str = Query(..., min_length=1)):
 
 
 @router.get("/{hat_kodu}", response_model=list[RouteMetadata])
-async def get_route_metadata(hat_kodu: str):
+async def get_route_metadata(
+    hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9_ -]+$"),
+):
     hat_kodu = hat_kodu.upper().strip()
     """Get metadata for a specific route.
 
@@ -100,7 +102,9 @@ async def get_route_metadata(hat_kodu: str):
 
 
 @router.get("/{hat_kodu}/buses", response_model=list[BusPosition])
-async def get_route_buses(hat_kodu: str):
+async def get_route_buses(
+    hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9_ -]+$"),
+):
     hat_kodu = hat_kodu.upper().strip()
     """Get live GPS positions of all buses currently operating on a route.
 
@@ -175,7 +179,9 @@ async def get_route_buses(hat_kodu: str):
 
 
 @router.get("/{hat_kodu}/stops", response_model=list[RouteStop])
-async def get_route_stops(hat_kodu: str):
+async def get_route_stops(
+    hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9_ -]+$"),
+):
     hat_kodu = hat_kodu.upper().strip()
     """Get the ordered sequence of stops for a route.
 
@@ -247,7 +253,9 @@ async def get_route_stops(hat_kodu: str):
 
 
 @router.get("/{hat_kodu}/schedule", response_model=list[ScheduledDeparture])
-async def get_route_schedule(hat_kodu: str):
+async def get_route_schedule(
+    hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9_ -]+$"),
+):
     hat_kodu = hat_kodu.upper().strip()
     """Get the official timetable schedule for a route.
 
@@ -376,7 +384,9 @@ async def get_batch_announcements(
 
 
 @router.get("/{hat_kodu}/announcements", response_model=list[Announcement])
-async def get_route_announcements(hat_kodu: str):
+async def get_route_announcements(
+    hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9_ -]+$"),
+):
     """Active disruption and traffic announcements for a specific route.
 
     This endpoint aggregates alerts from multiple sources to provide a complete picture of issues affecting a route.
@@ -473,13 +483,19 @@ async def get_route_announcements(hat_kodu: str):
 
 
 @router.get("/{hat_kodu}/info", response_model=RouteInfo)
-async def get_route_info(hat_kodu: str):
+async def get_route_info(
+    hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9_ -]+$"),
+):
     """Scrape route metadata from iett.istanbul/RouteDetail."""
     key = f"route:info:{hat_kodu}"
 
     async def _fetch():
         client = IettClient(get_session())
-        return await client.scrape_route_info(hat_kodu)
+        try:
+            return await client.scrape_route_info(hat_kodu)
+        except IettApiError as exc:
+            logger.warning("scrape_route_info failed for %s: %s", hat_kodu, exc)
+            raise HTTPException(502, detail="Hat bilgi servisine ulaşılamadı.") from exc
 
     return await cache_get_or_fetch(
         key,

@@ -10,6 +10,7 @@ import asyncio
 import logging
 import re
 from typing import Any
+from xml.sax.saxutils import escape as xml_escape
 
 import aiohttp
 
@@ -54,18 +55,12 @@ class IettApiError(Exception):
     """Raised when an IETT API call fails."""
 
 
-_global_mobiett: Any = None
-
-
 class IettClient:
     def __init__(self, session: aiohttp.ClientSession) -> None:
-        global _global_mobiett
         self._session = session
-        if _global_mobiett is None or _global_mobiett._session.closed:
-            from app.services.mobiett_client import MobiettClient
+        from app.services.mobiett_client import MobiettClient
 
-            _global_mobiett = MobiettClient(self._session)
-        self.mobiett = _global_mobiett
+        self.mobiett = MobiettClient(self._session)
 
     # ------------------------------------------------------------------
     # Helpers
@@ -173,9 +168,10 @@ class IettClient:
         from app.services.iett_parser import parse_mobiett_buses
 
         async def fetch_soap():
+            safe_hat = xml_escape(hat_kodu)
             xml = await self._soap_post(
                 f"{settings.iett_soap_base}/FiloDurum/SeferGerceklesme.asmx",
-                f'<GetHatOtoKonum_json xmlns="http://tempuri.org/"><HatKodu>{hat_kodu}</HatKodu></GetHatOtoKonum_json>',
+                f'<GetHatOtoKonum_json xmlns="http://tempuri.org/"><HatKodu>{safe_hat}</HatKodu></GetHatOtoKonum_json>',
                 '"http://tempuri.org/GetHatOtoKonum_json"',
             )
             return parse_route_fleet_xml(xml)
@@ -299,13 +295,17 @@ class IettClient:
         if not query.endswith("%"):
             query = query + "%"
 
-        res = await self.mobiett._post_service(
-            "mainGetBusStop_basic_search", {"HATYONETIM.DURAK.ADI": query}
-        )
-        if not isinstance(res, list) or not res:
+        try:
             res = await self.mobiett._post_service(
-                "mainGetBusStop_basic_search", {"HATYONETIM.DURAK.DURAK_KODU": query}
+                "mainGetBusStop_basic_search", {"HATYONETIM.DURAK.ADI": query}
             )
+            if not isinstance(res, list) or not res:
+                res = await self.mobiett._post_service(
+                    "mainGetBusStop_basic_search", {"HATYONETIM.DURAK.DURAK_KODU": query}
+                )
+        except Exception as exc:
+            raise IettApiError(f"Mobiett search_stops failed: {exc}") from exc
+
         if not isinstance(res, list):
             res = []
 
@@ -329,9 +329,10 @@ class IettClient:
         from app.services.iett_parser import parse_mobiett_stop
 
         async def fetch_soap():
+            safe_dcode = xml_escape(dcode)
             xml = await self._soap_post(
                 f"{settings.iett_soap_base}/UlasimAnaVeri/HatDurakGuzergah.asmx",
-                f'<GetDurak_json xmlns="http://tempuri.org/"><DurakKodu>{dcode}</DurakKodu></GetDurak_json>',
+                f'<GetDurak_json xmlns="http://tempuri.org/"><DurakKodu>{safe_dcode}</DurakKodu></GetDurak_json>',
                 '"http://tempuri.org/GetDurak_json"',
             )
             return parse_stop_detail_xml(xml, dcode)
@@ -409,13 +410,17 @@ class IettClient:
         if not query.endswith("%"):
             query = query + "%"
 
-        res = await self.mobiett._post_service(
-            "mainGetLine_basic_search", {"HATYONETIM.HAT.HAT_KODU": query}
-        )
-        if not isinstance(res, list) or not res:
+        try:
             res = await self.mobiett._post_service(
-                "mainGetLine_basic_search", {"HATYONETIM.HAT.HAT_ADI": query}
+                "mainGetLine_basic_search", {"HATYONETIM.HAT.HAT_KODU": query}
             )
+            if not isinstance(res, list) or not res:
+                res = await self.mobiett._post_service(
+                    "mainGetLine_basic_search", {"HATYONETIM.HAT.HAT_ADI": query}
+                )
+        except Exception as exc:
+            raise IettApiError(f"Mobiett search_routes failed: {exc}") from exc
+
         if not isinstance(res, list):
             res = []
 
@@ -480,9 +485,10 @@ class IettClient:
 
     async def get_route_schedule(self, hat_kodu: str) -> list[ScheduledDeparture]:
         """Planned departure times for a route."""
+        safe_hat = xml_escape(hat_kodu)
         xml = await self._soap_post(
             f"{settings.iett_soap_base}/UlasimAnaVeri/PlanlananSeferSaati.asmx",
-            f'<GetPlanlananSeferSaati_json xmlns="http://tempuri.org/"><HatKodu>{hat_kodu}</HatKodu></GetPlanlananSeferSaati_json>',
+            f'<GetPlanlananSeferSaati_json xmlns="http://tempuri.org/"><HatKodu>{safe_hat}</HatKodu></GetPlanlananSeferSaati_json>',
             '"http://tempuri.org/GetPlanlananSeferSaati_json"',
         )
         return parse_route_schedule_xml(xml)
@@ -511,9 +517,10 @@ class IettClient:
             }
         from bs4 import BeautifulSoup
 
-        url = f"https://iett.istanbul/RouteDetail?hkod={hat_kodu}"
-        async with self._session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-            html = await resp.text()
+        html = await self._get_text(
+            f"{settings.iett_rest_base}/RouteDetail",
+            params={"hkod": hat_kodu},
+        )
 
         soup = BeautifulSoup(html, "html.parser")
         info = {
@@ -568,9 +575,10 @@ class IettClient:
             }
         from bs4 import BeautifulSoup
 
-        url = f"https://iett.istanbul/StationDetail?dkod={dcode}"
-        async with self._session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-            html = await resp.text()
+        html = await self._get_text(
+            f"{settings.iett_rest_base}/StationDetail",
+            params={"dkod": dcode},
+        )
 
         soup = BeautifulSoup(html, "html.parser")
         info = {

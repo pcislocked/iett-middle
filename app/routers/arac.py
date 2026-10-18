@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, cast
 
 import aiohttp
 from cachetools import TTLCache
-from fastapi import APIRouter, HTTPException, Path, Request
+from fastapi import APIRouter, HTTPException, Path, Query, Request
 
 from app.deps import limiter
 from app.models.arac import (
@@ -20,6 +20,7 @@ from app.models.arac import (
 )
 from app.models.bus import BusPosition
 from app.services.arac_client import AracApiError, AracClient, solve_captcha_image
+from app.services.cache import cache_get_or_fetch
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +90,12 @@ def _require_arac_session_headers(
         import json
 
         try:
-            return json.loads(session_key_raw)
+            parsed = json.loads(session_key_raw)
+            if not isinstance(parsed, dict) or not all(
+                isinstance(k, str) and isinstance(v, str) for k, v in parsed.items()
+            ):
+                raise ValueError("Cookies must be a flat string-to-string dictionary")
+            return parsed
         except (ValueError, TypeError):
             raise HTTPException(400, detail="X-Arac-Session-Key is not valid JSON.")
 
@@ -165,6 +171,7 @@ async def create_arac_session(
         cookies=cookies_dict,
     ) as temp_session:
         client = AracClient(temp_session)
+        result_cookies: dict[str, str] = {}
         try:
             # Fetch fresh vehicle hash (dynamic, changes every time)
             vehicle_hash = await client.get_vehicle_hash(payload.kapino)
@@ -177,9 +184,6 @@ async def create_arac_session(
                     status_code=401,
                 )
 
-            # Remove used captcha cookies
-            _captcha_cookies.pop(payload.captchaId, None)
-
             # Export session cookies as sessionKey for the client
             result_cookies = {c.key: c.value for c in temp_session.cookie_jar}
 
@@ -188,6 +192,8 @@ async def create_arac_session(
             status = _status_from_arac_error(exc, 502)
             detail_msg = str(exc) if status < 500 else "ARAC servisine ulaşılamadı."
             raise HTTPException(status, detail=detail_msg) from exc
+        finally:
+            _captcha_cookies.pop(payload.captchaId, None)
 
     import json
 
@@ -198,11 +204,12 @@ async def create_arac_session(
 
 
 @router.get("/suggest")
-async def suggest_arac_bus(q: str) -> list[dict[str, str]]:
+@limiter.limit("30/minute")
+async def suggest_arac_bus(
+    request: Request,
+    q: str = Query(..., min_length=2, max_length=30),
+) -> list[dict[str, str]]:
     """Suggest vehicles by Kapı No or Plaka via ARAC API with persistent cache fallback."""
-    if len(q) < 2:
-        return []
-
     from app.services import vehicle_cache
 
     connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
@@ -220,7 +227,8 @@ async def suggest_arac_bus(q: str) -> list[dict[str, str]]:
             if isinstance(payload, dict) and payload.get("isSuccess"):
                 items = payload.get("data", [])
                 if isinstance(items, list):
-                    vehicle_cache.upsert_vehicles_batch(items)
+                    loop = asyncio.get_running_loop()
+                    loop.run_in_executor(None, vehicle_cache.upsert_vehicles_batch, items)
                     return [
                         {
                             "doorNumber": str(item.get("doorNumber", "")),
@@ -244,69 +252,81 @@ async def suggest_arac_bus(q: str) -> list[dict[str, str]]:
 
 
 @router.get("/fleet/{kapino}/auto-detail")
+@limiter.limit("10/minute")
 async def get_arac_bus_auto_detail(
+    request: Request,
     kapino: str = Path(..., pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,39}$"),
 ) -> dict[str, Any]:
     """Automatically fetch vehicle profile + missions by auto-solving the captcha."""
-    connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
-    async with aiohttp.ClientSession(connector=connector) as temp_session:
-        client = AracClient(temp_session)
-        try:
-            # 1. Get Captcha
-            captcha_data = await client.get_captcha()
-            captcha_image = captcha_data.get("captchaImage") or captcha_data.get("image")
-            if not captcha_image:
-                raise HTTPException(502, detail="No captcha image returned")
+    key = f"arac:autodetail:{kapino.upper()}"
 
-            # 2. Solve Captcha
-            suggested_answer = await asyncio.to_thread(solve_captcha_image, captcha_image)
-            if not suggested_answer:
-                raise HTTPException(502, detail="Auto-captcha solve failed")
+    async def _fetch():
+        connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
+        async with aiohttp.ClientSession(connector=connector) as temp_session:
+            client = AracClient(temp_session)
+            try:
+                # 1. Get Captcha
+                captcha_data = await client.get_captcha()
+                captcha_image = captcha_data.get("captchaImage") or captcha_data.get("image")
+                if not captcha_image:
+                    raise HTTPException(502, detail="No captcha image returned")
 
-            # 3. Create Session (Submit Captcha)
-            vehicle_hash = await client.get_vehicle_hash(kapino)
-            success = await client.submit_captcha(vehicle_hash, suggested_answer)
-            if not success:
-                raise HTTPException(502, detail="Auto-captcha failed")
+                # 2. Solve Captcha
+                suggested_answer = await asyncio.to_thread(solve_captcha_image, captcha_image)
+                if not suggested_answer:
+                    raise HTTPException(502, detail="Auto-captcha solve failed")
 
-            # 4. Get Detail
-            detail = await client.get_detail(vehicle_hash)
+                # 3. Create Session (Submit Captcha)
+                captcha_vehicle_hash = await client.get_vehicle_hash(kapino)
+                success = await client.submit_captcha(captcha_vehicle_hash, suggested_answer)
+                if not success:
+                    raise HTTPException(502, detail="Auto-captcha failed")
 
-            data_vehicle = detail.get("dataVehicle", {})
-            data_task = detail.get("dataTask", [])
+                # 4. Get Detail (Requires a fresh single-use vehicle_hash!)
+                detail_vehicle_hash = await client.get_vehicle_hash(kapino)
+                detail = await client.get_detail(detail_vehicle_hash)
 
-            profile = AracClient.normalize_bus_position(data_vehicle)
-            missions = AracClient.normalize_missions(data_task)
+                data_vehicle = detail.get("dataVehicle", {})
+                data_task = detail.get("dataTask", [])
 
-            completed = sum(1 for m in missions if m.state == "T")
-            pending = sum(1 for m in missions if m.state == "B")
-            line_codes = sorted({m.line_code for m in missions if m.line_code})
+                profile = AracClient.normalize_bus_position(data_vehicle)
+                missions = AracClient.normalize_missions(data_task)
 
-            active_route = None
-            if data_task and len(data_task) > 0:
-                active_route = str(data_task[0].get("lineCode", "")) or None
-            profile.route_code = active_route
+                completed = sum(1 for m in missions if m.state == "T")
+                pending = sum(1 for m in missions if m.state == "B")
+                line_codes = sorted({m.line_code for m in missions if m.line_code})
 
-            return {
-                "profile": profile.model_dump(),
-                "missions": AracMissionsResponse(
-                    kapino=kapino,
-                    summary=AracMissionSummary(
-                        mission_count=len(missions),
-                        completed_count=completed,
-                        pending_count=pending,
-                        distinct_line_codes=line_codes,
-                    ),
-                    missions=missions,
-                ).model_dump(),
-            }
-        except AracApiError as exc:
-            logger.warning("get_arac_bus_auto_detail failed: %s", exc)
-            status = _status_from_arac_error(exc, 502)
-            raise HTTPException(status, detail=str(exc)) from exc
+                active_route = None
+                if data_task and len(data_task) > 0:
+                    active_route = str(data_task[0].get("lineCode", "")) or None
+                profile.route_code = active_route
+
+                return {
+                    "profile": profile.model_dump(),
+                    "missions": AracMissionsResponse(
+                        kapino=kapino,
+                        summary=AracMissionSummary(
+                            mission_count=len(missions),
+                            completed_count=completed,
+                            pending_count=pending,
+                            distinct_line_codes=line_codes,
+                        ),
+                        missions=missions,
+                    ).model_dump(),
+                }
+            except AracApiError as exc:
+                logger.warning("get_arac_bus_auto_detail failed: %s", exc)
+                status = _status_from_arac_error(exc, 502)
+                detail_msg = (
+                    str(exc) if status < 500 else "ARAC otomatik detay servisine ulaşılamadı."
+                )
+                raise HTTPException(status, detail=detail_msg) from exc
+
+    return cast(dict[str, Any], await cache_get_or_fetch(key, 30, _fetch, stale_ttl=60))
 
 
 @router.get("/fleet/{kapino}/detail")
+@limiter.limit("30/minute")
 async def get_arac_bus_detail(
     request: Request,
     kapino: str = Path(..., pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,39}$"),
@@ -322,9 +342,14 @@ async def get_arac_bus_detail(
     import json as _json
 
     try:
-        cookies_dict = _json.loads(session_key_raw)
-    except (ValueError, TypeError):
-        raise HTTPException(400, detail="X-Arac-Session-Key is not valid JSON.")
+        parsed = _json.loads(session_key_raw)
+        if not isinstance(parsed, dict) or not all(
+            isinstance(k, str) and isinstance(v, str) for k, v in parsed.items()
+        ):
+            raise ValueError("Cookies must be a flat string-to-string dictionary")
+        cookies_dict: dict[str, str] = parsed
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(400, detail="X-Arac-Session-Key is not valid JSON.") from exc
 
     connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
     async with aiohttp.ClientSession(

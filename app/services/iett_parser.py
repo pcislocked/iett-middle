@@ -34,7 +34,10 @@ def _normalize_kapino(raw: Any) -> str:
 
 def _extract_soap_json(xml_text: str, result_tag: str) -> list[dict[str, Any]]:
     """Extract and JSON-parse the payload embedded inside a SOAP XML element."""
-    root = ET.fromstring(xml_text)
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return []
     el = root.find(f".//{{{_TEMPURI}}}{result_tag}")
     if el is None or not el.text:
         return []
@@ -244,7 +247,10 @@ def parse_route_stops_xml(xml_text: str) -> list[RouteStop]:
     Coordinate fields vary: XKOORDINATI/YKOORDINATI or XKOORT/YKOORT.
     X = longitude, Y = latitude.
     """
-    root = ET.fromstring(xml_text)
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return []
     ns = _TEMPURI
     # Collect Table elements — try ns-prefixed first, then bare
     tables = list(root.iter(f"{{{ns}}}Table")) or list(root.iter("Table"))

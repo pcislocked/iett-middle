@@ -7,10 +7,10 @@ import logging
 import math as _math
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Path, Query, Request
 
 from app.config import settings
-from app.deps import get_plate_by_kapino, get_session, get_stop_info_by_code
+from app.deps import get_plate_by_kapino, get_session, get_stop_info_by_code, limiter
 from app.models.bus import Arrival
 from app.models.route import Announcement
 from app.models.stop import NearbyStop, StopDetail, StopInfo, StopSearchResult
@@ -35,7 +35,7 @@ def _haversine_m(user_lat: float, user_lon: float, stop_lat: float, stop_lon: fl
 
 
 @router.get("/search", response_model=list[StopSearchResult])
-async def search_stops(q: str = Query(..., min_length=2)):
+async def search_stops(q: str = Query(..., min_length=2, max_length=50)):
     """Search for stops by name.
 
     Returns a list of matching stops. Minimum query length is 2 characters.
@@ -152,7 +152,11 @@ async def nearby_stops(
 
 
 @router.get("/{dcode}/arrivals/raw")
-async def get_arrivals_raw(dcode: str):
+@limiter.limit("10/minute")
+async def get_arrivals_raw(
+    request: Request,
+    dcode: str = Path(..., pattern=r"^\d{4,10}$"),
+):
     dcode = dcode.strip()
     """Return the raw HTML from IETT GetStationInfo (Internal/Debug).
     
@@ -174,7 +178,10 @@ async def get_arrivals_raw(dcode: str):
 
 
 @router.get("/{dcode}/arrivals", response_model=list[Arrival])
-async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
+async def get_arrivals(
+    dcode: str = Path(..., pattern=r"^\d{4,10}$"),
+    via: str | None = Query(default=None, pattern=r"^\d{4,10}$"),
+):
     dcode = dcode.strip()
     """Get live bus arrivals (ETAs) for a specific stop.
 
@@ -299,7 +306,7 @@ async def get_arrivals(dcode: str, via: str | None = Query(default=None)):
 
 
 @router.get("/{dcode}/routes", response_model=list[str])
-async def get_routes_at_stop(dcode: str):
+async def get_routes_at_stop(dcode: str = Path(..., pattern=r"^\d{4,10}$")):
     dcode = dcode.strip()
     """Get all routes passing through a stop.
     
@@ -326,7 +333,7 @@ async def get_routes_at_stop(dcode: str):
 
 
 @router.get("/{dcode}", response_model=StopDetail)
-async def get_stop_detail(dcode: str):
+async def get_stop_detail(dcode: str = Path(..., pattern=r"^\d{4,10}$")):
     dcode = dcode.strip()
     """Get basic details for a specific stop.
     
@@ -356,7 +363,7 @@ async def get_stop_detail(dcode: str):
 
 
 @router.get("/{dcode}/announcements", response_model=list[Announcement])
-async def get_stop_announcements(dcode: str):
+async def get_stop_announcements(dcode: str = Path(..., pattern=r"^\d{4,10}$")):
     dcode = dcode.strip()
     """Live traffic and route announcements for a specific stop.
     
@@ -453,13 +460,17 @@ async def get_stop_announcements(dcode: str):
 
 
 @router.get("/{dcode}/info", response_model=StopInfo)
-async def get_stop_info(dcode: str):
+async def get_stop_info(dcode: str = Path(..., pattern=r"^\d{4,10}$")):
     """Scrape stop metadata from iett.istanbul/StationDetail."""
     key = f"stop:info:{dcode}"
 
     async def _fetch():
         client = IettClient(get_session())
-        return await client.scrape_stop_info(dcode)
+        try:
+            return await client.scrape_stop_info(dcode)
+        except IettApiError as exc:
+            logger.warning("scrape_stop_info failed for %s: %s", dcode, exc)
+            raise HTTPException(502, detail="Durak bilgi servisine ulaşılamadı.") from exc
 
     return await cache_get_or_fetch(
         key,
