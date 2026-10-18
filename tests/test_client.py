@@ -134,6 +134,15 @@ class TestGetRouteBuses:
             buses = await client.get_route_buses("500T")
         assert buses[0].nearest_stop == "113333"
 
+    async def test_raises_when_both_json_and_soap_fail(self, client: IettClient) -> None:
+        from app.services.mobiett_client import MOBIETT_SERVICE_URL
+
+        with pytest.raises(IettApiError):
+            with aioresponses() as m:
+                m.post(FLEET_URL, status=500)
+                m.post(MOBIETT_SERVICE_URL, status=500)
+                await client.get_route_buses("500T")
+
 
 class TestGetStopArrivals:
     async def test_returns_arrivals(self, client: IettClient) -> None:
@@ -384,6 +393,16 @@ class TestGetStopDetail:
         assert detail.latitude == 0.0
         assert detail.longitude == 0.0
 
+    async def test_raises_when_both_soap_and_json_fail(self, client: IettClient) -> None:
+        from app.services.mobiett_client import MOBIETT_AUTH_URL, MOBIETT_SERVICE_URL
+
+        with pytest.raises(IettApiError):
+            with aioresponses() as m:
+                m.post(HAT_DURAK_URL, exception=TimeoutError("SOAP down"))
+                m.post(MOBIETT_AUTH_URL, payload={"access_token": "token", "expires_in": 3600})
+                m.post(MOBIETT_SERVICE_URL, status=500)
+                await client.get_stop_detail("220602")
+
 
 class TestGetAllStops:
     async def test_returns_stops(self, client: IettClient) -> None:
@@ -455,3 +474,61 @@ class TestBackdoorGating:
         finally:
             settings.environment = original_env
             settings.allow_test_backdoors = original_backdoor
+
+
+class TestScrapeInfoDirect:
+    async def test_scrape_route_info_success(self, client: IettClient) -> None:
+        import re
+
+        from app.config import settings
+
+        html = """
+        <div class="departure-times-header">
+            <p>HAT BİLGİSİ</p>
+            <p><b>Tek Yön Sefer Süresi:</b> 55 dk</p>
+            <p><b>Hat Tipi:</b> NORMAL</p>
+            <p><b>Tarife Bilgisi:</b> STANDART</p>
+        </div>
+        """
+        with aioresponses() as m:
+            m.get(
+                re.compile(rf"{re.escape(settings.iett_rest_base)}/RouteDetail.*"),
+                body=html,
+            )
+            res = await client.scrape_route_info("500T")
+            assert res["hat_kodu"] == "500T"
+            assert res["trip_duration_min"] == 55
+            assert res["hat_tipi"] == "NORMAL"
+            assert res["tarife"] == "STANDART"
+
+    async def test_scrape_stop_info_success(self, client: IettClient) -> None:
+        import re
+
+        from app.config import settings
+
+        html = """
+        <div id="info">
+            <div class="station-item">
+                <b>İlçe</b>
+                <p>KADIKÖY</p>
+            </div>
+            <div class="station-item">
+                <b>Fiziki Durum</b>
+                <p>KAPALI</p>
+            </div>
+            <div class="station-item">
+                <b>Akıllı Durak</b>
+                <p>VAR</p>
+            </div>
+        </div>
+        """
+        with aioresponses() as m:
+            m.get(
+                re.compile(rf"{re.escape(settings.iett_rest_base)}/StationDetail.*"),
+                body=html,
+            )
+            res = await client.scrape_stop_info("220602")
+            assert res["dcode"] == "220602"
+            assert res["ilce"] == "KADIKÖY"
+            assert res["fiziki_durum"] == "KAPALI"
+            assert res["akilli_durak"] is True

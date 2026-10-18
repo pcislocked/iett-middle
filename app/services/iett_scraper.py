@@ -7,6 +7,7 @@ Results are aggressively cached for 24 hours.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from collections import defaultdict
@@ -23,36 +24,7 @@ logger = logging.getLogger(__name__)
 _CACHE_TTL = 86400
 
 
-async def _fetch_official_footnotes(
-    hat_kodu: str, session: aiohttp.ClientSession
-) -> dict[str, dict[str, dict[str, str]]]:
-    """POST to IETT and parse the scheduled departure HTML.
-
-    Returns mapping:  html_direction_name -> day_type -> "HH:MM" -> note_id
-    Example: {"KÖPRÜBAŞI KALKIŞ": {"H": {"06:10": "-1", ...}}, ...}
-    """
-    url = "https://iett.istanbul/tr/RouteStation/GetScheduledDepartureTimes"
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "X-Requested-With": "XMLHttpRequest",
-    }
-    data = {"hCode": hat_kodu}
-
-    try:
-        async with session.post(
-            url, headers=headers, data=data, timeout=aiohttp.ClientTimeout(total=8)
-        ) as resp:
-            if resp.status != 200:
-                logger.warning("IETT scraper HTTP %s for %s", resp.status, hat_kodu)
-                return {}
-            html = await resp.text()
-    except Exception as exc:
-        logger.warning("IETT scraper network error for %s: %s", hat_kodu, exc)
-        return {}
-
-    if not html or len(html) < 50:
-        return {}
-
+def _parse_footnotes_html(html: str) -> dict[str, dict[str, dict[str, str]]]:
     soup = BeautifulSoup(html, "lxml")
     tables = soup.select("table.line-table")
 
@@ -92,6 +64,39 @@ async def _fetch_official_footnotes(
                         mapping[direction_name][day_type][time_str] = note_id
 
     return {k: {d: dict(t) for d, t in v.items()} for k, v in mapping.items()}
+
+
+async def _fetch_official_footnotes(
+    hat_kodu: str, session: aiohttp.ClientSession
+) -> dict[str, dict[str, dict[str, str]]]:
+    """POST to IETT and parse the scheduled departure HTML.
+
+    Returns mapping:  html_direction_name -> day_type -> "HH:MM" -> note_id
+    Example: {"KÖPRÜBAŞI KALKIŞ": {"H": {"06:10": "-1", ...}}, ...}
+    """
+    url = "https://iett.istanbul/tr/RouteStation/GetScheduledDepartureTimes"
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-Requested-With": "XMLHttpRequest",
+    }
+    data = {"hCode": hat_kodu}
+
+    try:
+        async with session.post(
+            url, headers=headers, data=data, timeout=aiohttp.ClientTimeout(total=8)
+        ) as resp:
+            if resp.status != 200:
+                logger.warning("IETT scraper HTTP %s for %s", resp.status, hat_kodu)
+                return {}
+            html = await resp.text()
+    except Exception as exc:
+        logger.warning("IETT scraper network error for %s: %s", hat_kodu, exc)
+        return {}
+
+    if not html or len(html) < 50:
+        return {}
+
+    return await asyncio.to_thread(_parse_footnotes_html, html)
 
 
 async def get_official_footnotes(
@@ -173,6 +178,57 @@ IETT_BASE_URL = "https://iett.istanbul"
 IETT_ANNOUNCEMENT_URL = "https://iett.istanbul/tr/Announcement"
 
 
+def _parse_official_announcements_html(html: str, page: int) -> dict[str, Any]:
+    soup = BeautifulSoup(html, "html.parser")
+
+    # Check total items input if present
+    total_items = 0
+    total_el = soup.select_one("input#totalItems")
+    if total_el and total_el.get("value"):
+        try:
+            total_items = int(str(total_el["value"]))
+        except ValueError:
+            total_items = 0
+
+    items: list[dict[str, str]] = []
+    for a in soup.select("a.mini-news-row"):
+        href = str(a.get("href", "")).strip()
+        date_el = a.select_one(".date")
+        info_el = a.select_one(".info")
+
+        title = info_el.get_text(strip=True) if info_el else ""
+        date_str = date_el.get_text(strip=True) if date_el else ""
+        item_id = href.rstrip("/").split("/")[-1] if "/" in href else href
+
+        if href.startswith("/"):
+            url = f"{IETT_BASE_URL}{href}"
+        elif href.startswith(("https://", "http://")):
+            url = href
+        elif href and not href.lower().startswith(("javascript:", "data:", "vbscript:")):
+            url = f"{IETT_BASE_URL}/{href}"
+        else:
+            url = IETT_BASE_URL
+
+        if title or date_str:
+            items.append(
+                {
+                    "id": item_id,
+                    "title": title,
+                    "date": date_str,
+                    "url": url,
+                }
+            )
+
+    if total_items == 0 and items:
+        total_items = len(items)
+
+    return {
+        "page": page,
+        "total_items": total_items,
+        "items": items,
+    }
+
+
 async def fetch_official_announcements(
     page: int = 0,
     session: aiohttp.ClientSession | None = None,
@@ -210,54 +266,7 @@ async def fetch_official_announcements(
                 return {"page": page, "total_items": 0, "items": []}
             html = await resp.text()
 
-        soup = BeautifulSoup(html, "html.parser")
-
-        # Check total items input if present
-        total_items = 0
-        total_el = soup.select_one("input#totalItems")
-        if total_el and total_el.get("value"):
-            try:
-                total_items = int(str(total_el["value"]))
-            except ValueError:
-                total_items = 0
-
-        items: list[dict[str, str]] = []
-        for a in soup.select("a.mini-news-row"):
-            href = str(a.get("href", "")).strip()
-            date_el = a.select_one(".date")
-            info_el = a.select_one(".info")
-
-            title = info_el.get_text(strip=True) if info_el else ""
-            date_str = date_el.get_text(strip=True) if date_el else ""
-            item_id = href.rstrip("/").split("/")[-1] if "/" in href else href
-
-            if href.startswith("/"):
-                url = f"{IETT_BASE_URL}{href}"
-            elif href.startswith(("https://", "http://")):
-                url = href
-            elif href and not href.lower().startswith(("javascript:", "data:", "vbscript:")):
-                url = f"{IETT_BASE_URL}/{href}"
-            else:
-                url = IETT_BASE_URL
-
-            if title or date_str:
-                items.append(
-                    {
-                        "id": item_id,
-                        "title": title,
-                        "date": date_str,
-                        "url": url,
-                    }
-                )
-
-        if total_items == 0 and items:
-            total_items = len(items)
-
-        return {
-            "page": page,
-            "total_items": total_items,
-            "items": items,
-        }
+        return await asyncio.to_thread(_parse_official_announcements_html, html, page)
     except Exception as exc:
         logger.warning("Failed to fetch/parse official announcements: %s", exc)
         return {"page": page, "total_items": 0, "items": []}

@@ -307,10 +307,22 @@ async def sweep_forever(interval: float = 60.0) -> None:
 
 def get_cache_stats() -> dict[str, Any]:
     now = time.monotonic()
-    active = sum(1 for _, (_, _, s_exp, _) in _store.items() if now < s_exp)
+    store_items: list[tuple[Any, ...]] = []
+    hits_copy: dict[str, int] = {}
+    misses_copy: dict[str, int] = {}
+    for _ in range(3):
+        try:
+            store_items = list(_store.values())
+            hits_copy = dict(_hits)
+            misses_copy = dict(_misses)
+            break
+        except RuntimeError:
+            continue
+
+    active = sum(1 for entry in store_items if len(entry) >= 3 and now < entry[2])
     return {
         "active_keys": active,
-        "total_keys": len(_store),
-        "hits": dict(_hits),
-        "misses": dict(_misses),
+        "total_keys": len(store_items),
+        "hits": hits_copy,
+        "misses": misses_copy,
     }

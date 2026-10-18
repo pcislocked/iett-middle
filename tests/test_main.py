@@ -40,6 +40,19 @@ class TestEndpoints:
         assert body["service"] == "iett-middle"
         assert "docs" in body
 
+    def test_lifespan_startup_and_shutdown(self) -> None:
+        from unittest.mock import AsyncMock, patch
+
+        with (
+            patch("app.services.stop_indexer.index_stops_forever", AsyncMock()),
+            patch("app.services.cache.sweep_forever", AsyncMock()),
+            patch("app.services.notice_poller.notice_poll_loop", AsyncMock()),
+            patch("app.services.fleet_poller.refresh_fleet_forever", AsyncMock()),
+            TestClient(app) as tc,
+        ):
+            resp = tc.get("/health")
+            assert resp.status_code == 200
+
 
 # ---------------------------------------------------------------------------
 # _make_trace_config

@@ -1969,3 +1969,137 @@ class TestStopAnnouncements:
         assert len(data) == 2
         assert "Global Only" in [d["message"] for d in data]
         assert "Local Only" in [d["message"] for d in data]
+
+
+class TestAracAutoDetailAndSuggest:
+    def test_suggest_vehicles_upstream_success(self, client: TestClient) -> None:
+        mock_arac = MagicMock()
+        mock_arac._post_json = AsyncMock(
+            return_value={
+                "isSuccess": True,
+                "data": [
+                    {"doorNumber": "C-1234", "plate": "34 HO 1234"},
+                    {"doorNumber": "C-1235", "plate": "34 HO 1235"},
+                ],
+            }
+        )
+        with patch("app.routers.arac.AracClient", return_value=mock_arac):
+            resp = client.get("/v1/arac/suggest?q=123")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 2
+        assert data[0]["doorNumber"] == "C-1234"
+
+    def test_suggest_vehicles_fallback_to_cache(self, client: TestClient) -> None:
+        from app.services.arac_client import AracApiError
+
+        mock_arac = MagicMock()
+        mock_arac._post_json = AsyncMock(side_effect=AracApiError("network error", status_code=502))
+        with (
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+            patch(
+                "app.services.vehicle_cache.search_vehicles",
+                return_value=[{"door_number": "A-100", "plate": "34 ABC 100"}],
+            ),
+        ):
+            resp = client.get("/v1/arac/suggest?q=A-100")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["doorNumber"] == "A-100"
+
+    def test_auto_detail_success(self, client: TestClient) -> None:
+        from app.services.cache import _store
+
+        _store.pop("arac:autodetail:M-9999", None)
+        mock_arac = MagicMock()
+        mock_arac.get_captcha = AsyncMock(
+            return_value={"captchaImage": "data:image/png;base64,abc"}
+        )
+        mock_arac.get_vehicle_hash = AsyncMock(return_value="dyn_hash_99")
+        mock_arac.submit_captcha = AsyncMock(return_value=True)
+        mock_arac.get_detail = AsyncMock(
+            return_value={
+                "isSuccess": True,
+                "dataVehicle": {
+                    "vehicleDoorCode": "M-9999",
+                    "numberPlate": "34 HO 9999",
+                    "latitude": 41.05,
+                    "longitude": 28.98,
+                },
+                "dataTask": [
+                    {"lineCode": "500T", "state": "T"},
+                    {"lineCode": "500T", "state": "B"},
+                ],
+            }
+        )
+        with (
+            patch("app.routers.arac.AracClient") as mock_arac_cls,
+            patch("app.routers.arac.solve_captcha_image", return_value="12345"),
+        ):
+            from app.services.arac_client import AracClient as RealAracClient
+
+            mock_arac_cls.return_value = mock_arac
+            mock_arac_cls.normalize_bus_position = RealAracClient.normalize_bus_position
+            mock_arac_cls.normalize_missions = RealAracClient.normalize_missions
+            resp = client.get("/v1/arac/fleet/M-9999/auto-detail")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["profile"]["kapino"] == "M-9999"
+        assert body["profile"]["route_code"] == "500T"
+        assert body["missions"]["summary"]["completed_count"] == 1
+        assert body["missions"]["summary"]["pending_count"] == 1
+
+    def test_auto_detail_captcha_solve_failure(self, client: TestClient) -> None:
+        from app.services.cache import _store
+
+        _store.pop("arac:autodetail:M-9998", None)
+        mock_arac = MagicMock()
+        mock_arac.get_captcha = AsyncMock(return_value={"captchaImage": "fake_base64"})
+        with (
+            patch("app.routers.arac.AracClient", return_value=mock_arac),
+            patch("app.routers.arac.solve_captcha_image", return_value=None),
+        ):
+            resp = client.get("/v1/arac/fleet/M-9998/auto-detail")
+        assert resp.status_code == 502
+        assert "solve failed" in resp.json()["detail"].lower()
+
+
+class TestRoutesInfoAndFanout:
+    def test_200_returns_route_info(self, client: TestClient) -> None:
+        from app.services.cache import _store
+
+        _store.pop("route:info:500T", None)
+        mock_client = MagicMock()
+        mock_client.scrape_route_info = AsyncMock(
+            return_value={
+                "hat_kodu": "500T",
+                "trip_duration_min": 120,
+                "hat_tipi": "EKSPRES",
+                "tarife": "ÇİFT BİLET",
+                "details": ["GİDİŞ: 55 KM"],
+            }
+        )
+        with (
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
+            patch("app.routers.routes.IettClient", return_value=mock_client),
+        ):
+            resp = client.get("/v1/routes/500T/info")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["hat_kodu"] == "500T"
+        assert data["trip_duration_min"] == 120
+
+    def test_502_when_scrape_fails(self, client: TestClient) -> None:
+        from app.services.cache import _store
+        from app.services.iett_client import IettApiError
+
+        _store.pop("route:info:INVALID_ROUTE", None)
+        mock_client = MagicMock()
+        mock_client.scrape_route_info = AsyncMock(side_effect=IettApiError("scraping failed"))
+        with (
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
+            patch("app.routers.routes.IettClient", return_value=mock_client),
+        ):
+            resp = client.get("/v1/routes/INVALID_ROUTE/info")
+        assert resp.status_code == 502

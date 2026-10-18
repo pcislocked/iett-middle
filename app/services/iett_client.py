@@ -59,6 +59,79 @@ def _is_test_mode() -> bool:
     return settings.environment == "development" or getattr(settings, "allow_test_backdoors", False)
 
 
+def _parse_route_info_html(html: str, hat_kodu: str) -> dict[str, Any]:
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html, "html.parser")
+    info: dict[str, Any] = {
+        "hat_kodu": hat_kodu,
+        "trip_duration_min": None,
+        "hat_tipi": None,
+        "tarife": None,
+        "details": [],
+    }
+
+    headers = soup.find_all("div", class_="departure-times-header")
+    for header in headers:
+        header_text = header.get_text()
+        if "HAT BİLGİSİ" not in header_text and "Hat Tipi" not in header_text:
+            continue
+
+        for p_tag in header.find_all("p"):
+            text = p_tag.get_text(separator=" ", strip=True)
+            if text:
+                info["details"].append(text.replace(" :", ":").replace(" : ", ": "))
+
+            b_tag = p_tag.find("b")
+            if not b_tag:
+                continue
+            key = b_tag.get_text(strip=True).replace(":", "")
+            val = b_tag.next_sibling
+            if val and isinstance(val, str):
+                val = val.strip()
+                if "Tek Yön Sefer Süresi" in key or "Tek yön sefer süresi" in key:
+                    try:
+                        info["trip_duration_min"] = int(val.split()[0])
+                    except Exception:
+                        pass
+                elif "Hat Tipi" in key:
+                    info["hat_tipi"] = val
+                elif "Tarife Bilgisi" in key:
+                    info["tarife"] = val
+        break
+
+    return info
+
+
+def _parse_stop_info_html(html: str, dcode: str) -> dict[str, Any]:
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html, "html.parser")
+    info: dict[str, Any] = {
+        "dcode": dcode,
+        "ilce": None,
+        "fiziki_durum": None,
+        "akilli_durak": None,
+    }
+
+    tab = soup.find(id="info")
+    if tab:
+        items = tab.find_all("div", class_="station-item")
+        for item in items:
+            b_tag = item.find("b")
+            p_tag = item.find("p")
+            if b_tag and p_tag:
+                key = b_tag.get_text(strip=True)
+                val = p_tag.get_text(strip=True)
+                if "İlçe" in key:
+                    info["ilce"] = val
+                elif "Fiziki Durum" in key:
+                    info["fiziki_durum"] = val
+                elif "Akıllı Durak" in key:
+                    info["akilli_durak"] = val == "VAR"
+    return info
+
+
 class IettClient:
     def __init__(self, session: aiohttp.ClientSession) -> None:
         self._session = session
@@ -269,7 +342,7 @@ class IettClient:
             f"{settings.iett_rest_base}/tr/RouteStation/GetStationInfo",
             params={"dcode": dcode, "langid": "1"},
         )
-        return parse_stop_arrivals_html(html)
+        return await asyncio.to_thread(parse_stop_arrivals_html, html)
 
     async def get_routes_at_stop(self, dcode: str) -> set[str]:
         """Routes passing through a stop."""
@@ -279,7 +352,7 @@ class IettClient:
             f"{settings.iett_rest_base}/tr/RouteStation/GetRouteByStation",
             params={"dcode": dcode, "langid": "1"},
         )
-        return parse_routes_from_html(html)
+        return await asyncio.to_thread(parse_routes_from_html, html)
 
     async def get_stop_arrivals_via(self, dcode_origin: str, dcode_via: str) -> list[Arrival]:
         """Arrivals at origin that will also pass through via stop."""
@@ -474,7 +547,7 @@ class IettClient:
             f"{settings.iett_rest_base}/tr/RouteStation/GetStationForRoute",
             params={"hatkod": hat_kodu, "hatstart": "X", "hatend": "Y", "langid": "1"},
         )
-        raw = parse_route_stops_html(html, hat_kodu)
+        raw = await asyncio.to_thread(parse_route_stops_html, html, hat_kodu)
         result: list[RouteStop] = []
         for s in raw:
             coords = get_stop_coords(s["stop_code"])
@@ -511,62 +584,21 @@ class IettClient:
         return announcements
 
     async def scrape_route_info(self, hat_kodu: str) -> dict[str, Any]:
-        """Scrapes gidis, donus, and details from iett.istanbul/RouteDetail"""
-        if _is_test_mode() and str(hat_kodu) == "31AMK":
+        """Scrapes 'Tek Yön Sefer Süresi', 'Hat Tipi', etc. from iett.istanbul/RouteDetail."""
+        if _is_test_mode() and str(hat_kodu).upper() in ("31AMK", "TEST"):
             return {
-                "hat_kodu": "31AMK",
-                "gidis": "TEST GİDİŞ",
-                "donus": "TEST DÖNÜŞ",
+                "hat_kodu": hat_kodu,
+                "trip_duration_min": 45,
+                "hat_tipi": "NORMAL",
+                "tarife": "STANDART",
                 "details": ["TEST ARACI"],
             }
-        from bs4 import BeautifulSoup
 
         html = await self._get_text(
             f"{settings.iett_rest_base}/RouteDetail",
             params={"hkod": hat_kodu},
         )
-
-        soup = BeautifulSoup(html, "html.parser")
-        info = {
-            "hat_kodu": hat_kodu,
-            "trip_duration_min": None,
-            "hat_tipi": None,
-            "tarife": None,
-            "details": [],
-        }
-
-        headers = soup.find_all("div", class_="departure-times-header")
-
-        for header in headers:
-            # We want the one that has "HAT BİLGİSİ"
-            header_text = header.get_text()
-            if "HAT BİLGİSİ" not in header_text and "Hat Tipi" not in header_text:
-                continue
-
-            for p_tag in header.find_all("p"):
-                text = p_tag.get_text(separator=" ", strip=True)
-                if text:
-                    info["details"].append(text.replace(" :", ":").replace(" : ", ": "))
-
-                b_tag = p_tag.find("b")
-                if not b_tag:
-                    continue
-                key = b_tag.get_text(strip=True).replace(":", "")
-                val = b_tag.next_sibling
-                if val and isinstance(val, str):
-                    val = val.strip()
-                    if "Tek Yön Sefer Süresi" in key or "Tek yön sefer süresi" in key:
-                        try:
-                            info["trip_duration_min"] = int(val.split()[0])
-                        except Exception:
-                            pass
-                    elif "Hat Tipi" in key:
-                        info["hat_tipi"] = val
-                    elif "Tarife Bilgisi" in key:
-                        info["tarife"] = val
-            break
-
-        return info
+        return await asyncio.to_thread(_parse_route_info_html, html, hat_kodu)
 
     async def scrape_stop_info(self, dcode: str) -> dict[str, Any]:
         """Scrapes 'İlçe', 'Fiziki Durum', 'Akıllı Durak' from iett.istanbul/StationDetail."""
@@ -577,34 +609,9 @@ class IettClient:
                 "fiziki_durum": "MÜKEMMEL",
                 "akilli_durak": True,
             }
-        from bs4 import BeautifulSoup
 
         html = await self._get_text(
             f"{settings.iett_rest_base}/StationDetail",
             params={"dkod": dcode},
         )
-
-        soup = BeautifulSoup(html, "html.parser")
-        info = {
-            "dcode": dcode,
-            "ilce": None,
-            "fiziki_durum": None,
-            "akilli_durak": None,
-        }
-
-        tab = soup.find(id="info")
-        if tab:
-            items = tab.find_all("div", class_="station-item")
-            for item in items:
-                b_tag = item.find("b")
-                p_tag = item.find("p")
-                if b_tag and p_tag:
-                    key = b_tag.get_text(strip=True)
-                    val = p_tag.get_text(strip=True)
-                    if "İlçe" in key:
-                        info["ilce"] = val
-                    elif "Fiziki Durum" in key:
-                        info["fiziki_durum"] = val
-                    elif "Akıllı Durak" in key:
-                        info["akilli_durak"] = val == "VAR"
-        return info
+        return await asyncio.to_thread(_parse_stop_info_html, html, dcode)
