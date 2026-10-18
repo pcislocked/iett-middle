@@ -529,9 +529,11 @@ def parse_route_metadata_json(raw: list[Any] | dict[str, Any]) -> list[dict[str,
     results: list[dict[str, Any]] = []
     for r in raw:
         try:
+            raw_dn = (r.get("GUZERGAH_GUZERGAH_ADI") or "").strip()
+            direction_name = re.sub(r"\s+", " ", re.sub(r"\s*-\s*", " - ", raw_dn)).strip()
             results.append(
                 {
-                    "direction_name": (r.get("GUZERGAH_GUZERGAH_ADI") or "").strip(),
+                    "direction_name": direction_name,
                     "full_name": (r.get("GUZERGAH_ADI") or "").strip(),
                     "variant_code": r.get("GUZERGAH_GUZERGAH_KODU") or "",
                     "direction": int(r.get("GUZERGAH_YON") or 0),

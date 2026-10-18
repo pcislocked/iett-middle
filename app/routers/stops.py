@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math as _math
+import re
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Path, Query, Request
@@ -203,13 +204,17 @@ async def get_arrivals(
             raw_items = await ntcapi_client.get_stop_arrivals(dcode, session)
             canonical = [normalizers.arrivals.from_ntcapi_ybs(r) for r in raw_items]
 
-            # Enrich empty destinations via route search fallback
+            # Enrich empty or incomplete destinations via route search fallback
             # Resolve missing destinations per-route to avoid cache stampede
             missing_routes = list(
                 {
                     a["route_code"]  # type: ignore
                     for a in canonical
-                    if not a.get("destination") and a.get("route_code")
+                    if (
+                        not a.get("destination")
+                        or normalizers.arrivals.is_destination_incomplete(a.get("destination"))
+                    )
+                    and a.get("route_code")
                 }
             )
             route_names: dict[str, str] = {}
@@ -220,7 +225,7 @@ async def get_arrivals(
                     res = await client.search_routes(rc)
                     for r in res:
                         if r.hat_kodu.upper() == rc.upper():
-                            return r.name
+                            return normalizers.arrivals.clean_destination(r.name)
                     return ""
 
                 try:
@@ -238,8 +243,20 @@ async def get_arrivals(
             if missing_routes:
                 await asyncio.gather(*[_resolve_route(rc) for rc in missing_routes])
                 for a in canonical:
-                    if not a.get("destination") and a.get("route_code") in route_names:
-                        a["destination"] = route_names[a["route_code"]]  # type: ignore
+                    dest = a.get("destination")
+                    if (
+                        not dest
+                        or normalizers.arrivals.is_destination_incomplete(dest)
+                    ) and a.get("route_code") in route_names:
+                        enriched = route_names[a["route_code"]]
+                        if enriched:
+                            a["destination"] = enriched  # type: ignore
+
+            # If any incomplete destinations could not be enriched, strip trailing/leading hyphens
+            for a in canonical:
+                d = a.get("destination")
+                if d and normalizers.arrivals.is_destination_incomplete(d):
+                    a["destination"] = re.sub(r"^[\s-]+|[\s-]+$", "", d).strip()  # type: ignore
 
             canonical.sort(
                 key=lambda a: (  # type: ignore

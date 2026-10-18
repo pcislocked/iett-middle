@@ -13,6 +13,46 @@ from typing import Any
 from app.models.canonical import Amenities, CanonicalArrival
 
 
+def clean_destination(raw: Any) -> str:
+    """Normalize destination string: collapse multiple whitespace, standardize ' - ' separator.
+
+    Examples:
+        "VADİ -  TAKSİM" -> "VADİ - TAKSİM"
+        "VADİ -" -> "VADİ -"
+        "- TAKSİM" -> "- TAKSİM"
+        " - " -> ""
+    """
+    if not raw:
+        return ""
+    s = re.sub(r"\s+", " ", str(raw)).strip()
+    if not s or s == "-":
+        return ""
+    s = re.sub(r"\s*-\s*", " - ", s).strip()
+    if s == "-":
+        return ""
+    return s
+
+
+def is_destination_incomplete(raw: Any) -> bool:
+    """Return True if destination is empty, only hyphens, or has trailing/leading hyphens (truncated).
+
+    Examples:
+        "" -> True
+        "VADİ -" -> True
+        "- TAKSİM" -> True
+        "VADİ" -> False (single-segment destination is valid)
+        "VADİ - TAKSİM" -> False
+    """
+    if not raw:
+        return True
+    s = str(raw).strip()
+    if not s or s == "-":
+        return True
+    if s.endswith("-") or s.startswith("-"):
+        return True
+    return False
+
+
 def from_ntcapi_ybs(item: dict[str, Any]) -> CanonicalArrival:
     """Normalise one record from the ntcapi ``ybs`` stop-arrivals response.
 
@@ -31,7 +71,7 @@ def from_ntcapi_ybs(item: dict[str, Any]) -> CanonicalArrival:
     lat, lon = _parse_son_konum(item.get("son_konum"))
     return CanonicalArrival(
         route_code=str(item.get("hatkodu") or ""),
-        destination=str(item.get("hattip") or item.get("hatadi") or ""),
+        destination=clean_destination(item.get("hattip") or item.get("hatadi") or ""),
         eta_minutes=_safe_int(item.get("dakika")),
         eta_raw=str(item.get("saat") or ""),
         kapino=_normalize_kapino(item.get("kapino")),
@@ -59,7 +99,7 @@ def from_iett_html(item: dict[str, Any]) -> CanonicalArrival:
     """
     return CanonicalArrival(
         route_code=str(item.get("route_code") or ""),
-        destination=str(item.get("destination") or ""),
+        destination=clean_destination(item.get("destination") or ""),
         eta_minutes=item.get("eta_minutes"),
         eta_raw=str(item.get("eta_raw") or ""),
         kapino=_normalize_kapino(item.get("kapino")),
