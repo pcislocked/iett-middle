@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 import aiohttp
 
 from app.config import settings
+from app.services.normalizers.plate import normalize_plate
 from app.utils.lock import LazyLock
 
 if TYPE_CHECKING:
@@ -178,7 +179,7 @@ async def get_bus_location(
     item = raw[0]
     return {
         "kapino": item.get("K_ARAC_KAPINUMARASI"),
-        "plate": item.get("K_ARAC_PLAKA"),
+        "plate": normalize_plate(item.get("K_ARAC_PLAKA")),
         "lat": item.get("H_OTOBUSKONUM_ENLEM"),
         "lon": item.get("H_OTOBUSKONUM_BOYLAM"),
         "speed": item.get("H_OTOBUSKONUM_HIZ"),
