@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.9.4] - 2026-10-19
+### Refactored & Type Safety
+- **Zero Suppression Strict Typing:** Eliminated all `# type: ignore` suppressions across entire backend (`app/` and `tests/`), making the codebase 100% strictly typed under Pyright and Ruff.
+- **Generic Cache Helper:** Made `cache_get_or_fetch` generic over `TypeVar("T")`, ensuring return types propagate cleanly to callers without implicit `Any` conversions.
+- **Pydantic v2 Hydration:** Replaced dictionary unpacking with `model_validate` and `model_copy` across stop arrivals, route stops, and announcement routers.
+- **Aiohttp Trace Protocol:** Explicitly typed `SimpleNamespace` context parameters for request tracing hooks.
+- **Version Synchronized:** Bumped version to `0.4.9.4` in sync with `iett-pwa`.
+
+---
+
 ## [0.4.9.2] - 2026-10-18
 ### Fixed & Hardened
 - **CI/CD Action Versions & Caching:** Upgraded GitHub Actions to valid stable versions (`checkout@v4`, `setup-python@v5`), scoped concurrency cancellation to preserve tag builds, and enabled `cache-to: type=gha,mode=max` in Docker workflows.
