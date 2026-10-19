@@ -6,7 +6,7 @@ import asyncio
 import contextvars
 import logging
 import time
-from typing import Any, Awaitable, Callable, Union
+from typing import Any, Awaitable, Callable, TypeVar, Union
 
 from app.config import settings
 from app.utils.lock import LazyLock
@@ -132,13 +132,16 @@ class SkipCache(Exception):
 _bg_tasks: set[asyncio.Task] = set()
 
 
+T = TypeVar("T")
+
+
 async def cache_get_or_fetch(
     key: str,
     ttl: int,
-    fetcher: Callable[[], Awaitable[Any]],
+    fetcher: Callable[[], Awaitable[T]],
     stale_ttl: int = 0,
     jitter: bool = False,
-) -> Any | None:
+) -> T:
     """Fetch a value from cache, or execute the fetcher if missing/expired.
 
     Prevents cache stampedes by ensuring only one concurrent fetcher runs per key.

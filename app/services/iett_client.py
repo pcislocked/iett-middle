@@ -266,13 +266,13 @@ class IettClient:
 
         buses: dict[str, BusPosition] = {}
 
-        if not isinstance(json_res, Exception):
-            for b in json_res:  # type: ignore
+        if isinstance(json_res, list):
+            for b in json_res:
                 if b.kapino:
                     buses[b.kapino] = b
 
-        if not isinstance(soap_res, Exception):
-            for b in soap_res:  # type: ignore
+        if isinstance(soap_res, list):
+            for b in soap_res:
                 if not b.kapino:
                     continue
                 if b.kapino in buses:
@@ -427,26 +427,28 @@ class IettClient:
         soap_res = results[0]
         json_res = results[1]
 
-        soap_valid = not isinstance(soap_res, Exception) and soap_res
-        json_valid = not isinstance(json_res, Exception) and json_res
+        soap_valid = isinstance(soap_res, StopDetail)
+        json_valid = isinstance(json_res, StopDetail)
 
-        detail = None
+        detail: StopDetail | None = None
         if soap_valid and json_valid:
-            soap_has_coords = soap_res.latitude not in (  # type: ignore
+            assert isinstance(soap_res, StopDetail)
+            assert isinstance(json_res, StopDetail)
+            soap_has_coords = soap_res.latitude not in (
                 None,
                 0.0,
-            ) and soap_res.longitude not in (None, 0.0)  # type: ignore
-            json_has_coords = json_res.latitude not in (  # type: ignore
+            ) and soap_res.longitude not in (None, 0.0)
+            json_has_coords = json_res.latitude not in (
                 None,
                 0.0,
-            ) and json_res.longitude not in (None, 0.0)  # type: ignore
+            ) and json_res.longitude not in (None, 0.0)
             if json_has_coords and not soap_has_coords:
                 detail = json_res
             else:
                 detail = soap_res
-        elif soap_valid:
+        elif soap_valid and isinstance(soap_res, StopDetail):
             detail = soap_res
-        elif json_valid:
+        elif json_valid and isinstance(json_res, StopDetail):
             detail = json_res
 
         if isinstance(json_res, Exception) and isinstance(soap_res, Exception):
@@ -454,14 +456,12 @@ class IettClient:
             raise IettApiError(f"Both SOAP and JSON failed for stop {dcode}") from json_res
 
         if detail is not None and (
-            detail.latitude in (None, 0.0) or detail.longitude in (None, 0.0)  # type: ignore
+            detail.latitude in (None, 0.0) or detail.longitude in (None, 0.0)
         ):
             coords = get_stop_coords(dcode)
             if coords:
-                detail = detail.model_copy(  # type: ignore
-                    update={"latitude": coords[0], "longitude": coords[1]}
-                )
-        return detail  # type: ignore
+                detail = detail.model_copy(update={"latitude": coords[0], "longitude": coords[1]})
+        return detail
 
     async def get_all_stops(self) -> list[NearbyStop]:
         """All ~15 k IETT stops with coordinates (GetDurak_json, empty DurakKodu)."""

@@ -71,7 +71,7 @@ class TestOsrmRoute:
             ]
         }
         with aioresponses() as m:
-            m.get(url, payload=payload)  # type: ignore[reportUnknownMemberType]
+            m.get(url, payload=payload)
             result = await osrm_route(session, 29.0, 41.0, 29.01, 41.01)
 
         assert result is not None
@@ -86,7 +86,7 @@ class TestOsrmRoute:
 
         url = f"{settings.osrm_base}/route/v1/driving/29.0,41.0;29.01,41.01?overview=full&geometries=geojson"
         with aioresponses() as m:
-            m.get(url, status=503)  # type: ignore[reportUnknownMemberType]
+            m.get(url, status=503)
             result = await osrm_route(session, 29.0, 41.0, 29.01, 41.01)
 
         assert result is None
@@ -96,7 +96,7 @@ class TestOsrmRoute:
 
         url = f"{settings.osrm_base}/route/v1/driving/29.0,41.0;29.01,41.01?overview=full&geometries=geojson"
         with aioresponses() as m:
-            m.get(url, exception=ConnectionError("OSRM unreachable"))  # type: ignore[reportUnknownMemberType]
+            m.get(url, exception=ConnectionError("OSRM unreachable"))
             result = await osrm_route(session, 29.0, 41.0, 29.01, 41.01)
 
         assert result is None

@@ -34,7 +34,7 @@ from app.services.ntcapi_client import NtcApiError
 _NTCAPI_DOWN = AsyncMock(side_effect=NtcApiError("test: ntcapi unavailable"))
 
 
-def _bus(kapino: str = "A-001", route_code: str = "500T") -> dict[str, Any]:
+def _bus(kapino: str = "A-001", route_code: str | None = "500T") -> dict[str, Any]:
     return {
         "kapino": kapino,
         "plate": "34 HO 1000",
@@ -268,7 +268,7 @@ class TestFleetDetailRouter:
 
     def test_200_parked_bus_uses_last_known_route(self, client: TestClient) -> None:
         """Bus with null live route_code falls back to _kapino_last_route."""
-        bus = _bus("A-001", None)  # type: ignore[arg-type]
+        bus = _bus("A-001", None)
         with (
             patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),
@@ -318,8 +318,8 @@ class TestFleetDetailRouter:
         assert resp.json()["route_stops"] == cached_stops
 
     def test_200_no_route_code_returns_empty_stops(self, client: TestClient) -> None:
-        """Bus with no live or last-known route_code â†’ route_stops is empty, route_is_live False."""
-        bus = _bus("A-001", None)  # type: ignore[arg-type]
+        """Bus with no live or last-known route_code → route_stops is empty, route_is_live False."""
+        bus = _bus("A-001", None)
         with (
             patch("app.routers.fleet.ensure_fleet_fresh", AsyncMock()),
             patch("app.routers.fleet.get_fleet_snapshot", return_value=[bus]),

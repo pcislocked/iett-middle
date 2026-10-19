@@ -6,6 +6,8 @@ import logging
 import sys
 import time
 from contextlib import asynccontextmanager
+from types import SimpleNamespace
+from typing import Any, cast
 
 import aiohttp
 from fastapi import FastAPI, Request
@@ -28,10 +30,10 @@ _outgoing.setLevel(logging.INFO)
 
 async def _on_request_start(
     session: aiohttp.ClientSession,
-    ctx: aiohttp.TraceRequestStartParams,  # type: ignore[name-defined]
+    ctx: SimpleNamespace,
     params: aiohttp.TraceRequestStartParams,
 ) -> None:
-    ctx.start_ts = time.monotonic()  # type: ignore[attr-defined]
+    ctx.start_ts = time.monotonic()
     action = params.headers.get("SOAPAction", "")
     suffix = f"  {action}" if action else ""
     _outgoing.info("\033[36m→\033[0m %s %s%s", params.method, params.url, suffix)
@@ -39,10 +41,10 @@ async def _on_request_start(
 
 async def _on_request_end(
     session: aiohttp.ClientSession,
-    ctx: aiohttp.TraceRequestEndParams,  # type: ignore[name-defined]
+    ctx: SimpleNamespace,
     params: aiohttp.TraceRequestEndParams,
 ) -> None:
-    elapsed_ms = (time.monotonic() - ctx.start_ts) * 1000  # type: ignore[attr-defined]
+    elapsed_ms = (time.monotonic() - getattr(ctx, "start_ts", time.monotonic())) * 1000
     status = params.response.status
     size_kb = params.response.content_length
     size_str = f" {size_kb / 1024:.1f}kb" if size_kb else ""
@@ -59,7 +61,7 @@ async def _on_request_end(
 
 async def _on_request_exception(
     session: aiohttp.ClientSession,
-    ctx: aiohttp.TraceRequestExceptionParams,  # type: ignore[name-defined]
+    ctx: SimpleNamespace,
     params: aiohttp.TraceRequestExceptionParams,
 ) -> None:
     elapsed_ms = (time.monotonic() - getattr(ctx, "start_ts", time.monotonic())) * 1000
@@ -74,9 +76,9 @@ async def _on_request_exception(
 
 def _make_trace_config() -> aiohttp.TraceConfig:
     tc = aiohttp.TraceConfig()
-    tc.on_request_start.append(_on_request_start)  # type: ignore[arg-type]
-    tc.on_request_end.append(_on_request_end)  # type: ignore[arg-type]
-    tc.on_request_exception.append(_on_request_exception)  # type: ignore[arg-type]
+    cast(list[Any], tc.on_request_start).append(_on_request_start)
+    cast(list[Any], tc.on_request_end).append(_on_request_end)
+    cast(list[Any], tc.on_request_exception).append(_on_request_exception)
     return tc
 
 

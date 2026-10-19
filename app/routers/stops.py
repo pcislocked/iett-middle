@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Path, Query, Request
 from app.config import settings
 from app.deps import get_plate_by_kapino, get_session, get_stop_info_by_code, limiter
 from app.models.bus import Arrival
+from app.models.canonical import CanonicalArrival
 from app.models.route import Announcement
 from app.models.stop import NearbyStop, StopDetail, StopInfo, StopSearchResult
 from app.services import normalizers, ntcapi_client
@@ -101,10 +102,14 @@ async def nearby_stops(
         canonical = [normalizers.stops.from_ntcapi_nearby_processed(r) for r in raw_stops]
         nearby_results: list[NearbyStop] = []
         for c in canonical:
+            lat_raw = c.get("lat")
+            lon_raw = c.get("lon")
+            if lat_raw is None or lon_raw is None:
+                continue
             try:
-                latitude = float(c["lat"])  # type: ignore[arg-type]
-                longitude = float(c["lon"])  # type: ignore[arg-type]
-            except (KeyError, TypeError, ValueError):
+                latitude = float(lat_raw)
+                longitude = float(lon_raw)
+            except (TypeError, ValueError):
                 logger.warning(
                     "Skipping nearby stop with invalid coordinates: %s",
                     c.get("stop_code"),
@@ -116,6 +121,13 @@ async def nearby_stops(
             if not stop_code.isdigit() or len(stop_code) < 4:
                 continue
 
+            dist_raw = c.get("distance_m")
+            distance_m = (
+                float(dist_raw)
+                if dist_raw is not None
+                else _haversine_m(lat, lon, latitude, longitude)
+            )
+
             nearby_results.append(
                 NearbyStop(
                     stop_code=stop_code,
@@ -124,9 +136,7 @@ async def nearby_stops(
                     longitude=longitude,
                     district=c.get("district"),
                     direction=c.get("direction"),
-                    distance_m=c.get("distance_m")  # type: ignore
-                    if c.get("distance_m") is not None
-                    else _haversine_m(lat, lon, latitude, longitude),
+                    distance_m=distance_m,
                 )
             )
 
@@ -209,13 +219,13 @@ async def get_arrivals(
             # Resolve missing destinations per-route to avoid cache stampede
             missing_routes = list(
                 {
-                    a["route_code"]  # type: ignore
+                    rc
                     for a in canonical
-                    if (
+                    if (rc := a.get("route_code"))
+                    and (
                         not a.get("destination")
                         or normalizers.arrivals.is_destination_incomplete(a.get("destination"))
                     )
-                    and a.get("route_code")
                 }
             )
             route_names: dict[str, str] = {}
@@ -232,14 +242,14 @@ async def get_arrivals(
                     raise SkipCache("")
 
                 try:
-                    name = await cache_get_or_fetch(
+                    name: str = await cache_get_or_fetch(
                         f"routes:name:{rc}",
                         86400,
                         _fetch_name,
                         stale_ttl=settings.cache_stale_ttl,
                         jitter=True,
                     )
-                    route_names[rc] = name  # type: ignore
+                    route_names[rc] = name
                 except Exception as e:
                     logger.warning("Failed to fetch route name for %s: %s", rc, e)
 
@@ -247,24 +257,27 @@ async def get_arrivals(
                 await asyncio.gather(*[_resolve_route(rc) for rc in missing_routes])
                 for a in canonical:
                     dest = a.get("destination")
-                    if (not dest or normalizers.arrivals.is_destination_incomplete(dest)) and a.get(
-                        "route_code"
-                    ) in route_names:
-                        enriched = route_names[a["route_code"]]
+                    rc = a.get("route_code")
+                    if (
+                        (not dest or normalizers.arrivals.is_destination_incomplete(dest))
+                        and rc
+                        and rc in route_names
+                    ):
+                        enriched = route_names[rc]
                         if enriched:
-                            a["destination"] = enriched  # type: ignore
+                            a["destination"] = enriched
 
             # If any incomplete destinations could not be enriched, strip trailing/leading hyphens
             for a in canonical:
                 d = a.get("destination")
                 if d and normalizers.arrivals.is_destination_incomplete(d):
-                    a["destination"] = re.sub(r"^[\s-]+|[\s-]+$", "", d).strip()  # type: ignore
+                    a["destination"] = re.sub(r"^[\s-]+|[\s-]+$", "", d).strip()
 
-            canonical.sort(
-                key=lambda a: (  # type: ignore
-                    a.get("eta_minutes") if a.get("eta_minutes") is not None else 9999
-                )
-            )
+            def _sort_by_eta(arr: CanonicalArrival) -> int:
+                eta = arr.get("eta_minutes")
+                return eta if eta is not None else 9999
+
+            canonical.sort(key=_sort_by_eta)
             arrivals_data = list(canonical)
         except NtcApiError as exc:
             ntcapi_failed = True
@@ -289,7 +302,7 @@ async def get_arrivals(
         if via and arrivals_data:
             try:
                 routes_via = await get_routes_at_stop(via)
-                routes_via_upper = {r.upper() for r in routes_via}  # type: ignore
+                routes_via_upper = {r.upper() for r in routes_via}
                 arrivals_data = [
                     a for a in arrivals_data if a.get("route_code", "").upper() in routes_via_upper
                 ]
@@ -313,20 +326,15 @@ async def get_arrivals(
 
     # Enrich with plate from in-memory fleet store (free, O(1) by kapino).
     result = []
-    for a in arrivals_data:  # type: ignore
+    for a in arrivals_data:
         kapino = a.get("kapino")
         plate = a.get("plate") or (get_plate_by_kapino(kapino) if kapino else None)
-        result.append(
-            Arrival(
-                **{k: v for k, v in a.items() if k not in ("_source", "plate")},
-                plate=plate,
-            )
-        )
+        result.append(Arrival.model_validate({**a, "plate": plate}))
     return result
 
 
 @router.get("/{dcode}/routes", response_model=list[str])
-async def get_routes_at_stop(dcode: str = Path(..., pattern=r"^\d{4,10}$")):
+async def get_routes_at_stop(dcode: str = Path(..., pattern=r"^\d{4,10}$")) -> list[str]:
     dcode = dcode.strip()
     """Get all routes passing through a stop.
     
@@ -353,7 +361,7 @@ async def get_routes_at_stop(dcode: str = Path(..., pattern=r"^\d{4,10}$")):
 
 
 @router.get("/{dcode}", response_model=StopDetail)
-async def get_stop_detail(dcode: str = Path(..., pattern=r"^\d{4,10}$")):
+async def get_stop_detail(dcode: str = Path(..., pattern=r"^\d{4,10}$")) -> StopDetail:
     dcode = dcode.strip()
     """Get basic details for a specific stop.
     
@@ -361,7 +369,7 @@ async def get_stop_detail(dcode: str = Path(..., pattern=r"^\d{4,10}$")):
     """
     key = f"stops:detail:{dcode}"
 
-    async def _fetch():
+    async def _fetch() -> dict[str, Any]:
         client = IettClient(get_session())
         try:
             detail = await client.get_stop_detail(dcode)
@@ -379,11 +387,13 @@ async def get_stop_detail(dcode: str = Path(..., pattern=r"^\d{4,10}$")):
         stale_ttl=settings.cache_stale_ttl,
         jitter=True,
     )
-    return StopDetail(**detail_data)  # type: ignore
+    return StopDetail.model_validate(detail_data)
 
 
 @router.get("/{dcode}/announcements", response_model=list[Announcement])
-async def get_stop_announcements(dcode: str = Path(..., pattern=r"^\d{4,10}$")):
+async def get_stop_announcements(
+    dcode: str = Path(..., pattern=r"^\d{4,10}$"),
+) -> list[Announcement]:
     dcode = dcode.strip()
     """Live traffic and route announcements for a specific stop.
     
@@ -395,14 +405,14 @@ async def get_stop_announcements(dcode: str = Path(..., pattern=r"^\d{4,10}$")):
     """
     key = f"stops:announcements:{dcode}"
 
-    async def _fetch():
+    async def _fetch() -> list[dict[str, Any]]:
         from app.routers.routes import fetch_filtered_announcements
         from app.services.mobiett_client import MobiettClient
 
         session = get_session()
         mobiett_client = MobiettClient(session)
 
-        async def _fetch_global_anns() -> list[dict]:
+        async def _fetch_global_anns() -> list[dict[str, Any]]:
             try:
                 route_codes = await get_routes_at_stop(dcode)
             except HTTPException as exc:
@@ -413,7 +423,7 @@ async def get_stop_announcements(dcode: str = Path(..., pattern=r"^\d{4,10}$")):
                 route_codes = []
 
             try:
-                return await fetch_filtered_announcements(set(route_codes))  # type: ignore
+                return await fetch_filtered_announcements(set(route_codes))
             except Exception as e:
                 logger.warning(f"Global announcements failed for stop {dcode}: {e}")
                 return []
@@ -426,45 +436,38 @@ async def get_stop_announcements(dcode: str = Path(..., pattern=r"^\d{4,10}$")):
                 return_exceptions=True,
             )
 
-            if isinstance(global_anns, Exception):
-                logger.warning(f"Global announcements failed for stop {dcode}: {global_anns}")
-                global_anns = []
-            elif not global_anns:
-                global_anns = []
-
-            if isinstance(stop_anns, Exception):
-                logger.warning(f"Stop announcements failed for stop {dcode}: {stop_anns}")
-                stop_anns = []
-            elif not stop_anns:
-                stop_anns = []
+            global_list: list[dict[str, Any]] = global_anns if isinstance(global_anns, list) else []
+            stop_list: list[Any] = stop_anns if isinstance(stop_anns, list) else []
 
         except Exception as e:
             logger.error(f"Error fetching combined announcements for stop {dcode}: {e}")
-            global_anns, stop_anns = [], []
+            global_list, stop_list = [], []
 
         # 3. Merge and deduplicate
-        combined: list[dict] = []
+        combined: list[dict[str, Any]] = []
         seen = set()
 
         # Add global announcements
-        for ann in global_anns:  # type: ignore
+        for ann in global_list:
+            if not isinstance(ann, dict):
+                continue
             msg = (ann.get("message") or "").strip()
             route_code = (ann.get("route_code") or "").strip().upper()
-            key = (route_code, msg)
-            if msg and key not in seen:
+            key_tuple = (route_code, msg)
+            if msg and key_tuple not in seen:
                 ann_copy = dict(ann)
                 ann_copy["route_code"] = route_code
                 combined.append(ann_copy)
-                seen.add(key)
+                seen.add(key_tuple)
 
         # Add stop-specific announcements
-        for ann in stop_anns:  # type: ignore
+        for ann in stop_list:
             if not isinstance(ann, dict):
                 continue
             msg = (ann.get("BILGI") or "").strip()
             route_code = (ann.get("HAT") or "").strip().upper()
-            key = (route_code, msg)
-            if msg and key not in seen:
+            key_tuple = (route_code, msg)
+            if msg and key_tuple not in seen:
                 combined.append(
                     {
                         "route_code": route_code,
@@ -474,14 +477,14 @@ async def get_stop_announcements(dcode: str = Path(..., pattern=r"^\d{4,10}$")):
                         "message": msg,
                     }
                 )
-                seen.add(key)
+                seen.add(key_tuple)
 
         return combined
 
     announcements_data = await cache_get_or_fetch(
         key, 300, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True
     )
-    return [Announcement(**a) for a in announcements_data]  # type: ignore
+    return [Announcement.model_validate(a) for a in announcements_data]
 
 
 @router.get("/{dcode}/info", response_model=StopInfo)

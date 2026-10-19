@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Path, Query
 
@@ -181,7 +182,7 @@ async def get_route_buses(
 @router.get("/{hat_kodu}/stops", response_model=list[RouteStop])
 async def get_route_stops(
     hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9_ -]+$"),
-):
+) -> list[dict[str, Any]]:
     hat_kodu = hat_kodu.upper().strip()
     """Get the ordered sequence of stops for a route.
 
@@ -302,10 +303,14 @@ async def get_route_schedule(
                 raise HTTPException(
                     502, detail="Hat sefer saatleri servisine ulaşılamadı."
                 ) from exc
-            data = [  # type: ignore
-                normalizers.schedule.from_iett_soap_schedule(d.model_dump()) for d in schedule
+            data = [
+                {
+                    k: v
+                    for k, v in normalizers.schedule.from_iett_soap_schedule(d.model_dump()).items()
+                    if k != "_source"
+                }
+                for d in schedule
             ]
-            data = [{k: v for k, v in d.items() if k != "_source"} for d in data]
         return data
 
     return await cache_get_or_fetch(
@@ -336,7 +341,7 @@ async def fetch_filtered_announcements(route_list: set[str]) -> list[dict]:
 
     key = "routes:announcements:global"
 
-    async def _fetch():
+    async def _fetch() -> list[dict[str, Any]]:
         client = IettClient(get_session())
         try:
             announcements = await client.get_announcements()
@@ -358,7 +363,7 @@ async def fetch_filtered_announcements(route_list: set[str]) -> list[dict]:
     )
 
     combined = []
-    for ann in all_anns:  # type: ignore
+    for ann in all_anns:
         rc = ann.get("route_code", "").upper().strip()
         if rc in route_list:
             a_dict = dict(ann)

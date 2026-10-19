@@ -245,7 +245,7 @@ class TestStopIndex:
         lat, lon = 41.0, 29.0
         deps.update_stop_index([_stop("A", lat, lon)])  # same coords → ~0 m
         results = deps.get_nearby_stops(lat, lon, radius_m=100.0)
-        assert results[0]["distance_m"] == pytest.approx(0.0, abs=5.0)  # type: ignore[arg-type]
+        assert results[0]["distance_m"] == pytest.approx(0.0, abs=5.0)
 
     def test_haversine_accuracy(self) -> None:
         """Known distance: Istanbul lat/lon offset of 0.005° ≈ ~500 m."""
@@ -265,10 +265,10 @@ class TestStopIndex:
 
 class TestSessionManagement:
     def setup_method(self) -> None:
-        deps._session = None  # type: ignore[assignment]
+        deps._session = None
 
     def teardown_method(self) -> None:
-        deps._session = None  # type: ignore[assignment]
+        deps._session = None
 
     def test_get_session_raises_when_not_set(self) -> None:
         with pytest.raises(RuntimeError, match="not initialised"):
@@ -278,7 +278,7 @@ class TestSessionManagement:
         import aiohttp
 
         mock_session = object.__new__(aiohttp.ClientSession)
-        deps.set_session(mock_session)  # type: ignore[arg-type]
+        deps.set_session(mock_session)
         assert deps.get_session() is mock_session
 
 
@@ -338,7 +338,7 @@ class TestGetBusesByRoute:
         assert result == []
 
     def test_bus_with_null_route_code_excluded(self) -> None:
-        deps.update_fleet([_bus("A-001", 41.0, 29.0, route_code=None)])  # type: ignore[arg-type]
+        deps.update_fleet([_bus("A-001", 41.0, 29.0, route_code=None)])
         result = deps.get_buses_by_route("500T")
         assert result == []
 

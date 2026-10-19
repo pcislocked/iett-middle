@@ -53,24 +53,25 @@ class MobiettClient:
                 ) as resp:
                     resp.raise_for_status()
                     data = await resp.json()
-                    MobiettClient._access_token = data["access_token"]
+                    token = str(data["access_token"])
+                    MobiettClient._access_token = token
                     # Token expires in 3600 seconds, refresh a bit early (3500)
                     expires_in = data.get("expires_in", 3600)
                     MobiettClient._token_expires_at = time.monotonic() + (expires_in - 100)
-                    return MobiettClient._access_token  # type: ignore
+                    return token
             except Exception as e:
                 raise MobiettApiError(f"OAuth2 failed: {e}") from e
 
-    async def _post_service(self, alias: str, data: dict[str, Any] = None) -> Any:  # type: ignore
+    async def _post_service(self, alias: str, data: dict[str, Any] | None = None) -> Any:
         """Make a POST request to the Mobiett /service endpoint."""
         token = await self._ensure_token()
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json; charset=UTF-8",
         }
-        payload = {"alias": alias}
+        payload: dict[str, Any] = {"alias": alias}
         if data:
-            payload["data"] = data  # type: ignore
+            payload["data"] = data
 
         try:
             async with self._session.post(

@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import time
 from collections.abc import AsyncIterator
+from typing import Any
 from unittest.mock import patch
 
 import aiohttp
@@ -48,7 +49,7 @@ def reset_token() -> None:
 
 def _mock_token(m: aioresponses) -> None:
     """Register a successful token endpoint response."""
-    m.post(  # type: ignore[reportUnknownMemberType]
+    m.post(
         _TOKEN_URL,
         payload={"access_token": "test-token", "expires_in": 3600},
     )
@@ -106,7 +107,7 @@ class TestEnsureToken:
     async def test_fetches_token_on_cold_start(self, session: aiohttp.ClientSession) -> None:
         with aioresponses() as m:
             _mock_token(m)
-            m.post(  # type: ignore[reportUnknownMemberType]
+            m.post(
                 _SERVICE_URL,
                 payload=[],
             )
@@ -118,25 +119,25 @@ class TestEnsureToken:
         _ntc_mod._token_expiry = time.time() + 3600
 
         with aioresponses() as m:
-            m.post(_SERVICE_URL, payload=[])  # type: ignore[reportUnknownMemberType]
+            m.post(_SERVICE_URL, payload=[])
             await get_stop_arrivals("301341", session)
         # Token endpoint was NOT called — still the cached value
         assert _ntc_mod._token == "cached-token"
 
     async def test_token_fetch_failure_raises(self, session: aiohttp.ClientSession) -> None:
         with aioresponses() as m:
-            m.post(_TOKEN_URL, status=401, payload={"error": "unauthorized"})  # type: ignore[reportUnknownMemberType]
+            m.post(_TOKEN_URL, status=401, payload={"error": "unauthorized"})
             with pytest.raises(NtcApiError, match="Token fetch failed 401"):
                 await get_stop_arrivals("301341", session)
 
     async def test_uses_expire_date_field(self, session: aiohttp.ClientSession) -> None:
         future_ms = (time.time() + 7200) * 1000
         with aioresponses() as m:
-            m.post(  # type: ignore[reportUnknownMemberType]
+            m.post(
                 _TOKEN_URL,
                 payload={"access_token": "tok2", "expire_date": int(future_ms)},
             )
-            m.post(_SERVICE_URL, payload=[])  # type: ignore[reportUnknownMemberType]
+            m.post(_SERVICE_URL, payload=[])
             await get_stop_arrivals("301341", session)
         assert _ntc_mod._token == "tok2"
         assert _ntc_mod._token_expiry == pytest.approx(time.monotonic() + 7200, rel=1e-3)
@@ -151,7 +152,7 @@ class TestCallService:
     async def test_non_200_service_raises(self, session: aiohttp.ClientSession) -> None:
         with aioresponses() as m:
             _mock_token(m)
-            m.post(_SERVICE_URL, status=500, payload={"msg": "err"})  # type: ignore[reportUnknownMemberType]
+            m.post(_SERVICE_URL, status=500, payload={"msg": "err"})
             with pytest.raises(NtcApiError, match="Service call 'ybs' failed 500"):
                 await get_stop_arrivals("301341", session)
 
@@ -169,7 +170,7 @@ class TestGetStopArrivals:
         ]
         with aioresponses() as m:
             _mock_token(m)
-            m.post(_SERVICE_URL, payload=raw)  # type: ignore[reportUnknownMemberType]
+            m.post(_SERVICE_URL, payload=raw)
             result = await get_stop_arrivals("301341", session)
         assert len(result) == 2
 
@@ -177,7 +178,7 @@ class TestGetStopArrivals:
         raw = ["not-a-dict", {"hatkodu": "500T", "saat": "10:05"}]
         with aioresponses() as m:
             _mock_token(m)
-            m.post(_SERVICE_URL, payload=raw)  # type: ignore[reportUnknownMemberType]
+            m.post(_SERVICE_URL, payload=raw)
             result = await get_stop_arrivals("301341", session)
         assert len(result) == 1
 
@@ -185,7 +186,7 @@ class TestGetStopArrivals:
         raw = [{"some_field": "x"}]
         with aioresponses() as m:
             _mock_token(m)
-            m.post(_SERVICE_URL, payload=raw)  # type: ignore[reportUnknownMemberType]
+            m.post(_SERVICE_URL, payload=raw)
             result = await get_stop_arrivals("301341", session)
         assert result == []
 
@@ -209,7 +210,7 @@ class TestGetBusLocation:
         ]
         with aioresponses() as m:
             _mock_token(m)
-            m.post(_SERVICE_URL, payload=raw)  # type: ignore[reportUnknownMemberType]
+            m.post(_SERVICE_URL, payload=raw)
             result = await get_bus_location("A-001", session)
         assert result is not None
         assert result["kapino"] == "A-001"
@@ -218,7 +219,7 @@ class TestGetBusLocation:
     async def test_empty_response_returns_none(self, session: aiohttp.ClientSession) -> None:
         with aioresponses() as m:
             _mock_token(m)
-            m.post(_SERVICE_URL, payload=[])  # type: ignore[reportUnknownMemberType]
+            m.post(_SERVICE_URL, payload=[])
             result = await get_bus_location("X-999", session)
         assert result is None
 
@@ -255,7 +256,7 @@ class TestGetRouteMetadata:
         ]
         with aioresponses() as m:
             _mock_token(m)
-            m.post(_SERVICE_URL, payload=raw)  # type: ignore[reportUnknownMemberType]
+            m.post(_SERVICE_URL, payload=raw)
             result = await get_route_metadata("500T", session)
         assert len(result) == 2
         directions = [r["direction"] for r in result]
@@ -290,7 +291,7 @@ class TestGetRouteStops:
         ]
         with aioresponses() as m:
             _mock_token(m)
-            m.post(_SERVICE_URL, payload=raw)  # type: ignore[reportUnknownMemberType]
+            m.post(_SERVICE_URL, payload=raw)
             result = await get_route_stops("500T", "G", session)
         assert len(result) == 2
         assert result[0]["stop_code"] == "222"  # sequence 1 comes first
@@ -298,10 +299,13 @@ class TestGetRouteStops:
 
     async def test_yon_letter_mapped_to_number(self, session: aiohttp.ClientSession) -> None:
         """'D' direction letter maps to yon '120' in the payload."""
-        captured: list[dict] = []
+        captured: list[dict[str, Any]] = []
 
-        async def fake_call(session, alias, data):  # type: ignore[override]
-            captured.append(data)
+        async def fake_call(
+            session: aiohttp.ClientSession, alias: str, data: dict[str, Any] | None = None
+        ) -> list[dict[str, Any]]:
+            if data is not None:
+                captured.append(data)
             return []
 
         with patch("app.services.ntcapi_client._call_service", side_effect=fake_call):
@@ -312,7 +316,7 @@ class TestGetRouteStops:
     async def test_empty_raw_returns_empty_list(self, session: aiohttp.ClientSession) -> None:
         with aioresponses() as m:
             _mock_token(m)
-            m.post(_SERVICE_URL, payload=[])  # type: ignore[reportUnknownMemberType]
+            m.post(_SERVICE_URL, payload=[])
             result = await get_route_stops("500T", "G", session)
         assert result == []
 
@@ -345,7 +349,7 @@ class TestGetRouteStops:
         ]
         with aioresponses() as m:
             _mock_token(m)
-            m.post(_SERVICE_URL, payload=raw)  # type: ignore[reportUnknownMemberType]
+            m.post(_SERVICE_URL, payload=raw)
             result = await get_route_stops("500T", "G", session)
         # Should return all 3 stops from both variants
         assert len(result) == 3
@@ -378,7 +382,7 @@ class TestGetRouteBusesYbs:
         ]
         with aioresponses() as m:
             _mock_token(m)
-            m.post(_SERVICE_URL, payload=raw)  # type: ignore[reportUnknownMemberType]
+            m.post(_SERVICE_URL, payload=raw)
             result = await get_route_buses_ybs(42, "500T", session)
         assert len(result) == 2
         assert result[0].kapino == "A-001"
@@ -392,7 +396,7 @@ class TestGetRouteBusesYbs:
         ]
         with aioresponses() as m:
             _mock_token(m)
-            m.post(_SERVICE_URL, payload=raw)  # type: ignore[reportUnknownMemberType]
+            m.post(_SERVICE_URL, payload=raw)
             result = await get_route_buses_ybs(42, "500T", session)
         assert result == []
 
@@ -407,7 +411,7 @@ class TestGetTimetable:
         raw = [{"K_ORER_GIDIS_SAATI": "06:00"}, {"K_ORER_GIDIS_SAATI": "06:15"}]
         with aioresponses() as m:
             _mock_token(m)
-            m.post(_SERVICE_URL, payload=raw)  # type: ignore[reportUnknownMemberType]
+            m.post(_SERVICE_URL, payload=raw)
             result = await get_timetable("500T", session)
         assert result == raw
 
@@ -429,7 +433,7 @@ class TestGetNearbyStops:
         ]
         with aioresponses() as m:
             _mock_token(m)
-            m.post(_SERVICE_URL, payload=raw)  # type: ignore[reportUnknownMemberType]
+            m.post(_SERVICE_URL, payload=raw)
             result = await get_nearby_stops(41.08, 29.01, 0.5, session)
         assert len(result) == 1
         assert result[0]["stop_code"] == "301341"

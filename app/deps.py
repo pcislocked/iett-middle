@@ -366,7 +366,7 @@ _stop_index_updated_at: datetime | None = None
 _R_EARTH = 6_371_000.0  # metres
 
 
-def update_stop_index(stops: list[NearbyStop]) -> None:  # type: ignore[name-defined]
+def update_stop_index(stops: list[NearbyStop]) -> None:
     global _stop_index, _stop_by_code, _stop_index_updated_at  # noqa: PLW0603
     _stop_index = [s.model_dump() for s in stops]
     _stop_by_code = {s["stop_code"]: s for s in _stop_index}

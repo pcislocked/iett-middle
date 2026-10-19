@@ -62,20 +62,20 @@ async def client() -> AsyncIterator[IettClient]:
 class TestGetAllBuses:
     async def test_returns_buses(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.post(FLEET_URL, body=FLEET_ALL_XML)  # type: ignore[misc]
+            m.post(FLEET_URL, body=FLEET_ALL_XML)
             buses: list[BusPosition] = await client.get_all_buses()
         assert len(buses) == 1
         assert buses[0].kapino == "A-001"
 
     async def test_plate_parsed(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.post(FLEET_URL, body=FLEET_ALL_XML)  # type: ignore[misc]
+            m.post(FLEET_URL, body=FLEET_ALL_XML)
             buses = await client.get_all_buses()
         assert buses[0].plate == "34 HO 1000"
 
     async def test_raises_on_network_error(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.post(FLEET_URL, exception=Exception("timeout"))  # type: ignore[misc]
+            m.post(FLEET_URL, exception=Exception("timeout"))
             with pytest.raises(IettApiError):
                 await client.get_all_buses()
 
@@ -83,7 +83,7 @@ class TestGetAllBuses:
 class TestGetRouteBuses:
     async def test_returns_buses(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.post(FLEET_URL, body=ROUTE_FLEET_XML)  # type: ignore[misc]
+            m.post(FLEET_URL, body=ROUTE_FLEET_XML)
             buses: list[BusPosition] = await client.get_route_buses("500T")
         assert buses[0].route_code == "500T"
 
@@ -130,7 +130,7 @@ class TestGetRouteBuses:
 
     async def test_nearest_stop_parsed(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.post(FLEET_URL, body=ROUTE_FLEET_XML)  # type: ignore[misc]
+            m.post(FLEET_URL, body=ROUTE_FLEET_XML)
             buses = await client.get_route_buses("500T")
         assert buses[0].nearest_stop == "113333"
 
@@ -147,21 +147,21 @@ class TestGetRouteBuses:
 class TestGetStopArrivals:
     async def test_returns_arrivals(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.get(ARRIVALS_URL, body=ARRIVALS_HTML)  # type: ignore[misc]
+            m.get(ARRIVALS_URL, body=ARRIVALS_HTML)
             arrivals: list[Arrival] = await client.get_stop_arrivals("220602")
         assert len(arrivals) == 2
 
     async def test_raises_on_500(self, client: IettClient) -> None:
         with pytest.raises(IettApiError):
             with aioresponses() as m:
-                m.get(ARRIVALS_URL, status=500)  # type: ignore[misc]
+                m.get(ARRIVALS_URL, status=500)
                 await client.get_stop_arrivals("000000")
 
 
 class TestGetRoutesAtStop:
     async def test_returns_route_set(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.get(ROUTES_AT_STOP_URL, body=ROUTES_BY_STATION_HTML)  # type: ignore[misc]
+            m.get(ROUTES_AT_STOP_URL, body=ROUTES_BY_STATION_HTML)
             routes: set[str] = await client.get_routes_at_stop("220602")
         assert "14M" in routes
         assert "15TY" in routes
@@ -171,18 +171,18 @@ class TestGetStopArrivalsVia:
     async def test_filters_to_common_routes(self, client: IettClient) -> None:
         via_html = '<div class="line-list"><div class="line-item"><a href="#"><span>14M</span></a></div></div>'
         with aioresponses() as m:
-            m.get(ROUTES_AT_STOP_URL, body=ROUTES_BY_STATION_HTML)  # type: ignore[misc]
-            m.get(ROUTES_AT_STOP_URL, body=via_html)  # type: ignore[misc]
-            m.get(ARRIVALS_URL, body=ARRIVALS_HTML)  # type: ignore[misc]
+            m.get(ROUTES_AT_STOP_URL, body=ROUTES_BY_STATION_HTML)
+            m.get(ROUTES_AT_STOP_URL, body=via_html)
+            m.get(ARRIVALS_URL, body=ARRIVALS_HTML)
             arrivals: list[Arrival] = await client.get_stop_arrivals_via("220602", "216572")
         assert all(a.route_code == "14M" for a in arrivals)
 
     async def test_empty_when_no_common_routes(self, client: IettClient) -> None:
         other_html = '<div class="line-list"><div class="line-item"><a href="#"><span>999Z</span></a></div></div>'
         with aioresponses() as m:
-            m.get(ROUTES_AT_STOP_URL, body=ROUTES_BY_STATION_HTML)  # type: ignore[misc]
-            m.get(ROUTES_AT_STOP_URL, body=other_html)  # type: ignore[misc]
-            m.get(ARRIVALS_URL, body=ARRIVALS_HTML)  # type: ignore[misc]
+            m.get(ROUTES_AT_STOP_URL, body=ROUTES_BY_STATION_HTML)
+            m.get(ROUTES_AT_STOP_URL, body=other_html)
+            m.get(ARRIVALS_URL, body=ARRIVALS_HTML)
             arrivals = await client.get_stop_arrivals_via("220602", "999999")
         assert arrivals == []
 
@@ -190,13 +190,13 @@ class TestGetStopArrivalsVia:
 class TestGetRouteSchedule:
     async def test_returns_schedule(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.post(SCHEDULE_URL, body=SCHEDULE_XML)  # type: ignore[misc]
+            m.post(SCHEDULE_URL, body=SCHEDULE_XML)
             deps: list[ScheduledDeparture] = await client.get_route_schedule("500T")
         assert deps[0].departure_time == "05:55"
 
     async def test_raises_on_error(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.post(SCHEDULE_URL, status=503)  # type: ignore[misc]
+            m.post(SCHEDULE_URL, status=503)
             with pytest.raises(IettApiError):
                 await client.get_route_schedule("500T")
 
@@ -204,19 +204,19 @@ class TestGetRouteSchedule:
 class TestGetAnnouncements:
     async def test_returns_all(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.post(ANNOUNCEMENTS_URL, body=ANNOUNCEMENTS_XML)  # type: ignore[misc]
+            m.post(ANNOUNCEMENTS_URL, body=ANNOUNCEMENTS_XML)
             anns: list[Announcement] = await client.get_announcements()
         assert len(anns) == 1
 
     async def test_filter_by_hat_kodu(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.post(ANNOUNCEMENTS_URL, body=ANNOUNCEMENTS_XML)  # type: ignore[misc]
+            m.post(ANNOUNCEMENTS_URL, body=ANNOUNCEMENTS_XML)
             anns: list[Announcement] = await client.get_announcements("NOTEXIST")
         assert anns == []
 
     async def test_case_insensitive_filter(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.post(ANNOUNCEMENTS_URL, body=ANNOUNCEMENTS_XML)  # type: ignore[misc]
+            m.post(ANNOUNCEMENTS_URL, body=ANNOUNCEMENTS_XML)
             anns = await client.get_announcements("500t")
         assert len(anns) == 1
 
@@ -224,7 +224,7 @@ class TestGetAnnouncements:
 class TestGetRouteStops:
     async def test_returns_stops(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.get(ROUTE_STATION_FOR_ROUTE_URL, body=ROUTE_STOPS_HTML)  # type: ignore[misc]
+            m.get(ROUTE_STATION_FOR_ROUTE_URL, body=ROUTE_STOPS_HTML)
             stops: list[RouteStop] = await client.get_route_stops("15F")
         assert stops[0].stop_code == "262541"
         assert stops[0].route_code == "15F"
@@ -234,7 +234,7 @@ class TestGetRouteStops:
 
     async def test_raises_on_error(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.get(ROUTE_STATION_FOR_ROUTE_URL, exception=Exception("timeout"))  # type: ignore[misc]
+            m.get(ROUTE_STATION_FOR_ROUTE_URL, exception=Exception("timeout"))
             with pytest.raises(IettApiError):
                 await client.get_route_stops("15F")
 
@@ -302,14 +302,14 @@ class TestSearchRoutes:
 class TestGetRouteMetadata:
     async def test_returns_metadata(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.get(ALL_ROUTE_URL, payload=ROUTE_METADATA_JSON)  # type: ignore[misc]
+            m.get(ALL_ROUTE_URL, payload=ROUTE_METADATA_JSON)
             meta: list[RouteMetadata] = await client.get_route_metadata("500T")
         assert len(meta) == 2
         assert meta[0].variant_code == "500T_D_D0"
 
     async def test_raises_on_error(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.get(ALL_ROUTE_URL, status=502)  # type: ignore[misc]
+            m.get(ALL_ROUTE_URL, status=502)
             with pytest.raises(IettApiError):
                 await client.get_route_metadata("500T")
 
@@ -317,7 +317,7 @@ class TestGetRouteMetadata:
 class TestGetStopDetail:
     async def test_returns_detail(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.post(HAT_DURAK_URL, body=STOP_DETAIL_XML)  # type: ignore[misc]
+            m.post(HAT_DURAK_URL, body=STOP_DETAIL_XML)
             detail: StopDetail | None = await client.get_stop_detail("220602")
         assert detail is not None
         assert detail.name == "AHMET MİTHAT EFENDİ"
@@ -364,7 +364,7 @@ class TestGetStopDetail:
             "</GetDurak_jsonResponse></soap:Body></soap:Envelope>"
         )
         with aioresponses() as m:
-            m.post(HAT_DURAK_URL, body=empty_xml)  # type: ignore[misc]
+            m.post(HAT_DURAK_URL, body=empty_xml)
             detail = await client.get_stop_detail("000000")
         assert detail is None
 
@@ -373,7 +373,7 @@ class TestGetStopDetail:
         from unittest.mock import patch
 
         with aioresponses() as m:
-            m.post(HAT_DURAK_URL, body=STOP_DETAIL_ZERO_COORDS_XML)  # type: ignore[misc]
+            m.post(HAT_DURAK_URL, body=STOP_DETAIL_ZERO_COORDS_XML)
             with patch("app.deps.get_stop_coords", return_value=(41.1234, 29.0871)):
                 detail = await client.get_stop_detail("220602")
         assert detail is not None
@@ -385,7 +385,7 @@ class TestGetStopDetail:
         from unittest.mock import patch
 
         with aioresponses() as m:
-            m.post(HAT_DURAK_URL, body=STOP_DETAIL_ZERO_COORDS_XML)  # type: ignore[misc]
+            m.post(HAT_DURAK_URL, body=STOP_DETAIL_ZERO_COORDS_XML)
             with patch("app.deps.get_stop_coords", return_value=None):
                 detail = await client.get_stop_detail("220602")
         assert detail is not None
@@ -407,20 +407,20 @@ class TestGetStopDetail:
 class TestGetAllStops:
     async def test_returns_stops(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.post(HAT_DURAK_URL, body=ALL_STOPS_XML)  # type: ignore[misc]
+            m.post(HAT_DURAK_URL, body=ALL_STOPS_XML)
             stops: list[NearbyStop] = await client.get_all_stops()
         assert len(stops) == 3
 
     async def test_wkt_coords_parsed(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.post(HAT_DURAK_URL, body=ALL_STOPS_XML)  # type: ignore[misc]
+            m.post(HAT_DURAK_URL, body=ALL_STOPS_XML)
             stops = await client.get_all_stops()
         levent = next(s for s in stops if s.stop_code == "301341")
         assert abs(levent.latitude - 41.0842) < 0.001
 
     async def test_raises_on_error(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.post(HAT_DURAK_URL, exception=Exception("timeout"))  # type: ignore[misc]
+            m.post(HAT_DURAK_URL, exception=Exception("timeout"))
             with pytest.raises(IettApiError):
                 await client.get_all_stops()
 
@@ -428,14 +428,14 @@ class TestGetAllStops:
 class TestGetGarages:
     async def test_returns_garages(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.post(HAT_DURAK_URL, body=GARAGE_XML)  # type: ignore[misc]
+            m.post(HAT_DURAK_URL, body=GARAGE_XML)
             garages: list[Garage] = await client.get_garages()
         assert len(garages) == 2
         assert garages[0].name == "IKITELLI GARAJ"
 
     async def test_raises_on_error(self, client: IettClient) -> None:
         with aioresponses() as m:
-            m.post(HAT_DURAK_URL, exception=ConnectionError("refused"))  # type: ignore[misc]
+            m.post(HAT_DURAK_URL, exception=ConnectionError("refused"))
             with pytest.raises(IettApiError):
                 await client.get_garages()
 

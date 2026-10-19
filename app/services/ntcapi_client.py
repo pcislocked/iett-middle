@@ -93,7 +93,7 @@ async def _ensure_token(session: aiohttp.ClientSession) -> str:
         else:
             _token_expiry = time.monotonic() + 3600
         logger.debug("ntcapi: new token obtained, expires at monotonic %s", _token_expiry)
-        return _token  # type: ignore[return-value]
+        return str(_token)
 
 
 async def _call_service(
