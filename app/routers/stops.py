@@ -412,7 +412,6 @@ async def get_stop_announcements(dcode: str = Path(..., pattern=r"^\d{4,10}$")):
                 logger.warning(f"Unexpected error fetching routes for stop {dcode}: {exc}")
                 route_codes = []
 
-
             try:
                 return await fetch_filtered_announcements(set(route_codes))
             except Exception as e:
