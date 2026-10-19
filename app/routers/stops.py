@@ -400,25 +400,31 @@ async def get_stop_announcements(dcode: str = Path(..., pattern=r"^\d{4,10}$")):
         from app.services.mobiett_client import MobiettClient
 
         session = get_session()
-
-        # 1. Fetch all routes passing through this stop
-        try:
-            route_codes = await get_routes_at_stop(dcode)
-        except HTTPException as exc:
-            logger.warning(f"Failed to fetch routes for stop {dcode}: {exc.detail}")
-            route_codes = []
-        except Exception as exc:
-            logger.warning(f"Unexpected error fetching routes for stop {dcode}: {exc}")
-            route_codes = []
-
-        # 2. Fetch global route announcements concurrently with stop-specific announcements
         mobiett_client = MobiettClient(session)
-        try:
-            global_task = fetch_filtered_announcements(set(route_codes))  # type: ignore
-            stop_status_task = mobiett_client.get_stop_announcements(dcode)
 
+        async def _fetch_global_anns() -> list[dict]:
+            try:
+                route_codes = await get_routes_at_stop(dcode)
+            except HTTPException as exc:
+                logger.warning(f"Failed to fetch routes for stop {dcode}: {exc.detail}")
+                route_codes = []
+            except Exception as exc:
+                logger.warning(f"Unexpected error fetching routes for stop {dcode}: {exc}")
+                route_codes = []
+
+
+            try:
+                return await fetch_filtered_announcements(set(route_codes))
+            except Exception as e:
+                logger.warning(f"Global announcements failed for stop {dcode}: {e}")
+                return []
+
+        # Fetch global announcements (routes + SOAP) concurrently with Mobiett stop-specific announcements
+        try:
             global_anns, stop_anns = await asyncio.gather(
-                global_task, stop_status_task, return_exceptions=True
+                _fetch_global_anns(),
+                mobiett_client.get_stop_announcements(dcode),
+                return_exceptions=True,
             )
 
             if isinstance(global_anns, Exception):
