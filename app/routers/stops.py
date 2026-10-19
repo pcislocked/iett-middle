@@ -413,7 +413,7 @@ async def get_stop_announcements(dcode: str = Path(..., pattern=r"^\d{4,10}$")):
                 route_codes = []
 
             try:
-                return await fetch_filtered_announcements(set(route_codes))
+                return await fetch_filtered_announcements(set(route_codes))  # type: ignore
             except Exception as e:
                 logger.warning(f"Global announcements failed for stop {dcode}: {e}")
                 return []
