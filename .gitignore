@@ -20,6 +20,8 @@ env/
 .coverage
 htmlcov/
 coverage.xml
+coverage.json
+*.log
 
 # Env files (may contain secrets)
 .env
