@@ -181,6 +181,7 @@ app.add_middleware(
     expose_headers=["X-IETT-Updated-At"],
 )
 
+
 def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
     from app.deps import get_real_ip  # noqa: PLC0415
 
