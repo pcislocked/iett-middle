@@ -194,8 +194,9 @@ class SoapRouteManager:
             is_probe = not self._direct_healthy
             conn_timeout = 2.5 if timeout.connect is None else min(2.5, timeout.connect)
             sock_timeout = 2.5 if timeout.sock_connect is None else min(2.5, timeout.sock_connect)
+            probe_total = min(timeout.total, 10.0) if timeout.total is not None else 10.0
             direct_timeout = aiohttp.ClientTimeout(
-                total=4.0 if is_probe else timeout.total,
+                total=probe_total if is_probe else timeout.total,
                 connect=conn_timeout,
                 sock_connect=sock_timeout,
             )
