@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.10.3] - 2026-10-22
+### Fixed
+- **Nearby Stops Distance-Ordered Truncation Fix (`/v1/stops/nearby`):** Resolved a critical bug where NTCAPI nearby responses were truncated to `limit` prior to sorting by distance. All candidate stops within `radius` are now calculated and sorted by ascending `distance_m` before the `limit` slice is returned, guaranteeing the true closest stops are always returned first even when querying broad radiuses (e.g. 2000m).
+
+### Added
+- **NTP-Synchronized Server Time Endpoint (`/v1/time`, `/time`):** Added lightweight, rate-limited system endpoint returning server UTC ISO timestamp, Turkey local time (`Europe/Istanbul` formatted `HH:mm:ss`), Unix timestamp, and time source attribution (`TÜBİTAK UME NTP`).
+
+---
+
 ## [0.4.10.2] - 2026-10-22
 ### Added & Adaptive Multi-Proxy Pool Routing
 - **Adaptive SOAP Multi-Proxy Pool (`SoapRouteManager`):** Implemented direct-first upstream routing with resilient multi-proxy pool fallback. Middle always prioritizes direct upstream connections by default to prevent routing overhead.

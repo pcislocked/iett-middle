@@ -152,10 +152,8 @@ async def nearby_stops(
                 )
             )
 
-            if len(nearby_results) >= limit:
-                break
-
-        return nearby_results
+        nearby_results.sort(key=lambda s: s.distance_m)
+        return nearby_results[:limit]
     except NtcApiError as exc:
         logger.warning(
             "ntcapi nearby stops failed (lat=%s lon=%s), falling back to index: %s",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import logging
 import sys
 import time
@@ -235,6 +236,25 @@ app.include_router(arac.router, prefix="/v1/arac", tags=["arac"])
 app.include_router(garages.router, prefix="/v1/garages", tags=["garages"])
 app.include_router(traffic.router, prefix="/v1/traffic", tags=["traffic"])
 app.include_router(announcements.router, prefix="/v1/announcements", tags=["announcements"])
+
+
+@app.get("/v1/time", tags=["system"])
+@app.get("/time", tags=["system"], include_in_schema=False)
+@limiter.limit("120/minute")
+async def get_server_time(request: Request):
+    """Return the current server time synchronized via NTP (TÜBİTAK UME)."""
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    turkey_tz = datetime.timezone(datetime.timedelta(hours=3))
+    now_tr = now_utc.astimezone(turkey_tz)
+    return {
+        "status": "ok",
+        "iso": now_utc.isoformat(),
+        "time": now_tr.strftime("%H:%M:%S"),
+        "date": now_tr.strftime("%Y-%m-%d"),
+        "timestamp": int(now_utc.timestamp()),
+        "timezone": "Europe/Istanbul",
+        "source": "TÜBİTAK UME NTP",
+    }
 
 
 @app.get("/health", tags=["health"])

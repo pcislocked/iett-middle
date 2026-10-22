@@ -33,6 +33,18 @@ class TestEndpoints:
         assert "version" in body
         assert body["version"] == app.version
 
+    def test_server_time_returns_ok(self) -> None:
+        for path in ("/v1/time", "/time"):
+            resp = _client().get(path)
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["status"] == "ok"
+            assert "iso" in body
+            assert "time" in body
+            assert len(body["time"].split(":")) == 3
+            assert body["timezone"] == "Europe/Istanbul"
+            assert body["source"] == "TÜBİTAK UME NTP"
+
     def test_root_returns_service_name(self) -> None:
         resp = _client().get("/")
         assert resp.status_code == 200

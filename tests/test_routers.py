@@ -1088,6 +1088,34 @@ class TestStopsExtra:
         assert resp.json()[0]["stop_code"] == "301341"
         assert resp.json()[0]["distance_m"] == 120.0
 
+    def test_nearby_sorts_by_distance_before_limit(self, client: TestClient) -> None:
+        """Ensure all returned NTCAPI stops are sorted by distance before limit is applied."""
+        processed = [
+            {"stop_code": "1001", "stop_name": "Far Stop 1", "lat": 41.09, "lon": 29.02, "district": "X", "direction": None, "distance_m": 800.0},
+            {"stop_code": "1002", "stop_name": "Closest Stop", "lat": 41.081, "lon": 29.011, "district": "X", "direction": None, "distance_m": 50.0},
+            {"stop_code": "1003", "stop_name": "Medium Stop", "lat": 41.085, "lon": 29.015, "district": "X", "direction": None, "distance_m": 300.0},
+            {"stop_code": "1004", "stop_name": "Far Stop 2", "lat": 41.091, "lon": 29.021, "district": "X", "direction": None, "distance_m": 850.0},
+            {"stop_code": "1005", "stop_name": "Close Stop 2", "lat": 41.082, "lon": 29.012, "district": "X", "direction": None, "distance_m": 120.0},
+            {"stop_code": "1006", "stop_name": "Far Stop 3", "lat": 41.092, "lon": 29.022, "district": "X", "direction": None, "distance_m": 900.0},
+        ]
+        with (
+            patch(
+                "app.routers.stops.ntcapi_client.get_nearby_stops",
+                AsyncMock(return_value=[{}, {}, {}, {}, {}, {}]),
+            ),
+            patch(
+                "app.services.normalizers.stops.from_ntcapi_nearby_processed",
+                side_effect=processed,
+            ),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
+        ):
+            resp = client.get("/v1/stops/nearby?lat=41.08&lon=29.01&limit=5")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) == 5
+        # Top 5 must be sorted by distance: 50m, 120m, 300m, 800m, 850m (900m is excluded)
+        assert [b["stop_code"] for b in body] == ["1002", "1005", "1003", "1001", "1004"]
+
     def test_get_routes_at_stop_200(self, client: TestClient) -> None:
         mock_client = MagicMock()
         mock_client.get_routes_at_stop = AsyncMock(return_value=["500T", "15F"])
