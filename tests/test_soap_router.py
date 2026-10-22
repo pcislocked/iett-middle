@@ -207,7 +207,9 @@ async def test_soap_router_probe_restores_direct(router: SoapRouteManager) -> No
     session.post.return_value.__aenter__.return_value = mock_resp
 
     router._direct_healthy = False
-    router._last_direct_failure = 0.0  # probe due
+    router._last_direct_failure = time.monotonic() - (
+        settings.soap_direct_probe_interval + 10.0
+    )  # probe due
 
     with patch.object(settings, "soap_proxy_urls", DUMMY_PROXY_1):
         res = await router.post(
