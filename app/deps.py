@@ -286,7 +286,7 @@ def record_plate_mapping(kapino: str, plate: str) -> None:
     try:
         from app.services import vehicle_cache  # noqa: PLC0415
 
-        vehicle_cache.upsert_vehicle(clean_k, door_number=kapino, plate=norm_p)
+        vehicle_cache.upsert_vehicle(door_number=kapino, plate=norm_p)
     except Exception as exc:
         logger.debug("Failed to persist plate mapping to sqlite: %s", exc)
 
