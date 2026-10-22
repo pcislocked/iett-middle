@@ -49,6 +49,11 @@ async def _on_request_end(
     size_kb = params.response.content_length
     size_str = f" {size_kb / 1024:.1f}kb" if size_kb else ""
     color = "\033[32m" if status < 400 else "\033[31m"
+    if status == 429:
+        _outgoing.warning(
+            "\033[33m[Upstream RateLimit]\033[0m HTTP 429 received from %s",
+            params.url,
+        )
     _outgoing.info(
         "%s←\033[0m %s %s%s  \033[2m%.0fms\033[0m",
         color,
@@ -164,7 +169,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
 app = FastAPI(
     title="iett-middle",
     description="Smart caching proxy for IETT Istanbul public transit APIs.",
-    version="0.4.9.4",
+    version="0.4.9.5",
     lifespan=lifespan,
 )
 
@@ -176,8 +181,22 @@ app.add_middleware(
     expose_headers=["X-IETT-Updated-At"],
 )
 
+def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    from app.deps import get_real_ip  # noqa: PLC0415
+
+    client_ip = get_real_ip(request)
+    logger.warning(
+        "\033[33m[RateLimit]\033[0m 429 Too Many Requests: %s %s from %s (%s)",
+        request.method,
+        request.url.path,
+        client_ip,
+        exc.detail,
+    )
+    return _rate_limit_exceeded_handler(request, exc)
+
+
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # pyright: ignore[reportArgumentType]
+app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)  # pyright: ignore[reportArgumentType]
 app.add_middleware(SlowAPIMiddleware)
 
 
@@ -191,6 +210,8 @@ async def add_cache_timestamp_header(request: Request, call_next):
     token = cache_hit_time.set(container)
     try:
         response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
         hit_time = container.get("hit_time")
         if hit_time is None:
             val = cache_hit_time.get()
@@ -217,6 +238,7 @@ app.include_router(announcements.router, prefix="/v1/announcements", tags=["anno
 
 @app.get("/health", tags=["health"])
 @app.get("/healthz", tags=["health"], include_in_schema=False)
+@limiter.limit("120/minute")
 async def health(request: Request):
     import time
 
@@ -260,5 +282,6 @@ async def health(request: Request):
 
 
 @app.get("/", include_in_schema=False)
-async def root():
+@limiter.limit("60/minute")
+async def root(request: Request):
     return {"service": "iett-middle", "docs": "/docs"}

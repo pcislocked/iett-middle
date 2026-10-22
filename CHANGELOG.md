@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.9.5] - 2026-10-22
+### Security & Rate Limiting
+- **Global Rate Limiting Overhaul:** Added explicit `@limiter.limit` decorators to every single API endpoint across all routers (fleet, routes, stops, arac, garages, traffic, announcements, health).
+- **Abuse & Scraping Mitigation:** Restricted manual fleet refresh to `5/minute`, captcha generation and session creation to `30/minute`, large traffic segments payload to `30/minute`, and official scraper to `20/minute`.
+- **Security Response Headers:** Enforced `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY` on all HTTP responses.
+- **Internal Helper Isolation:** Decoupled internal service calls from rate-limited endpoint handlers to prevent SlowAPI request context collisions during inter-router calls.
+
+---
+
 ## [0.4.9.4] - 2026-10-19
 ### Refactored & Type Safety
 - **Zero Suppression Strict Typing:** Eliminated all `# type: ignore` suppressions across entire backend (`app/` and `tests/`), making the codebase 100% strictly typed under Pyright and Ruff.

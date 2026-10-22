@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from app.config import settings
-from app.deps import get_session
+from app.deps import get_session, limiter
 from app.models.traffic import TrafficIndex, TrafficSegment
 from app.services.cache import cache_get_or_fetch
 from app.services.iett_client import IettApiError
@@ -19,7 +20,8 @@ router = APIRouter()
 
 
 @router.get("/index", response_model=TrafficIndex)
-async def get_traffic_index():
+@limiter.limit("60/minute")
+async def get_traffic_index(request: Request):
     """Get the city-wide Istanbul traffic congestion index.
 
     Returns a single percentage value representing the overall traffic density
@@ -44,8 +46,7 @@ async def get_traffic_index():
     )
 
 
-@router.get("/segments", response_model=list[TrafficSegment])
-async def get_traffic_segments():
+async def get_traffic_segments() -> list[dict[str, Any]]:
     """Get live traffic speeds and congestion levels for all road segments.
 
     Returns a large array (~587 kB) of road segments with their current speed (km/h)
@@ -68,3 +69,9 @@ async def get_traffic_segments():
         _fetch,
         stale_ttl=settings.cache_stale_ttl,
     )
+
+
+@router.get("/segments", response_model=list[TrafficSegment])
+@limiter.limit("30/minute")
+async def get_traffic_segments_endpoint(request: Request) -> list[dict[str, Any]]:
+    return await get_traffic_segments()

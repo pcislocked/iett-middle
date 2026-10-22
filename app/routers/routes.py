@@ -6,10 +6,10 @@ import asyncio
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Path, Query
+from fastapi import APIRouter, HTTPException, Path, Query, Request
 
 from app.config import settings
-from app.deps import get_session
+from app.deps import get_session, limiter
 from app.models.bus import BusPosition
 from app.models.route import (
     Announcement,
@@ -31,7 +31,11 @@ router = APIRouter()
 
 
 @router.get("/search", response_model=list[RouteSearchResult])
-async def search_routes(q: str = Query(..., min_length=1, max_length=50)):
+@limiter.limit("60/minute")
+async def search_routes(
+    request: Request,
+    q: str = Query(..., min_length=1, max_length=50),
+):
     """Search for routes by code or name.
 
     Returns a list of matching routes (e.g. searching '500' returns '500T', '500L', etc.).
@@ -56,10 +60,7 @@ async def search_routes(q: str = Query(..., min_length=1, max_length=50)):
     )
 
 
-@router.get("/{hat_kodu}", response_model=list[RouteMetadata])
-async def get_route_metadata(
-    hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9_ -]+$"),
-):
+async def get_route_metadata(hat_kodu: str) -> list[dict]:
     hat_kodu = hat_kodu.upper().strip()
     """Get metadata for a specific route.
 
@@ -102,8 +103,19 @@ async def get_route_metadata(
     )
 
 
+@router.get("/{hat_kodu}", response_model=list[RouteMetadata])
+@limiter.limit("60/minute")
+async def get_route_metadata_endpoint(
+    request: Request,
+    hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9_ -]+$"),
+):
+    return await get_route_metadata(hat_kodu)
+
+
 @router.get("/{hat_kodu}/buses", response_model=list[BusPosition])
+@limiter.limit("60/minute")
 async def get_route_buses(
+    request: Request,
     hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9_ -]+$"),
 ):
     hat_kodu = hat_kodu.upper().strip()
@@ -179,10 +191,7 @@ async def get_route_buses(
     return await cache_get_or_fetch(key, 5, _fetch, stale_ttl=settings.cache_stale_ttl, jitter=True)
 
 
-@router.get("/{hat_kodu}/stops", response_model=list[RouteStop])
-async def get_route_stops(
-    hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9_ -]+$"),
-) -> list[dict[str, Any]]:
+async def get_route_stops(hat_kodu: str) -> list[dict[str, Any]]:
     hat_kodu = hat_kodu.upper().strip()
     """Get the ordered sequence of stops for a route.
 
@@ -253,8 +262,19 @@ async def get_route_stops(
     )
 
 
+@router.get("/{hat_kodu}/stops", response_model=list[RouteStop])
+@limiter.limit("60/minute")
+async def get_route_stops_endpoint(
+    request: Request,
+    hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9_ -]+$"),
+) -> list[dict[str, Any]]:
+    return await get_route_stops(hat_kodu)
+
+
 @router.get("/{hat_kodu}/schedule", response_model=list[ScheduledDeparture])
+@limiter.limit("60/minute")
 async def get_route_schedule(
+    request: Request,
     hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9_ -]+$"),
 ):
     hat_kodu = hat_kodu.upper().strip()
@@ -375,7 +395,9 @@ async def fetch_filtered_announcements(route_list: set[str]) -> list[dict]:
 
 
 @router.get("/announcements/batch", response_model=list[Announcement])
+@limiter.limit("40/minute")
 async def get_batch_announcements(
+    request: Request,
     routes: str = Query(
         ..., min_length=1, max_length=500, description="Comma-separated route codes"
     ),
@@ -391,7 +413,9 @@ async def get_batch_announcements(
 
 
 @router.get("/{hat_kodu}/announcements", response_model=list[Announcement])
+@limiter.limit("60/minute")
 async def get_route_announcements(
+    request: Request,
     hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9_ -]+$"),
 ):
     """Active disruption and traffic announcements for a specific route.
@@ -490,7 +514,9 @@ async def get_route_announcements(
 
 
 @router.get("/{hat_kodu}/info", response_model=RouteInfo)
+@limiter.limit("60/minute")
 async def get_route_info(
+    request: Request,
     hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9_ -]+$"),
 ):
     """Scrape route metadata from iett.istanbul/RouteDetail."""

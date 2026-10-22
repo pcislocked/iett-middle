@@ -1,4 +1,4 @@
-"""Stops router â€” /v1/stops"""
+"""Stops router — /v1/stops"""
 
 from __future__ import annotations
 
@@ -37,7 +37,11 @@ def _haversine_m(user_lat: float, user_lon: float, stop_lat: float, stop_lon: fl
 
 
 @router.get("/search", response_model=list[StopSearchResult])
-async def search_stops(q: str = Query(..., min_length=2, max_length=50)):
+@limiter.limit("60/minute")
+async def search_stops(
+    request: Request,
+    q: str = Query(..., min_length=2, max_length=50),
+):
     """Search for stops by name.
 
     Returns a list of matching stops. Minimum query length is 2 characters.
@@ -80,7 +84,9 @@ async def search_stops(q: str = Query(..., min_length=2, max_length=50)):
 
 
 @router.get("/nearby", response_model=list[NearbyStop])
+@limiter.limit("60/minute")
 async def nearby_stops(
+    request: Request,
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
     radius: float = Query(default=500, ge=50, le=3000),
@@ -189,7 +195,9 @@ async def get_arrivals_raw(
 
 
 @router.get("/{dcode}/arrivals", response_model=list[Arrival])
+@limiter.limit("60/minute")
 async def get_arrivals(
+    request: Request,
     dcode: str = Path(..., pattern=r"^\d{4,10}$"),
     via: str | None = Query(default=None, pattern=r"^\d{4,10}$"),
 ):
@@ -333,8 +341,7 @@ async def get_arrivals(
     return result
 
 
-@router.get("/{dcode}/routes", response_model=list[str])
-async def get_routes_at_stop(dcode: str = Path(..., pattern=r"^\d{4,10}$")) -> list[str]:
+async def get_routes_at_stop(dcode: str) -> list[str]:
     dcode = dcode.strip()
     """Get all routes passing through a stop.
     
@@ -360,8 +367,21 @@ async def get_routes_at_stop(dcode: str = Path(..., pattern=r"^\d{4,10}$")) -> l
     )
 
 
+@router.get("/{dcode}/routes", response_model=list[str])
+@limiter.limit("60/minute")
+async def get_routes_at_stop_endpoint(
+    request: Request,
+    dcode: str = Path(..., pattern=r"^\d{4,10}$"),
+) -> list[str]:
+    return await get_routes_at_stop(dcode)
+
+
 @router.get("/{dcode}", response_model=StopDetail)
-async def get_stop_detail(dcode: str = Path(..., pattern=r"^\d{4,10}$")) -> StopDetail:
+@limiter.limit("60/minute")
+async def get_stop_detail(
+    request: Request,
+    dcode: str = Path(..., pattern=r"^\d{4,10}$"),
+) -> StopDetail:
     dcode = dcode.strip()
     """Get basic details for a specific stop.
     
@@ -391,7 +411,9 @@ async def get_stop_detail(dcode: str = Path(..., pattern=r"^\d{4,10}$")) -> Stop
 
 
 @router.get("/{dcode}/announcements", response_model=list[Announcement])
+@limiter.limit("60/minute")
 async def get_stop_announcements(
+    request: Request,
     dcode: str = Path(..., pattern=r"^\d{4,10}$"),
 ) -> list[Announcement]:
     dcode = dcode.strip()
@@ -488,7 +510,11 @@ async def get_stop_announcements(
 
 
 @router.get("/{dcode}/info", response_model=StopInfo)
-async def get_stop_info(dcode: str = Path(..., pattern=r"^\d{4,10}$")):
+@limiter.limit("60/minute")
+async def get_stop_info(
+    request: Request,
+    dcode: str = Path(..., pattern=r"^\d{4,10}$"),
+):
     """Scrape stop metadata from iett.istanbul/StationDetail."""
     key = f"stop:info:{dcode}"
 

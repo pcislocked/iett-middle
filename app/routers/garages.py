@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
-from app.deps import get_session
+from app.deps import get_session, limiter
 from app.models.garage import Garage
 from app.services.cache import cache_get, cache_set
 from app.services.iett_client import IettApiError, IettClient
@@ -20,7 +20,8 @@ _TTL = 86_400  # 24 h — garages almost never change
 
 
 @router.get("", response_model=list[Garage])
-async def list_garages():
+@limiter.limit("30/minute")
+async def list_garages(request: Request):
     """Get all IETT bus garage locations.
 
     Returns a list of all bus garages/depots operated by IETT along with their

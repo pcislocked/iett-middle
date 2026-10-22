@@ -15,7 +15,7 @@ import threading
 import time
 from typing import Any, Literal, TypedDict, cast
 
-from fastapi import APIRouter, HTTPException, Path
+from fastapi import APIRouter, HTTPException, Path, Request
 
 from app.deps import (
     _clean_fleet,
@@ -25,6 +25,7 @@ from app.deps import (
     get_fleet_updated_at,
     get_last_route_by_kapino,
     get_trail,
+    limiter,
 )
 from app.models.bus import BusDetail, BusPositionWithTrail
 
@@ -56,7 +57,8 @@ def _snapshot_with_trails() -> list[dict[str, Any]]:
 
 
 @router.get("", response_model=list[BusPositionWithTrail])
-async def get_fleet() -> list[dict[str, Any]]:
+@limiter.limit("30/minute")
+async def get_fleet(request: Request) -> list[dict[str, Any]]:
     """All active Istanbul buses with 5-minute position trails.
 
     Served from the in-memory store.  Triggers a background refresh when data
@@ -78,7 +80,8 @@ async def get_fleet() -> list[dict[str, Any]]:
 
 
 @router.get("/meta", tags=["fleet"])
-async def get_fleet_meta() -> FleetMetaResponse:
+@limiter.limit("60/minute")
+async def get_fleet_meta(request: Request) -> FleetMetaResponse:
     """Get lightweight fleet status.
 
     Returns the total number of active buses currently tracked and the timestamp
@@ -95,7 +98,8 @@ async def get_fleet_meta() -> FleetMetaResponse:
 
 
 @router.post("/refresh", status_code=202)
-async def refresh_fleet() -> FleetRefreshResponse:
+@limiter.limit("5/minute")
+async def refresh_fleet(request: Request) -> FleetRefreshResponse:
     """Queue an immediate out-of-band fleet re-poll.
 
     Keeps stale-while-revalidate semantics while allowing operators/clients to
@@ -119,7 +123,9 @@ async def refresh_fleet() -> FleetRefreshResponse:
 
 
 @router.get("/{kapino}/detail", response_model=BusDetail)
+@limiter.limit("30/minute")
 async def get_bus_detail(
+    request: Request,
     kapino: str = Path(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9_ -]+$"),
 ) -> dict[str, Any]:
     """Get rich details for a single bus, including its route stops.
@@ -164,7 +170,9 @@ async def get_bus_detail(
 
 
 @router.get("/{kapino}", response_model=BusPositionWithTrail)
+@limiter.limit("60/minute")
 async def get_bus(
+    request: Request,
     kapino: str = Path(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9_ -]+$"),
 ) -> dict[str, Any]:
     """Get the live position and trail of a single bus.

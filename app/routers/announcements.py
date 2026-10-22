@@ -14,7 +14,8 @@ router = APIRouter()
 
 
 @router.get("/global", response_model=list[dict[str, Any]])
-async def get_global_notices_endpoint() -> list[dict[str, Any]]:
+@limiter.limit("60/minute")
+async def get_global_notices_endpoint(request: Request) -> list[dict[str, Any]]:
     """Get system-wide global announcements.
 
     Returns the cached global notices that affect the entire IETT system,

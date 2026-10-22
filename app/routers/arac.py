@@ -111,7 +111,7 @@ def _require_arac_session_headers(
 
 @router.get("/session/captcha", response_model=AracCaptchaResponse)
 @router.post("/session/captcha", response_model=AracCaptchaResponse)
-@limiter.limit("60/minute")
+@limiter.limit("30/minute")
 async def get_arac_captcha(request: Request) -> AracCaptchaResponse:
     """Fetch a captcha challenge image.
 
@@ -148,7 +148,7 @@ async def get_arac_captcha(request: Request) -> AracCaptchaResponse:
 
 
 @router.post("/session/create", response_model=AracSessionCreateResponse)
-@limiter.limit("60/minute")
+@limiter.limit("30/minute")
 async def create_arac_session(
     request: Request,
     payload: AracSessionCreateRequest,
@@ -425,7 +425,9 @@ async def get_arac_bus_detail(
 
 
 @router.get("/fleet/{kapino}", response_model=BusPosition)
+@limiter.limit("60/minute")
 async def get_arac_bus(
+    request: Request,
     kapino: str = Path(..., pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,39}$"),
     x_arac_session_key: str | None = None,
 ) -> BusPosition:
