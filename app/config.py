@@ -43,5 +43,31 @@ class Settings(BaseSettings):
 
     vehicle_cache_path: str = "data/vehicles.db"
 
+    # SOAP Upstream Proxy & Adaptive Routing (Bypasses datacenter geo-blocking safely)
+    soap_proxy_url: str | None = None
+    soap_proxy_max_per_minute: int = 15
+    soap_proxy_min_interval: float = 3.0
+    soap_direct_probe_interval: float = 300.0
+
+    @property
+    def effective_soap_proxy_url(self) -> str | None:
+        """Resolve SOAP proxy URL from CLI arguments (--soap-proxy-url or --soap-proxy) or env."""
+        import sys
+
+        for i, arg in enumerate(sys.argv):
+            if arg.startswith("--soap-proxy-url="):
+                return arg.split("=", 1)[1].strip()
+            if arg == "--soap-proxy-url" and i + 1 < len(sys.argv):
+                return sys.argv[i + 1].strip()
+            if arg.startswith("--soap-proxy="):
+                return arg.split("=", 1)[1].strip()
+            if arg == "--soap-proxy" and i + 1 < len(sys.argv):
+                return sys.argv[i + 1].strip()
+        return (
+            self.soap_proxy_url.strip()
+            if self.soap_proxy_url and self.soap_proxy_url.strip()
+            else None
+        )
+
 
 settings = Settings()

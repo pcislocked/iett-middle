@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.10.2] - 2026-10-22
+### Added & Adaptive Proxy Routing
+- **Adaptive SOAP Route Manager (`SoapRouteManager`):** Implemented direct-first upstream routing with resilient proxy fallback. Middle always prioritizes direct upstream connections by default to prevent routing overhead.
+- **Environment & CLI Overrides:** Supports optional proxy configuration via `SOAP_PROXY_URL` environment variable or `--soap-proxy-url` / `--soap-proxy` CLI flags. Zero hardcoded IP addresses or gateway hosts in repository.
+- **Continuous Direct Probing:** Automatically tests direct upstream health every 5 minutes (`soap_direct_probe_interval = 300.0s`). As soon as direct connectivity is restored, seamlessly resumes direct traffic without downtime.
+- **Guarded Residential Gateway Throttling:** Enforces a minimum 3.0s request spacing (`soap_proxy_min_interval = 3.0s`) and a sliding 60-second window quota of 15 requests/minute (`soap_proxy_max_per_minute = 15`) when proxy routing is active, completely safeguarding residential proxy IPs from upstream municipal rate-limits or bans.
+- **Resilient Proxy Degraded State & Cooldown:** If the proxy gateway is unreachable, down, or returning connection errors, marks the proxy degraded with a 60-second cooldown so subsequent requests don't hang, gracefully falling back to NTCAPI and in-memory caches.
+
+---
+
 ## [0.4.10.1] - 2026-10-22
 ### Fixed & Upstream Outage Relay
 - **Upstream Error Message Extraction**: Extracted and unescaped inner message text when `arac.iett.gov.tr` returns HTML error templates (e.g. ASP.NET/IIS `Kod: 500`), passing the raw upstream message in the exception payload with zero hardcoded UI strings.

@@ -158,14 +158,17 @@ class IettClient:
         if timeout is None:
             timeout = aiohttp.ClientTimeout(total=5.0, connect=2.5, sock_connect=2.5)
         try:
-            async with self._session.post(
-                url,
+            from app.services.soap_router import soap_router
+
+            return await soap_router.post(
+                self._session,
+                url=url,
                 data=envelope.encode("utf-8"),
                 headers=headers,
                 timeout=timeout,
-            ) as resp:
-                resp.raise_for_status()
-                return await resp.text()
+            )
+        except IettApiError:
+            raise
         except Exception as exc:
             raise IettApiError(f"SOAP POST to {url} failed: {exc}") from exc
 
