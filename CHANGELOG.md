@@ -6,12 +6,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ---
 
 ## [0.4.10.2] - 2026-10-22
-### Added & Adaptive Proxy Routing
-- **Adaptive SOAP Route Manager (`SoapRouteManager`):** Implemented direct-first upstream routing with resilient proxy fallback. Middle always prioritizes direct upstream connections by default to prevent routing overhead.
-- **Environment & CLI Overrides:** Supports optional proxy configuration via `SOAP_PROXY_URL` environment variable or `--soap-proxy-url` / `--soap-proxy` CLI flags. Zero hardcoded IP addresses or gateway hosts in repository.
+### Added & Adaptive Multi-Proxy Pool Routing
+- **Adaptive SOAP Multi-Proxy Pool (`SoapRouteManager`):** Implemented direct-first upstream routing with resilient multi-proxy pool fallback. Middle always prioritizes direct upstream connections by default to prevent routing overhead.
+- **Multi-Proxy Support (`SOAP_PROXY_URLS`):** Supports multiple proxy endpoints via `SOAP_PROXY_URLS` (comma/space-separated list) or `SOAP_PROXY_URL`, plus CLI argument overrides (`--soap-proxy-urls` / `--soap-proxy-url`). Zero hardcoded IP addresses or gateway hosts in repository.
+- **Isolated Per-Proxy Rate Limiting:** Enforces independent rate limits on each proxy gateway (minimum 2.0s request spacing and 45 requests per 2-minute rolling window) to protect individual residential / OpenWrt router IPs from upstream municipal rate-limits or bans.
+- **Least-Recently-Used Load Balancing & Failover:** Dynamically rotates requests across the coldest (least-recently-used) healthy proxies in the pool. Automatically isolates failing proxies with a 60-second cooldown without affecting the rest of the pool.
 - **Continuous Direct Probing:** Automatically tests direct upstream health every 5 minutes (`soap_direct_probe_interval = 300.0s`). As soon as direct connectivity is restored, seamlessly resumes direct traffic without downtime.
-- **Guarded Residential Gateway Throttling:** Enforces a minimum 3.0s request spacing (`soap_proxy_min_interval = 3.0s`) and a sliding 60-second window quota of 15 requests/minute (`soap_proxy_max_per_minute = 15`) when proxy routing is active, completely safeguarding residential proxy IPs from upstream municipal rate-limits or bans.
-- **Resilient Proxy Degraded State & Cooldown:** If the proxy gateway is unreachable, down, or returning connection errors, marks the proxy degraded with a 60-second cooldown so subsequent requests don't hang, gracefully falling back to NTCAPI and in-memory caches.
+- **Transparent User-Agent & Dynamic `via proxy` Indicator:** Dynamically appends `(via proxy; ...)` to the User-Agent when routing through fallback proxies, linking directly to `PROXY_NOTICE.md`.
+- **Upstream Proxy Notice Documentation (`PROXY_NOTICE.md`):** Added comprehensive English and Turkish notice explaining open data compliance (CC-BY 4.0), reasons for non-datacenter proxy fallback, and strict residential rate limits (2s spacing, 45 req / 2 min cap).
 
 ---
 

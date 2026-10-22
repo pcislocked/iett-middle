@@ -1,6 +1,6 @@
 # iett-middle
 
-[![Tests](https://img.shields.io/badge/tests-433%20passed-brightgreen)](#testleri-çalıştırma)
+[![Tests](https://img.shields.io/badge/tests-434%20passed-brightgreen)](#testleri-çalıştırma)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.141-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
 [![Version](https://img.shields.io/badge/version-0.4.10.2-orange)](./CHANGELOG.md)
@@ -29,7 +29,7 @@
   İETT SOAP servisleri, Mobiett JSON altyapısı ve `arac.iett.gov.tr` şifreli API'lerindeki parçalı verileri arka planda harmanlayarak ön yüze **tek bir HTTP yanıtında** (ör: `/v1/fleet/{kapino}/detail` ile anlık konum, hat bilgisi, sıralı durak listesi ve araç teknik donanımı) sunar. Mobil cihazların ardışık onlarca ağ isteği yapmasını (N+1 problemi) ve hücresel veri gecikmelerini engeller.
 - **⚡ Akıllı Bellek İçi TTL Önbellekleme (In-Memory Cache):** Filo (~7k araç: 15s), Durak Varışları (20s), Sefer Saatleri (1sa), Duyurular (5dk), Resmi Duyurular (1sa + 24sa stale) ve Garajlar (24sa) için optimize edilmiş TTL önbellekleme.
 - **🔄 Otomatik Mobiett & SOAP Fallback (Failover):** İBB açık verilerindeki SOAP kısıtlamalarını ve veri karartmalarını aşmak için arka planda Mobiett JSON servisleri, SOAP XML ve BeautifulSoup HTML kazıma altyapıları arasında otomatik veri birleştirme ve kesintisiz geçiş.
-- **🌐 Adaptif Doğrudan Bağlantı & Koruyucu Proxy Yönlendirmesi:** Doğrudan bağlantıyı her zaman önceliklendirir. Doğrudan bağlantı koptuğunda opsiyonel proxy'ye (`SOAP_PROXY_URL`) otomatik geçer; 5 dakikada bir doğrudan hattı yoklayarak hat düzeldiğinde anında geri döner. Proxy ağ geçidini banlanmaya karşı korumak için 3 saniye aralık ve 15 istek/dakika tavanı uygular.
+- **🌐 Adaptif Doğrudan Bağlantı & Çoklu Proxy Havuzu (Multi-Proxy Pool):** Doğrudan bağlantıyı her zaman önceliklendirir. Doğrudan bağlantı koptuğunda yapılandırılan proxy havuzuna (`SOAP_PROXY_URLS`) otomatik geçer; 5 dakikada bir doğrudan hattı yoklayarak hat düzeldiğinde anında geri döner. Konut/OpenWrt ağ geçitlerini banlanmaya karşı korumak için **proxy başına 2 saniye aralık** ve **2 dakikada en fazla 45 istek** kotası uygular, trafiği havuzdaki en soğuk router'lar arasında dengeler.
 - **🔒 ARAÇ Oturum & Otomatik Captcha Çözücü (`arac.iett.gov.tr`):** Dahili `ddddocr` OCR modeli ile otomatik captcha yanıtı üretme, istemci bazlı izole oturum yönetimi (`X-Arac-Session-Key`), manuel captcha doğrulaması ve `server_time` / `cached` zaman damgası metaverisi.
 - **📍 Ultra Hızlı Yakın Durak İndeksi (Spatial R-Tree Indexing):** Sunucu başlangıcında yüklenen R-Tree mekansal indeksi sayesinde kullanıcının koordinatına en yakın durakları milisaniyeler içinde hesaplama (`GET /v1/stops/nearby`).
 - **🪪 Standart TR Plaka Normalizasyonu:** Tüm SOAP, NTCAPI, ARAÇ ve SQLite katmanlarında plakaları standart `34 HO 1900` formatına dönüştürme ve boşluk/tire bağımsız $O(1)$ sorgulama.
@@ -163,7 +163,7 @@ Backend component of a three-repository stack:
   Harmonizes fragmented data from IETT SOAP services, Mobiett JSON endpoints, and `arac.iett.gov.tr` APIs into a **single HTTP payload** (e.g. `/v1/fleet/{kapino}/detail` combining live position, resolved route, ordered stop list, and vehicle specs). Completely eliminates mobile N+1 request waterfalls and network latency.
 - **⚡ Smart In-Memory TTL Caching:** Optimized per-endpoint TTL caching (Fleet ~7k buses: 15s, ETAs: 20s, Timetables: 1h, Announcements: 5m, Garages: 24h).
 - **🔄 Automatic Mobiett & SOAP Failover:** Merges Mobiett JSON endpoints, SOAP XML APIs, and BeautifulSoup HTML parsers in real-time to bypass municipal public API restrictions.
-- **🌐 Adaptive Direct Connection & Guarded Proxy Routing:** Prioritizes direct upstream connections by default. Transparently falls back to an optional proxy (`SOAP_PROXY_URL`) upon direct failure, continuously probing direct connectivity every 5 minutes to restore native routing as soon as reachable. Protects proxy gateway IPs with minimum 3.0s request spacing and 15 req/min quota.
+- **🌐 Adaptive Direct Connection & Multi-Proxy Pool (SOAP Route Manager):** Prioritizes direct upstream connections by default. Transparently falls back to an optional proxy pool (`SOAP_PROXY_URLS`) upon direct failure, continuously probing direct connectivity every 5 minutes. Protects residential/OpenWrt gateway IPs with **isolated per-proxy rate limits (2.0s min interval, 45 req / 2 min cap)** and least-recently-used load balancing.
 - **🔒 ARAC Session & Captcha Engine (`arac.iett.gov.tr`):** Built-in `ddddocr` OCR engine for automated captcha solving, client-isolated session authentication (`X-Arac-Session-Key`), and manual captcha verification endpoints.
 - **📍 Ultra-Fast Spatial R-Tree Indexing:** Memory-mapped spatial R-Tree index populated at startup for instant nearby stop lookup (`GET /v1/stops/nearby`).
 - **🛡️ Security & Error Shielding:** Rate-limiting via SlowAPI, sanitizing raw ASP.NET HTML stack traces, preventing internal leakage.

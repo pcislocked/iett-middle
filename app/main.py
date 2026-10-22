@@ -16,6 +16,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
+from app.config import settings
 from app.deps import cancel_fleet_refresh_task, close_session, limiter, set_session
 from app.routers import announcements, arac, fleet, garages, routes, stops, traffic
 
@@ -91,7 +92,6 @@ def _make_trace_config() -> aiohttp.TraceConfig:
 async def lifespan(app: FastAPI):  # noqa: ARG001
     import asyncio  # noqa: PLC0415
 
-    from app.config import settings  # noqa: PLC0415
     from app.services.cache import sweep_forever  # noqa: PLC0415
     from app.services.fleet_poller import refresh_fleet_forever  # noqa: PLC0415
     from app.services.notice_poller import notice_poll_loop  # noqa: PLC0415
@@ -109,7 +109,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
             connector=connector,
             trace_configs=trace_configs,
             timeout=aiohttp.ClientTimeout(total=20),
-            headers={"User-Agent": "iett-middle/1.0 (+https://github.com/pcislocked)"},
+            headers={"User-Agent": settings.user_agent(via_proxy=False)},
         )
     )
     logger.info("HTTP session started")
@@ -169,7 +169,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
 app = FastAPI(
     title="iett-middle",
     description="Smart caching proxy for IETT Istanbul public transit APIs.",
-    version="0.4.10.2",
+    version=settings.app_version,
     lifespan=lifespan,
 )
 
