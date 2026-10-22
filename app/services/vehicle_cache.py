@@ -63,14 +63,30 @@ def get_db_connection() -> sqlite3.Connection:
             timeout=30.0,
             check_same_thread=False,
         )
+        if not _is_memory:
+            new_conn.execute("CREATE TABLE IF NOT EXISTS _test_write (id INT);")
     except Exception as exc:
-        logger.warning("Could not open %s, using in-memory fallback: %s", db_target, exc)
-        new_conn = sqlite3.connect(
-            "file:vehicle_cache_fallback?mode=memory&cache=shared",
-            uri=True,
-            timeout=30.0,
-            check_same_thread=False,
-        )
+        logger.warning("Could not open %s (%s), trying /tmp/vehicles.db", db_target, exc)
+        try:
+            p_tmp = Path("/tmp/vehicles.db")
+            new_conn = sqlite3.connect(
+                str(p_tmp),
+                uri=False,
+                timeout=30.0,
+                check_same_thread=False,
+            )
+            new_conn.execute("CREATE TABLE IF NOT EXISTS _test_write (id INT);")
+        except Exception as exc2:
+            logger.warning(
+                "Could not open /tmp fallback either (%s), using in-memory shared fallback", exc2
+            )
+            _is_memory = True
+            new_conn = sqlite3.connect(
+                "file:vehicle_cache_fallback?mode=memory&cache=shared",
+                uri=True,
+                timeout=30.0,
+                check_same_thread=False,
+            )
 
     new_conn.row_factory = sqlite3.Row
 

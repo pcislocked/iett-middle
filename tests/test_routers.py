@@ -1254,6 +1254,56 @@ class TestStopsExtra:
         assert resp.status_code == 200
         assert resp.json()[0]["eta_minutes"] == 5
 
+    def test_arrivals_resolves_missing_plates_via_ntcapi_location(self, client: TestClient) -> None:
+        from app.deps import clear_fleet_store
+
+        clear_fleet_store()
+
+        raw_arrival = {
+            "hatkodu": "500T",
+            "hattip": "",
+            "hatadi": "TUZLA - CEVIZLIBAG",
+            "dakika": "7",
+            "saat": "7 dk",
+            "kapino": "M-2575",
+            "son_konum": "29.0,41.0",
+            "son_hiz": "30",
+            "son_konum_saati": "2026-03-01 12:00:00",
+            "usb": "0",
+            "wifi": "0",
+            "klima": "1",
+            "engelli": None,
+        }
+        mock_bus_loc = {
+            "kapino": "M-2575",
+            "plate": "34 TN 1904",
+            "lat": 41.0,
+            "lon": 29.0,
+            "speed": 30,
+            "ts": "2026-03-01 12:00:00",
+        }
+
+        with (
+            patch(
+                "app.routers.stops.ntcapi_client.get_stop_arrivals",
+                AsyncMock(return_value=[raw_arrival]),
+            ),
+            patch(
+                "app.routers.stops.ntcapi_client.get_bus_location",
+                AsyncMock(return_value=mock_bus_loc),
+            ),
+            patch("app.routers.stops.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.stops.cache_set", AsyncMock(), create=True),
+            patch("app.routers.stops.get_session", return_value=MagicMock(), create=True),
+        ):
+            resp = client.get("/v1/stops/219381/arrivals")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["kapino"] == "M-2575"
+        assert data[0]["plate"] == "34 TN 1904"
+
     def test_arrivals_ntcapi_empty_list_does_not_trigger_html_fallback(
         self, client: TestClient
     ) -> None:

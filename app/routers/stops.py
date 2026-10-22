@@ -11,7 +11,13 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Path, Query, Request
 
 from app.config import settings
-from app.deps import get_plate_by_kapino, get_session, get_stop_info_by_code, limiter
+from app.deps import (
+    get_plate_by_kapino,
+    get_session,
+    get_stop_info_by_code,
+    limiter,
+    record_plate_mapping,
+)
 from app.models.bus import Arrival
 from app.models.canonical import CanonicalArrival
 from app.models.route import Announcement
@@ -280,6 +286,36 @@ async def get_arrivals(
                 d = a.get("destination")
                 if d and normalizers.arrivals.is_destination_incomplete(d):
                     a["destination"] = re.sub(r"^[\s-]+|[\s-]+$", "", d).strip()
+
+            # Enrich missing plates via in-memory fleet/cache or NTCAPI bus location
+            missing_plates = [
+                k
+                for a in canonical
+                if (k := a.get("kapino")) and not a.get("plate") and not get_plate_by_kapino(k)
+            ]
+
+            async def _resolve_plate(k: str) -> None:
+                try:
+                    loc = await asyncio.wait_for(
+                        ntcapi_client.get_bus_location(k, session), timeout=1.5
+                    )
+                    if loc and loc.get("plate"):
+                        record_plate_mapping(k, loc["plate"])
+                except Exception as exc:
+                    logger.debug("Failed to resolve plate for %s: %s", k, exc)
+
+            if missing_plates:
+                unique_missing = list(set(missing_plates))
+                await asyncio.gather(
+                    *[_resolve_plate(k) for k in unique_missing], return_exceptions=True
+                )
+
+            for a in canonical:
+                k = a.get("kapino")
+                if not a.get("plate") and k:
+                    pl = get_plate_by_kapino(k)
+                    if pl:
+                        a["plate"] = pl
 
             def _sort_by_eta(arr: CanonicalArrival) -> int:
                 eta = arr.get("eta_minutes")

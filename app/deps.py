@@ -6,6 +6,7 @@ Import from here, never from main.py, to avoid circular imports.
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
 import re
 import time
@@ -22,6 +23,8 @@ from slowapi import Limiter
 
 from app.models.stop import NearbyStop
 from app.services.normalizers.plate import normalize_plate
+
+logger = logging.getLogger(__name__)
 
 
 def get_real_ip(request: Request) -> str:
@@ -254,6 +257,38 @@ def get_plate_by_kapino(kapino: str) -> str | None:
             return veh["plate"]
 
     return None
+
+
+def record_plate_mapping(kapino: str, plate: str) -> None:
+    """Record a known kapino <-> plate pair into in-memory fleet and persistent cache."""
+    if not kapino or not plate:
+        return
+    norm_p = normalize_plate(plate) or plate.strip()
+    clean_k = re.sub(r"[^A-Z0-9]", "", kapino.upper())
+    clean_p = re.sub(r"[^A-Z0-9]", "", norm_p.upper())
+    if not clean_k or not clean_p:
+        return
+
+    _known_plate_mappings[clean_k] = clean_p
+
+    if clean_k in _clean_fleet:
+        _clean_fleet[clean_k]["plate"] = norm_p
+    else:
+        _clean_fleet[clean_k] = {"kapino": kapino, "plate": norm_p}
+
+    if kapino in _fleet:
+        _fleet[kapino]["plate"] = norm_p
+    else:
+        _fleet[kapino] = {"kapino": kapino, "plate": norm_p}
+
+    _plate_fleet[clean_p] = _clean_fleet[clean_k]
+
+    try:
+        from app.services import vehicle_cache  # noqa: PLC0415
+
+        vehicle_cache.upsert_vehicle(clean_k, door_number=kapino, plate=norm_p)
+    except Exception as exc:
+        logger.debug("Failed to persist plate mapping to sqlite: %s", exc)
 
 
 def get_last_route_by_kapino(kapino: str) -> str | None:

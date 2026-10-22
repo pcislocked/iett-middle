@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.9.7] - 2026-10-22
+### Fixed & Resilience
+- **Dynamic NTCAPI Plate Resolution:** Resolved vehicle license plates on-demand via `ntcapi_client.get_bus_location` for approaching buses when full fleet SOAP snapshot is unavailable or blocked, recording mappings into memory and persistent cache.
+- **SQLite Fallback Directory Resilience:** Added `/tmp/vehicles.db` fallback and persistent in-memory shared fallback if `/app/data` is mounted read-only or owned by root.
+- **Route Bus Plate Enrichment:** Automatically populated missing license plates in route bus positions from the in-memory plate mapping store.
+
+---
+
 ## [0.4.9.6] - 2026-10-22
 ### Fixed & Performance
 - **Fail-Fast SOAP Connection Timeouts:** Configured strict connection timeouts (`connect=2.5s`, `sock_connect=2.5s`, `total=5.0s`) on `_soap_post` and downstream HTTP calls so that unresponsive upstream servers (e.g. `api.ibb.gov.tr` packet drops) fail immediately instead of blocking user requests for 30 seconds.

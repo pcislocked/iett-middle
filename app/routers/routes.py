@@ -157,8 +157,13 @@ async def get_route_buses(
             if hat_id is not None:
                 buses = await ntcapi_client.get_route_buses_ybs(hat_id, hat_kodu, session)
                 if buses:
-                    from app.deps import update_fleet
+                    from app.deps import get_plate_by_kapino, update_fleet
 
+                    for i, b in enumerate(buses):
+                        if not b.plate and b.kapino:
+                            pl = get_plate_by_kapino(b.kapino)
+                            if pl:
+                                buses[i] = b.model_copy(update={"plate": pl})
                     update_fleet(buses, is_full_snapshot=False)
                     return buses
         except Exception as exc:  # noqa: BLE001
