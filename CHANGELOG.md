@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.9.6] - 2026-10-22
+### Fixed & Performance
+- **Fail-Fast SOAP Connection Timeouts:** Configured strict connection timeouts (`connect=2.5s`, `sock_connect=2.5s`, `total=5.0s`) on `_soap_post` and downstream HTTP calls so that unresponsive upstream servers (e.g. `api.ibb.gov.tr` packet drops) fail immediately instead of blocking user requests for 30 seconds.
+- **Route Stops Cache Retention & Fallback Guard:** Removed `SkipCache` bypass in `get_route_stops` when stops contain null coordinates. Bounded SOAP fallback with a 3.0-second timeout so NTCAPI stops are preserved and cached permanently rather than forcing 30-second delays on every route page visit.
+- **Resilient Announcement Aggregation:** Wrapped global announcement retrieval with a 2.5-3.0 second timeout and extended the negative cache TTL from 60s to 300s during upstream outages. Ensures stop-specific Mobiett announcements display instantly even when central SOAP announcements are offline.
+- **Bounded Stop Detail Resolution:** Enforced 3-second SOAP timeouts in `get_stop_detail` so fast Mobiett stop coordinates are returned immediately without waiting for stalled SOAP tasks.
+
+---
+
 ## [0.4.9.5] - 2026-10-22
 ### Security & Rate Limiting
 - **Global Rate Limiting Overhaul:** Added explicit `@limiter.limit` decorators to every single API endpoint across all routers (fleet, routes, stops, arac, garages, traffic, announcements, health).

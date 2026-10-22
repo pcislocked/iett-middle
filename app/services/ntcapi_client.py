@@ -68,7 +68,7 @@ async def _ensure_token(session: aiohttp.ClientSession) -> str:
                 _TOKEN_URL,
                 json=payload,
                 headers={"User-Agent": "okhttp/5.0.0-alpha.11"},
-                timeout=aiohttp.ClientTimeout(total=10),
+                timeout=aiohttp.ClientTimeout(total=8.0, connect=3.0, sock_connect=3.0),
             ) as resp:
                 if resp.status != 200:
                     text = await resp.text()
@@ -112,7 +112,7 @@ async def _call_service(
                 "Authorization": f"Bearer {token}",
                 "User-Agent": "okhttp/5.0.0-alpha.11",
             },
-            timeout=aiohttp.ClientTimeout(total=10),
+            timeout=aiohttp.ClientTimeout(total=8.0, connect=3.0, sock_connect=3.0),
         ) as resp:
             if resp.status != 200:
                 text = await resp.text()

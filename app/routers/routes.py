@@ -87,8 +87,8 @@ async def get_route_metadata(hat_kodu: str) -> list[dict]:
         if not data:
             client = IettClient(session)
             try:
-                meta = await client.get_route_metadata(hat_kodu)
-            except IettApiError as exc:
+                meta = await asyncio.wait_for(client.get_route_metadata(hat_kodu), timeout=3.0)
+            except (IettApiError, asyncio.TimeoutError) as exc:
                 logger.warning("get_route_metadata failed for %s: %s", hat_kodu, exc)
                 raise HTTPException(502, detail="Hat üst veri servisine ulaşılamadı.") from exc
             data = [m.model_dump() for m in meta]
@@ -171,7 +171,7 @@ async def get_route_buses(
         # ── secondary: IETT SOAP GetHatOtoKonum ────────────────────────────────
         try:
             client = IettClient(session)
-            buses = await client.get_route_buses(hat_kodu)
+            buses = await asyncio.wait_for(client.get_route_buses(hat_kodu), timeout=3.0)
             if buses:
                 from app.deps import update_fleet
 
@@ -239,18 +239,20 @@ async def get_route_stops(hat_kodu: str) -> list[dict[str, Any]]:
                 logger.warning("ntcapi stops missing coords for %s, trying SOAP fallback", hat_kodu)
             client = IettClient(session)
             try:
-                soap_stops = await client.get_route_stops(hat_kodu)
+                soap_stops = await asyncio.wait_for(client.get_route_stops(hat_kodu), timeout=3.0)
                 if soap_stops:
                     stops = soap_stops
-                    has_null_coords = any(s.latitude is None or s.longitude is None for s in stops)
-            except IettApiError as exc:
+            except (IettApiError, asyncio.TimeoutError) as exc:
                 if not stops:
                     logger.warning("get_route_stops failed for %s: %s", hat_kodu, exc)
                     raise HTTPException(502, detail="Hat durakları servisine ulaşılamadı.") from exc
+                logger.warning(
+                    "SOAP fallback failed or timed out for %s, proceeding with NTCAPI stops: %s",
+                    hat_kodu,
+                    exc,
+                )
 
         dumped = [s.model_dump() for s in stops]
-        if has_null_coords:
-            raise SkipCache(dumped)
         return dumped
 
     return await cache_get_or_fetch(
@@ -364,13 +366,13 @@ async def fetch_filtered_announcements(route_list: set[str]) -> list[dict]:
     async def _fetch() -> list[dict[str, Any]]:
         client = IettClient(get_session())
         try:
-            announcements = await client.get_announcements()
-        except IettApiError as exc:
+            announcements = await asyncio.wait_for(client.get_announcements(), timeout=3.0)
+        except (IettApiError, asyncio.TimeoutError) as exc:
             logger.warning(
-                "IETT API failed for global announcements, applying 60s negative cache: %s",
+                "IETT API failed for global announcements, applying 300s negative cache: %s",
                 exc,
             )
-            await cache_set(key, [], 60)
+            await cache_set(key, [], 300)
             raise SkipCache([])
         return [a.model_dump() for a in announcements]
 
@@ -433,12 +435,18 @@ async def get_route_announcements(
         route_list = {hat_kodu}
 
         # 1. Get global announcements for the route
-        global_anns = await fetch_filtered_announcements(route_list)
+        try:
+            global_anns = await asyncio.wait_for(
+                fetch_filtered_announcements(route_list), timeout=3.0
+            )
+        except Exception as exc:
+            logger.warning("Failed to fetch global announcements for route %s: %s", hat_kodu, exc)
+            global_anns = []
 
         # 2. Get stops for the route to pull stop-specific announcements
         stops = []
         try:
-            stops = await get_route_stops(hat_kodu)
+            stops = await asyncio.wait_for(get_route_stops(hat_kodu), timeout=3.0)
         except Exception as exc:
             logger.warning("Failed to get route stops for announcements enrichment: %s", exc)
 

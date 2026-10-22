@@ -731,12 +731,12 @@ class TestRoutesBatchAnnouncements:
         assert resp.status_code == 200
         assert resp.json() == []
 
-        # Verify negative cache was set with 60s TTL
+        # Verify negative cache was set with 300s TTL
         mock_cache_set.assert_called_once()
         args = mock_cache_set.call_args
         assert args[0][0] == "routes:announcements:global"
         assert args[0][1] == []
-        assert args[0][2] == 60
+        assert args[0][2] == 300
 
 
 # ===========================  /v1/garages  ==================================
@@ -1011,6 +1011,47 @@ class TestRoutesStopsFallback:
             resp = client.get("/v1/routes/500T/stops")
         assert resp.status_code == 200
         assert resp.json()[0]["stop_code"] == "301341"
+
+    def test_200_ntcapi_stops_with_null_coords_retained_and_cached_when_soap_fails(
+        self, client: TestClient
+    ) -> None:
+        from app.services.cache import _store
+        from app.services.iett_client import IettApiError
+
+        _store.clear()
+
+        raw_g = [
+            {
+                "route_code": "500T",
+                "direction_letter": "G",
+                "sequence": 1,
+                "stop_code": "301341",
+                "stop_name": "LEVENT",
+                "lat": None,
+                "lon": None,
+                "district": "Besiktas",
+            }
+        ]
+        mock_client = MagicMock()
+        mock_client.get_route_stops = AsyncMock(side_effect=IettApiError("SOAP unreachable"))
+
+        with (
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
+            patch(
+                "app.routers.routes.ntcapi_client.get_route_stops",
+                AsyncMock(side_effect=[raw_g, []]),
+            ),
+            patch("app.routers.routes.IettClient", return_value=mock_client),
+        ):
+            resp = client.get("/v1/routes/500T/stops")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) == 1
+        assert body[0]["stop_code"] == "301341"
+        assert body[0]["latitude"] is None
+        # Must be cached in _store, not skipped!
+        assert "routes:stops:500T" in _store
 
 
 # ===========================  extra /v1/stops  ==============================

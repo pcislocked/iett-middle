@@ -49,7 +49,7 @@ class MobiettClient:
                 async with self._session.post(
                     MOBIETT_AUTH_URL,
                     json=payload,
-                    timeout=aiohttp.ClientTimeout(total=10),
+                    timeout=aiohttp.ClientTimeout(total=8.0, connect=3.0, sock_connect=3.0),
                 ) as resp:
                     resp.raise_for_status()
                     data = await resp.json()
@@ -78,7 +78,7 @@ class MobiettClient:
                 MOBIETT_SERVICE_URL,
                 json=payload,
                 headers=headers,
-                timeout=aiohttp.ClientTimeout(total=15),
+                timeout=aiohttp.ClientTimeout(total=8.0, connect=3.0, sock_connect=3.0),
             ) as resp:
                 resp.raise_for_status()
                 return await resp.json()

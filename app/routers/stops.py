@@ -436,7 +436,7 @@ async def get_stop_announcements(
 
         async def _fetch_global_anns() -> list[dict[str, Any]]:
             try:
-                route_codes = await get_routes_at_stop(dcode)
+                route_codes = await asyncio.wait_for(get_routes_at_stop(dcode), timeout=2.5)
             except HTTPException as exc:
                 logger.warning(f"Failed to fetch routes for stop {dcode}: {exc.detail}")
                 route_codes = []
@@ -445,7 +445,9 @@ async def get_stop_announcements(
                 route_codes = []
 
             try:
-                return await fetch_filtered_announcements(set(route_codes))
+                return await asyncio.wait_for(
+                    fetch_filtered_announcements(set(route_codes)), timeout=2.5
+                )
             except Exception as e:
                 logger.warning(f"Global announcements failed for stop {dcode}: {e}")
                 return []

@@ -143,42 +143,64 @@ class IettClient:
     # Helpers
     # ------------------------------------------------------------------
 
-    async def _soap_post(self, url: str, body: str, action: str) -> str:
+    async def _soap_post(
+        self,
+        url: str,
+        body: str,
+        action: str,
+        timeout: aiohttp.ClientTimeout | None = None,
+    ) -> str:
         envelope = _SOAP_ENV.format(body=body)
         headers = {
             "Content-Type": "text/xml; charset=utf-8",
             "SOAPAction": action,
         }
+        if timeout is None:
+            timeout = aiohttp.ClientTimeout(total=5.0, connect=2.5, sock_connect=2.5)
         try:
             async with self._session.post(
                 url,
                 data=envelope.encode("utf-8"),
                 headers=headers,
-                timeout=aiohttp.ClientTimeout(total=30),
+                timeout=timeout,
             ) as resp:
                 resp.raise_for_status()
                 return await resp.text()
         except Exception as exc:
             raise IettApiError(f"SOAP POST to {url} failed: {exc}") from exc
 
-    async def _get_text(self, url: str, params: dict[str, Any] | None = None) -> str:
+    async def _get_text(
+        self,
+        url: str,
+        params: dict[str, Any] | None = None,
+        timeout: aiohttp.ClientTimeout | None = None,
+    ) -> str:
+        if timeout is None:
+            timeout = aiohttp.ClientTimeout(total=10.0, connect=3.0, sock_connect=3.0)
         try:
             async with self._session.get(
                 url,
                 params=params,
-                timeout=aiohttp.ClientTimeout(total=15),
+                timeout=timeout,
             ) as resp:
                 resp.raise_for_status()
                 return await resp.text()
         except Exception as exc:
             raise IettApiError(f"GET {url} failed: {exc}") from exc
 
-    async def _get_json(self, url: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def _get_json(
+        self,
+        url: str,
+        params: dict[str, Any] | None = None,
+        timeout: aiohttp.ClientTimeout | None = None,
+    ) -> dict[str, Any]:
+        if timeout is None:
+            timeout = aiohttp.ClientTimeout(total=10.0, connect=3.0, sock_connect=3.0)
         try:
             async with self._session.get(
                 url,
                 params=params,
-                timeout=aiohttp.ClientTimeout(total=15),
+                timeout=timeout,
             ) as resp:
                 resp.raise_for_status()
                 return await resp.json(content_type=None)
@@ -195,6 +217,7 @@ class IettClient:
             f"{settings.iett_soap_base}/FiloDurum/SeferGerceklesme.asmx",
             '<GetFiloAracKonum_json xmlns="http://tempuri.org/"/>',
             '"http://tempuri.org/GetFiloAracKonum_json"',
+            timeout=aiohttp.ClientTimeout(total=30.0, connect=3.0, sock_connect=3.0),
         )
         return await asyncio.to_thread(parse_all_fleet_xml, xml)
 
@@ -411,6 +434,7 @@ class IettClient:
                 f"{settings.iett_soap_base}/UlasimAnaVeri/HatDurakGuzergah.asmx",
                 f'<GetDurak_json xmlns="http://tempuri.org/"><DurakKodu>{safe_dcode}</DurakKodu></GetDurak_json>',
                 '"http://tempuri.org/GetDurak_json"',
+                timeout=aiohttp.ClientTimeout(total=3.0, connect=2.0, sock_connect=2.0),
             )
             return parse_stop_detail_xml(xml, dcode)
 
