@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     ntcapi_ybs_username: str = "netuce"
     ntcapi_ybs_password: str = "n1!t8c7M1"
 
+    # data.ibb.gov.tr — IBB Open Data Portal API Key (passed via env IBB_DATA_API_KEY)
+    ibb_data_api_key: str | None = None
+
     log_level: str = "info"
     enable_outgoing_trace: bool = False
     port: int = 8000
