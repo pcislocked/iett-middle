@@ -177,10 +177,16 @@ class AracClient:
                 )
             ctype = resp.headers.get("content-type", "")
             if "application/json" not in ctype:
+                import html as html_lib
+                import re as re_lib
+
+                stripped = re_lib.sub(r"<[^>]+>", " ", text).strip()
+                stripped = html_lib.unescape(stripped)
+                stripped = re_lib.sub(r"\s+", " ", stripped)
                 raise AracApiError(
                     f"ARAC {path} returned non-JSON (status {resp.status})",
-                    status_code=resp.status,
-                    payload=text[:500],
+                    status_code=503,
+                    payload=stripped or f"HTTP {resp.status}",
                 )
             try:
                 return json.loads(text)

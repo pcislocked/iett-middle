@@ -31,9 +31,11 @@ router = APIRouter()
 _captcha_cookies = TTLCache[str, dict[str, str]](maxsize=1000, ttl=600)
 
 
-def _status_from_arac_error(exc: AracApiError, fallback: int = 502) -> int:
+def _status_from_arac_error(exc: AracApiError, fallback: int = 503) -> int:
     status = getattr(exc, "status_code", None)
     if isinstance(status, int) and 400 <= status <= 599:
+        if status in (500, 502):
+            return 503
         return status
     return fallback
 
@@ -126,8 +128,12 @@ async def get_arac_captcha(request: Request) -> AracCaptchaResponse:
             captcha_data = await client.get_captcha()
         except AracApiError as exc:
             logger.warning("get_arac_captcha failed: %s", exc)
-            status = _status_from_arac_error(exc, 502)
-            detail_msg = str(exc) if status < 500 else "ARAC captcha servisine ulaşılamadı."
+            status = _status_from_arac_error(exc, 503)
+            detail_msg = (
+                exc.payload
+                if exc.payload and isinstance(exc.payload, str) and not exc.payload.startswith("<")
+                else str(exc)
+            )
             raise HTTPException(status, detail=detail_msg) from exc
 
         captcha_id = captcha_data["captchaId"]
@@ -190,8 +196,12 @@ async def create_arac_session(
 
         except AracApiError as exc:
             logger.warning("create_arac_session failed: %s", exc)
-            status = _status_from_arac_error(exc, 502)
-            detail_msg = str(exc) if status < 500 else "ARAC servisine ulaşılamadı."
+            status = _status_from_arac_error(exc, 503)
+            detail_msg = (
+                exc.payload
+                if exc.payload and isinstance(exc.payload, str) and not exc.payload.startswith("<")
+                else str(exc)
+            )
             raise HTTPException(status, detail=detail_msg) from exc
         finally:
             _captcha_cookies.pop(payload.captchaId, None)
@@ -332,8 +342,12 @@ async def get_arac_bus_auto_detail(
             }
         except AracApiError as exc:
             logger.warning("get_arac_bus_auto_detail failed: %s", exc)
-            status = _status_from_arac_error(exc, 502)
-            detail_msg = str(exc) if status < 500 else "ARAC otomatik detay servisine ulaşılamadı."
+            status = _status_from_arac_error(exc, 503)
+            detail_msg = (
+                exc.payload
+                if exc.payload and isinstance(exc.payload, str) and not exc.payload.startswith("<")
+                else str(exc)
+            )
             raise HTTPException(status, detail=detail_msg) from exc
         finally:
             if must_close:
@@ -385,8 +399,12 @@ async def get_arac_bus_detail(
             detail = await client.get_detail(vehicle_hash)
         except AracApiError as exc:
             logger.warning("get_arac_bus_detail failed: %s", exc)
-            status = _status_from_arac_error(exc, 502)
-            detail_msg = str(exc) if status < 500 else "ARAC araç detay servisine ulaşılamadı."
+            status = _status_from_arac_error(exc, 503)
+            detail_msg = (
+                exc.payload
+                if exc.payload and isinstance(exc.payload, str) and not exc.payload.startswith("<")
+                else str(exc)
+            )
             raise HTTPException(status, detail=detail_msg) from exc
 
     data_vehicle = detail.get("dataVehicle", {})

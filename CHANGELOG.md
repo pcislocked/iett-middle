@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.10.1] - 2026-10-22
+### Fixed & Upstream Outage Relay
+- **Upstream Error Message Extraction**: Extracted and unescaped inner message text when `arac.iett.gov.tr` returns HTML error templates (e.g. ASP.NET/IIS `Kod: 500`), passing the raw upstream message in the exception payload with zero hardcoded UI strings.
+- **503 Status Code for Upstream Failures**: Mapped upstream 500/502 errors to HTTP 503 Service Unavailable so Cloudflare edge proxies do not intercept and overwrite the JSON response with Cloudflare-branded HTML error landing pages.
+
+---
+
 ## [0.4.10] - 2026-10-22
 *Minor version bump consolidating all cumulative patch releases (0.4.9 through 0.4.9.7) into a major stability, resilience, and security release.*
 
