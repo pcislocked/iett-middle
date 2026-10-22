@@ -5,6 +5,53 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.10] - 2026-10-22
+*Minor version bump consolidating all cumulative patch releases (0.4.9 through 0.4.9.7) into a major stability, resilience, and security release.*
+
+### Complete Changelog Since 0.4.9
+
+#### 1. Dynamic Plate Enrichment & Resilience (0.4.9.7)
+- **On-Demand NTCAPI Plate Resolution:** Integrated `ntcapi_client.get_bus_location` (`mainGetBusLocation_basic`) to dynamically resolve canonical license plates (`34 TN 1904`) for approaching buses at stops when the full fleet SOAP snapshot is unavailable or blocked, caching mappings permanently in memory and SQLite.
+- **SQLite Fallback Directory Resilience:** Added `/tmp/vehicles.db` fallback and persistent in-memory shared fallback when `/app/data` is mounted read-only or owned by root.
+- **Route Bus Plate Enrichment:** Automatically populated missing license plates in route bus positions from the in-memory plate mapping store.
+
+#### 2. Fail-Fast Upstream SOAP & Cache Isolation (0.4.9.6)
+- **Fail-Fast SOAP Connection Timeouts:** Configured strict connection timeouts (`connect=2.5s`, `sock_connect=2.5s`, `total=5.0s`) on `_soap_post` and downstream HTTP calls so unresponsive upstream servers (e.g. `api.ibb.gov.tr` packet drops) fail immediately instead of blocking user requests for 30 seconds.
+- **Route Stops Cache Retention & Fallback Guard:** Removed `SkipCache` bypass in `get_route_stops` when stops contain null coordinates. Bounded SOAP fallback with a 3.0-second timeout so NTCAPI stops are preserved and cached permanently rather than forcing 30-second delays on every route page visit.
+- **Resilient Announcement Aggregation:** Wrapped global announcement retrieval with a 2.5-3.0 second timeout and extended the negative cache TTL from 60s to 300s during upstream outages. Ensures stop-specific Mobiett announcements display instantly even when central SOAP announcements are offline.
+- **Bounded Stop Detail Resolution:** Enforced 3-second SOAP timeouts in `get_stop_detail` so fast Mobiett stop coordinates are returned immediately without waiting for stalled SOAP tasks.
+
+#### 3. Security & Comprehensive Rate Limiting (0.4.9.5)
+- **Global Rate Limiting Overhaul:** Added explicit `@limiter.limit` decorators to every single API endpoint across all routers (fleet, routes, stops, arac, garages, traffic, announcements, health).
+- **Abuse & Scraping Mitigation:** Restricted manual fleet refresh to `5/minute`, captcha generation and session creation to `30/minute`, large traffic segments payload to `30/minute`, and official scraper to `20/minute`.
+- **Security Response Headers:** Enforced `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY` on all HTTP responses.
+- **Internal Helper Isolation:** Decoupled internal service calls from rate-limited endpoint handlers to prevent SlowAPI request context collisions during inter-router calls.
+
+#### 4. Zero Suppression Strict Typing (0.4.9.4)
+- **Strict Typing:** Eliminated all `# type: ignore` suppressions across entire backend (`app/` and `tests/`), making the codebase 100% strictly typed under Pyright and Ruff.
+- **Generic Cache Helper:** Made `cache_get_or_fetch` generic over `TypeVar("T")`, ensuring return types propagate cleanly to callers without implicit `Any` conversions.
+- **Pydantic v2 Hydration:** Replaced dictionary unpacking with `model_validate` and `model_copy` across stop arrivals, route stops, and announcement routers.
+- **Aiohttp Trace Protocol:** Explicitly typed `SimpleNamespace` context parameters for request tracing hooks.
+
+#### 5. CI/CD & Performance Hardening (0.4.9.2)
+- **CI/CD Action Versions & Caching:** Upgraded GitHub Actions to valid stable versions (`checkout@v4`, `setup-python@v5`), scoped concurrency cancellation to preserve tag builds, and enabled `cache-to: type=gha,mode=max` in Docker workflows.
+- **Async Event Loop Offloading:** Offloaded all CPU-bound BeautifulSoup HTML tree parsing routines to worker threads via `asyncio.to_thread`.
+- **Session Lifecycle:** Reused FastAPI shared `aiohttp.ClientSession` in `arac.py` with transient session fallback for isolated tests.
+- **Cache Thread Safety:** Added bounded retry loop to `get_cache_stats()` for dictionary mutation resilience.
+
+#### 6. Resilient Fallbacks & Memory Bounding (0.4.9.1)
+- **Stop Arrivals SOAP Failover:** Implemented automatic fallback to SOAP `GetHatOtoKonum_json` when NTCAPI fails or returns empty/invalid arrivals.
+- **Bounded In-Memory Vehicle Cache (LRU):** Converted in-memory dictionaries in `app/services/vehicle_cache.py` to `collections.OrderedDict` with bounded size (`max_size=500`) and LRU eviction.
+- **Synchronized 401 Token Refresh:** Added `asyncio.Lock` synchronization to `iett_client.py` and `arac_client.py` token invalidation and refresh logic to prevent concurrent request stampedes.
+
+#### 7. Core Capabilities Introduced in 0.4.9
+- **Official IETT Announcements Endpoint (`GET /v1/announcements/official`):** Scrapes official announcements from `iett.istanbul/announcement/Index` with pagination, 1-hour TTL, and 24-hour stale fallback.
+- **Turkish License Plate Normalization:** Added canonical `normalize_plate` formatting (`34 HO 1900`) across all layers while maintaining dash/space-agnostic $O(1)$ lookup.
+- **ARAC Freshness & Cache Metadata:** Added `server_time` (ISO-8601 UTC) and `cached` boolean flags to ARAC responses.
+- **Health Endpoint Version Exposure:** Exposed `"version": app.version` in `/health` and `/healthz`.
+
+---
+
 ## [0.4.9.7] - 2026-10-22
 ### Fixed & Resilience
 - **Dynamic NTCAPI Plate Resolution:** Resolved vehicle license plates on-demand via `ntcapi_client.get_bus_location` for approaching buses when full fleet SOAP snapshot is unavailable or blocked, recording mappings into memory and persistent cache.
