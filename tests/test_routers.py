@@ -1091,12 +1091,60 @@ class TestStopsExtra:
     def test_nearby_sorts_by_distance_before_limit(self, client: TestClient) -> None:
         """Ensure all returned NTCAPI stops are sorted by distance before limit is applied."""
         processed = [
-            {"stop_code": "1001", "stop_name": "Far Stop 1", "lat": 41.09, "lon": 29.02, "district": "X", "direction": None, "distance_m": 800.0},
-            {"stop_code": "1002", "stop_name": "Closest Stop", "lat": 41.081, "lon": 29.011, "district": "X", "direction": None, "distance_m": 50.0},
-            {"stop_code": "1003", "stop_name": "Medium Stop", "lat": 41.085, "lon": 29.015, "district": "X", "direction": None, "distance_m": 300.0},
-            {"stop_code": "1004", "stop_name": "Far Stop 2", "lat": 41.091, "lon": 29.021, "district": "X", "direction": None, "distance_m": 850.0},
-            {"stop_code": "1005", "stop_name": "Close Stop 2", "lat": 41.082, "lon": 29.012, "district": "X", "direction": None, "distance_m": 120.0},
-            {"stop_code": "1006", "stop_name": "Far Stop 3", "lat": 41.092, "lon": 29.022, "district": "X", "direction": None, "distance_m": 900.0},
+            {
+                "stop_code": "1001",
+                "stop_name": "Far Stop 1",
+                "lat": 41.09,
+                "lon": 29.02,
+                "district": "X",
+                "direction": None,
+                "distance_m": 800.0,
+            },
+            {
+                "stop_code": "1002",
+                "stop_name": "Closest Stop",
+                "lat": 41.081,
+                "lon": 29.011,
+                "district": "X",
+                "direction": None,
+                "distance_m": 50.0,
+            },
+            {
+                "stop_code": "1003",
+                "stop_name": "Medium Stop",
+                "lat": 41.085,
+                "lon": 29.015,
+                "district": "X",
+                "direction": None,
+                "distance_m": 300.0,
+            },
+            {
+                "stop_code": "1004",
+                "stop_name": "Far Stop 2",
+                "lat": 41.091,
+                "lon": 29.021,
+                "district": "X",
+                "direction": None,
+                "distance_m": 850.0,
+            },
+            {
+                "stop_code": "1005",
+                "stop_name": "Close Stop 2",
+                "lat": 41.082,
+                "lon": 29.012,
+                "district": "X",
+                "direction": None,
+                "distance_m": 120.0,
+            },
+            {
+                "stop_code": "1006",
+                "stop_name": "Far Stop 3",
+                "lat": 41.092,
+                "lon": 29.022,
+                "district": "X",
+                "direction": None,
+                "distance_m": 900.0,
+            },
         ]
         with (
             patch(
