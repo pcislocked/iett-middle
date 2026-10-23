@@ -5,6 +5,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.10.4] - 2026-10-23
+### Changed
+- **Millisecond Precision for Server Clock (`/v1/time`):** Added `timestamp_ms` to `/v1/time` endpoint response to support sub-second NTP synchronization and eliminate truncation drift in clients.
+
+---
+
 ## [0.4.10.3] - 2026-10-22
 ### Fixed
 - **Nearby Stops Distance-Ordered Truncation Fix (`/v1/stops/nearby`):** Resolved a critical bug where NTCAPI nearby responses were truncated to `limit` prior to sorting by distance. All candidate stops within `radius` are now calculated and sorted by ascending `distance_m` before the `limit` slice is returned, guaranteeing the true closest stops are always returned first even when querying broad radiuses (e.g. 2000m).

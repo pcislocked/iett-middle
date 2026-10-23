@@ -246,12 +246,14 @@ async def get_server_time(request: Request):
     now_utc = datetime.datetime.now(datetime.timezone.utc)
     turkey_tz = datetime.timezone(datetime.timedelta(hours=3))
     now_tr = now_utc.astimezone(turkey_tz)
+    now_ts = now_utc.timestamp()
     return {
         "status": "ok",
         "iso": now_utc.isoformat(),
         "time": now_tr.strftime("%H:%M:%S"),
         "date": now_tr.strftime("%Y-%m-%d"),
-        "timestamp": int(now_utc.timestamp()),
+        "timestamp": int(now_ts),
+        "timestamp_ms": int(now_ts * 1000),
         "timezone": "Europe/Istanbul",
         "source": "TÜBİTAK UME NTP",
     }

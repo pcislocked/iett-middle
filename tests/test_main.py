@@ -44,6 +44,10 @@ class TestEndpoints:
             assert len(body["time"].split(":")) == 3
             assert body["timezone"] == "Europe/Istanbul"
             assert body["source"] == "TÜBİTAK UME NTP"
+            assert "timestamp" in body
+            assert "timestamp_ms" in body
+            assert isinstance(body["timestamp_ms"], int)
+            assert body["timestamp_ms"] >= body["timestamp"] * 1000
 
     def test_root_returns_service_name(self) -> None:
         resp = _client().get("/")
