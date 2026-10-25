@@ -21,6 +21,12 @@ _primary_conn: sqlite3.Connection | None = None
 _is_memory = False
 
 
+def _tr_upper(s: str | None) -> str:
+    if not s:
+        return ""
+    return str(s).replace("i", "İ").replace("ı", "I").upper()
+
+
 def get_db_connection() -> sqlite3.Connection:
     global _primary_conn, _initialized, _is_memory
     conn = getattr(_local, "conn", None)
@@ -78,6 +84,7 @@ def get_db_connection() -> sqlite3.Connection:
             )
 
     new_conn.row_factory = sqlite3.Row
+    new_conn.create_function("tr_upper", 1, _tr_upper)
 
     with _init_lock:
         if not _initialized:
@@ -216,24 +223,27 @@ def upsert_stops_batch(items: list[dict[str, Any]]) -> None:
     if not rows:
         return
 
-    conn = get_db_connection()
-    with _write_lock, conn:
-        conn.executemany(
-            """
-            INSERT INTO stop_cache (
-                stop_code, stop_name, latitude, longitude, district, direction, updated_at
+    try:
+        conn = get_db_connection()
+        with _write_lock, conn:
+            conn.executemany(
+                """
+                INSERT INTO stop_cache (
+                    stop_code, stop_name, latitude, longitude, district, direction, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(stop_code) DO UPDATE SET
+                    stop_name = CASE WHEN excluded.stop_name != '' THEN excluded.stop_name ELSE stop_cache.stop_name END,
+                    latitude = COALESCE(excluded.latitude, stop_cache.latitude),
+                    longitude = COALESCE(excluded.longitude, stop_cache.longitude),
+                    district = COALESCE(excluded.district, stop_cache.district),
+                    direction = COALESCE(excluded.direction, stop_cache.direction),
+                    updated_at = excluded.updated_at;
+                """,
+                rows,
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(stop_code) DO UPDATE SET
-                stop_name = CASE WHEN excluded.stop_name != '' THEN excluded.stop_name ELSE stop_cache.stop_name END,
-                latitude = COALESCE(excluded.latitude, stop_cache.latitude),
-                longitude = COALESCE(excluded.longitude, stop_cache.longitude),
-                district = COALESCE(excluded.district, stop_cache.district),
-                direction = COALESCE(excluded.direction, stop_cache.direction),
-                updated_at = excluded.updated_at;
-            """,
-            rows,
-        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Failed to upsert stop cache batch: %s", exc)
 
 
 def get_stop(stop_code: str) -> dict[str, Any] | None:
@@ -269,8 +279,8 @@ def search_stops(query: str, limit: int = 20) -> list[dict[str, Any]]:
         """
         SELECT stop_code, stop_name, latitude, longitude, district, direction, updated_at
         FROM stop_cache
-        WHERE stop_name LIKE ? OR stop_code LIKE ?
-        ORDER BY CASE WHEN stop_code = ? THEN 0 WHEN stop_name LIKE ? THEN 1 ELSE 2 END, stop_name ASC
+        WHERE tr_upper(stop_name) LIKE tr_upper(?) OR stop_code LIKE ?
+        ORDER BY CASE WHEN stop_code = ? THEN 0 WHEN tr_upper(stop_name) LIKE tr_upper(?) THEN 1 ELSE 2 END, stop_name ASC
         LIMIT ?;
         """,
         (pattern, pattern, q, f"{q}%", limit),

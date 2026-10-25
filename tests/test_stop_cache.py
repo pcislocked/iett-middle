@@ -280,3 +280,65 @@ class TestStopIngestionHooks:
             assert data["longitude"] == pytest.approx(29.0530)
             assert data["district"] == "Sarıyer"
             assert data["direction"] == "HİSARÜSTÜ"
+
+    def test_search_stops_turkish_case_insensitive(self):
+        stop_cache.upsert_stop("200001", "BEŞİKTAŞ MEYDAN", 41.042, 29.008)
+        stop_cache.upsert_stop("200002", "ŞİŞLİ CAMİİ", 41.060, 28.987)
+        stop_cache.upsert_stop("200003", "KADIKÖY RIHTIM", 40.990, 29.020)
+
+        # Searching with lowercase Turkish characters
+        res_besiktas = stop_cache.search_stops("beşiktaş")
+        assert len(res_besiktas) >= 1
+        assert res_besiktas[0]["stop_code"] == "200001"
+
+        res_sisli = stop_cache.search_stops("şişli")
+        assert len(res_sisli) >= 1
+        assert res_sisli[0]["stop_code"] == "200002"
+
+        res_kadikoy = stop_cache.search_stops("kadıköy")
+        assert len(res_kadikoy) >= 1
+        assert res_kadikoy[0]["stop_code"] == "200003"
+
+    def test_record_stops_batch_deferred_coordinates_enters_stop_index(self):
+        from app.deps import get_nearby_stops
+
+        clear_stop_store()
+        # 1. Record without coords
+        record_stops_batch([{"stop_code": "999888", "stop_name": "GEÇİCİ DURAK"}])
+        assert get_stop_info_by_code("999888") is not None
+        assert len(get_nearby_stops(41.0, 29.0)) == 0
+
+        # 2. Later coords arrive
+        record_stops_batch([{"stop_code": "999888", "latitude": 41.0001, "longitude": 29.0001}])
+        nearby = get_nearby_stops(41.0, 29.0, radius_m=500.0)
+        assert len(nearby) >= 1
+        assert nearby[0]["stop_code"] == "999888"
+
+    def test_stop_detail_fallback_to_sqlite_when_memory_empty(self):
+        client = TestClient(app, raise_server_exceptions=False)
+        stop_cache.upsert_stop("300555", "SQLITE ONLY STOP", 41.1, 29.1, "Beykoz", "KAVACIK")
+        clear_stop_store()  # memory is completely cleared
+
+        from app.services.iett_client import IettApiError
+
+        with patch("app.routers.stops.IettClient") as mock_cls:
+            mock_client = MagicMock()
+            mock_client.get_stop_detail = AsyncMock(side_effect=IettApiError(500, "SOAP down"))
+            mock_cls.return_value = mock_client
+
+            resp = client.get("/v1/stops/300555")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["dcode"] == "300555"
+            assert data["name"] == "SQLITE ONLY STOP"
+
+    def test_record_stops_batch_does_not_insert_empty_stop_name(self):
+        clear_stop_store()
+        record_stops_batch([{"stop_code": "400444", "district": "Üsküdar"}])
+        assert stop_cache.get_stop("400444") is None
+
+    def test_record_stops_batch_persist_flag(self):
+        clear_stop_store()
+        record_stops_batch([{"stop_code": "500555", "stop_name": "MEMORY ONLY"}], persist=False)
+        assert get_stop_info_by_code("500555") is not None
+        assert stop_cache.get_stop("500555") is None

@@ -404,7 +404,17 @@ _R_EARTH = 6_371_000.0  # metres
 def update_stop_index(stops: list[NearbyStop]) -> None:
     global _stop_index, _stop_by_code, _stop_index_updated_at  # noqa: PLW0603
     _stop_index = [s.model_dump() for s in stops]
-    _stop_by_code = {s["stop_code"]: s for s in _stop_index}
+    new_by_code: dict[str, dict[str, Any]] = {}
+    for s in _stop_index:
+        code = s["stop_code"]
+        existing = _stop_by_code.get(code)
+        if existing:
+            if not s.get("district") and existing.get("district"):
+                s["district"] = existing["district"]
+            if not s.get("direction") and existing.get("direction"):
+                s["direction"] = existing["direction"]
+        new_by_code[code] = s
+    _stop_by_code = new_by_code
     _stop_index_updated_at = datetime.now(UTC)
 
 
@@ -414,7 +424,7 @@ def clear_stop_store() -> None:
     _stop_by_code.clear()
 
 
-def record_stops_batch(items: list[dict[str, Any]]) -> None:
+def record_stops_batch(items: list[dict[str, Any]], persist: bool = True) -> None:
     """Record discovered stops into in-memory store and persist asynchronously to SQLite stop cache."""
     if not items:
         return
@@ -434,7 +444,7 @@ def record_stops_batch(items: list[dict[str, Any]]) -> None:
 
         district = item.get("district") or item.get("ilce")
         direction = item.get("direction")
-        if direction in ("G", "D"):
+        if direction and str(direction).strip().upper() in ("G", "D"):
             direction = None
 
         cleaned = {
@@ -445,12 +455,17 @@ def record_stops_batch(items: list[dict[str, Any]]) -> None:
             "district": str(district).strip() if district else None,
             "direction": str(direction).strip() if direction else None,
         }
-        cleaned_items.append(cleaned)
 
         existing = _stop_by_code.get(code)
         if existing:
+            had_coords = (
+                existing.get("latitude") is not None and existing.get("longitude") is not None
+            )
             if not existing.get("stop_name") and name:
                 existing["stop_name"] = name
+            elif not name and existing.get("stop_name"):
+                cleaned["stop_name"] = existing["stop_name"]
+
             if existing.get("latitude") is None and cleaned["latitude"] is not None:
                 existing["latitude"] = cleaned["latitude"]
             if existing.get("longitude") is None and cleaned["longitude"] is not None:
@@ -459,19 +474,30 @@ def record_stops_batch(items: list[dict[str, Any]]) -> None:
                 existing["district"] = cleaned["district"]
             if not existing.get("direction") and cleaned["direction"]:
                 existing["direction"] = cleaned["direction"]
+
+            if (
+                not had_coords
+                and existing.get("latitude") is not None
+                and existing.get("longitude") is not None
+            ):
+                _stop_index.append(existing)
         else:
             _stop_by_code[code] = cleaned.copy()
             if cleaned["latitude"] is not None and cleaned["longitude"] is not None:
                 _stop_index.append(cleaned.copy())
 
-    if cleaned_items:
-        from app.services import stop_cache  # noqa: PLC0415
+        cleaned_items.append(cleaned)
 
-        try:
-            loop = asyncio.get_running_loop()
-            loop.run_in_executor(None, stop_cache.upsert_stops_batch, cleaned_items)
-        except RuntimeError:
-            stop_cache.upsert_stops_batch(cleaned_items)
+    if persist and cleaned_items:
+        items_to_persist = [item for item in cleaned_items if item.get("stop_name")]
+        if items_to_persist:
+            from app.services import stop_cache  # noqa: PLC0415
+
+            try:
+                loop = asyncio.get_running_loop()
+                loop.run_in_executor(None, stop_cache.upsert_stops_batch, items_to_persist)
+            except RuntimeError:
+                stop_cache.upsert_stops_batch(items_to_persist)
 
 
 def get_stop_index_updated_at() -> datetime | None:

@@ -26,7 +26,7 @@ async def index_stops_forever() -> None:
     try:
         cached_stops = await asyncio.to_thread(stop_cache.get_all_stops)
         if cached_stops:
-            record_stops_batch(cached_stops)
+            record_stops_batch(cached_stops, persist=False)
             logger.info("Preloaded %d stops from persistent stop cache", len(cached_stops))
     except Exception as exc:  # noqa: BLE001
         logger.warning("Failed to preload persistent stop cache: %s", exc)

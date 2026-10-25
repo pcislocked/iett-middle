@@ -23,7 +23,7 @@ from app.models.bus import Arrival
 from app.models.canonical import CanonicalArrival
 from app.models.route import Announcement
 from app.models.stop import NearbyStop, StopDetail, StopInfo, StopSearchResult
-from app.services import normalizers, ntcapi_client
+from app.services import normalizers, ntcapi_client, stop_cache
 from app.services.cache import SkipCache, cache_get_or_fetch
 from app.services.iett_client import IettApiError, IettClient
 from app.services.ntcapi_client import NtcApiError
@@ -127,7 +127,7 @@ async def nearby_stops(
     sorted by distance (closest first).
 
     - Primary source: Live NTCAPI nearby lookup.
-    - Fallback: Local in-memory spatial index (R-Tree) populated at server startup.
+    - Fallback: Local in-memory spatial index (Haversine distance) populated at server startup.
     """
     session = get_session()
 
@@ -461,37 +461,40 @@ async def get_stop_detail(
             detail = await client.get_stop_detail(dcode)
         except IettApiError as exc:
             logger.warning("get_stop_detail upstream failed for %s, checking cache: %s", dcode, exc)
-            if cached_stop and cached_stop.get("stop_name"):
+            active_cache = cached_stop or await asyncio.to_thread(stop_cache.get_stop, dcode)
+            if active_cache and active_cache.get("stop_name"):
                 return {
                     "dcode": dcode,
-                    "name": cached_stop["stop_name"],
-                    "latitude": cached_stop.get("latitude"),
-                    "longitude": cached_stop.get("longitude"),
-                    "direction": cached_stop.get("direction"),
-                    "district": cached_stop.get("district"),
+                    "name": active_cache["stop_name"],
+                    "latitude": active_cache.get("latitude"),
+                    "longitude": active_cache.get("longitude"),
+                    "direction": active_cache.get("direction"),
+                    "district": active_cache.get("district"),
                 }
             raise HTTPException(502, detail="Durak detay servisine ulaşılamadı.") from exc
         if detail is None:
-            if cached_stop and cached_stop.get("stop_name"):
+            active_cache = cached_stop or await asyncio.to_thread(stop_cache.get_stop, dcode)
+            if active_cache and active_cache.get("stop_name"):
                 return {
                     "dcode": dcode,
-                    "name": cached_stop["stop_name"],
-                    "latitude": cached_stop.get("latitude"),
-                    "longitude": cached_stop.get("longitude"),
-                    "direction": cached_stop.get("direction"),
-                    "district": cached_stop.get("district"),
+                    "name": active_cache["stop_name"],
+                    "latitude": active_cache.get("latitude"),
+                    "longitude": active_cache.get("longitude"),
+                    "direction": active_cache.get("direction"),
+                    "district": active_cache.get("district"),
                 }
             raise HTTPException(404, detail=f"Stop {dcode!r} not found")
         item_dict = detail.model_dump()
-        if cached_stop:
+        active_cache = cached_stop or await asyncio.to_thread(stop_cache.get_stop, dcode)
+        if active_cache:
             if not item_dict.get("direction"):
-                item_dict["direction"] = cached_stop.get("direction")
+                item_dict["direction"] = active_cache.get("direction")
             if not item_dict.get("district"):
-                item_dict["district"] = cached_stop.get("district")
-            if item_dict.get("latitude") is None and cached_stop.get("latitude") is not None:
-                item_dict["latitude"] = cached_stop["latitude"]
-            if item_dict.get("longitude") is None and cached_stop.get("longitude") is not None:
-                item_dict["longitude"] = cached_stop["longitude"]
+                item_dict["district"] = active_cache.get("district")
+            if item_dict.get("latitude") is None and active_cache.get("latitude") is not None:
+                item_dict["latitude"] = active_cache["latitude"]
+            if item_dict.get("longitude") is None and active_cache.get("longitude") is not None:
+                item_dict["longitude"] = active_cache["longitude"]
         record_stops_batch([item_dict])
         return item_dict
 
