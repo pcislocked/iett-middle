@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Path, Query, Request
 
 from app.config import settings
-from app.deps import get_session, limiter
+from app.deps import get_session, limiter, record_stops_batch
 from app.models.bus import BusPosition
 from app.models.route import (
     Announcement,
@@ -258,6 +258,8 @@ async def get_route_stops(hat_kodu: str) -> list[dict[str, Any]]:
                 )
 
         dumped = [s.model_dump() for s in stops]
+        if dumped:
+            record_stops_batch(dumped)
         return dumped
 
     return await cache_get_or_fetch(

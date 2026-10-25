@@ -11,6 +11,8 @@ class StopSearchResult(BaseModel):
     path: str | None = None
     direction: str | None = None
     district: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 class StopDetail(BaseModel):
@@ -21,6 +23,7 @@ class StopDetail(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     direction: str | None = None
+    district: str | None = None
 
 
 class RouteStop(BaseModel):

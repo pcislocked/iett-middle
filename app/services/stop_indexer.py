@@ -18,16 +18,27 @@ async def index_stops_forever() -> None:
 
     Lazy imports to avoid circular-import problems at module load time.
     """
-    from app.deps import get_session, update_stop_index  # noqa: PLC0415
+    from app.deps import get_session, record_stops_batch, update_stop_index  # noqa: PLC0415
+    from app.services import stop_cache  # noqa: PLC0415
     from app.services.iett_client import IettApiError, IettClient  # noqa: PLC0415
 
-    logger.info("Stop indexer started — fetching all stops…")
+    logger.info("Stop indexer started — preloading persistent stop cache…")
+    try:
+        cached_stops = await asyncio.to_thread(stop_cache.get_all_stops)
+        if cached_stops:
+            record_stops_batch(cached_stops)
+            logger.info("Preloaded %d stops from persistent stop cache", len(cached_stops))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed to preload persistent stop cache: %s", exc)
+
+    logger.info("Fetching all stops from upstream catalogue…")
     while True:
         try:
             client = IettClient(get_session())
             stops = await client.get_all_stops()
             update_stop_index(stops)
-            logger.info("Stop index ready: %d stops indexed", len(stops))
+            record_stops_batch([s.model_dump() for s in stops])
+            logger.info("Stop index ready: %d stops indexed and persisted", len(stops))
         except IettApiError as exc:
             logger.warning("Stop index fetch failed (will retry in 60 s): %s", exc)
             await asyncio.sleep(60)

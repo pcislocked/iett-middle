@@ -158,9 +158,10 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
 
     await cancel_fleet_refresh_task()
     await close_session()
-    from app.services import vehicle_cache  # noqa: PLC0415
+    from app.services import stop_cache, vehicle_cache  # noqa: PLC0415
 
     vehicle_cache.close_connection()
+    stop_cache.close_connection()
     logger.info("HTTP session and database connections closed")
 
 

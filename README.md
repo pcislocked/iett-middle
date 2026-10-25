@@ -1,6 +1,6 @@
 # iett-middle
 
-[![Tests](https://img.shields.io/badge/tests-434%20passed-brightgreen)](#testleri-çalıştırma)
+[![Tests](https://img.shields.io/badge/tests-446%20passed-brightgreen)](#testleri-çalıştırma)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.141-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
 [![Version](https://img.shields.io/badge/version-0.4.10.4-orange)](./CHANGELOG.md)
@@ -31,7 +31,8 @@
 - **🔄 Otomatik Mobiett & SOAP Fallback (Failover):** İBB açık verilerindeki SOAP kısıtlamalarını ve veri karartmalarını aşmak için arka planda Mobiett JSON servisleri, SOAP XML ve BeautifulSoup HTML kazıma altyapıları arasında otomatik veri birleştirme ve kesintisiz geçiş.
 - **🌐 Adaptif Doğrudan Bağlantı & Çoklu Proxy Havuzu (Multi-Proxy Pool):** Doğrudan bağlantıyı her zaman önceliklendirir. Doğrudan bağlantı koptuğunda yapılandırılan proxy havuzuna (`SOAP_PROXY_URLS`) otomatik geçer; 5 dakikada bir doğrudan hattı yoklayarak hat düzeldiğinde anında geri döner. Konut/OpenWrt ağ geçitlerini banlanmaya karşı korumak için **proxy başına 2 saniye aralık** ve **2 dakikada en fazla 45 istek** kotası uygular, trafiği havuzdaki en soğuk router'lar arasında dengeler.
 - **🔒 ARAÇ Oturum & Otomatik Captcha Çözücü (`arac.iett.gov.tr`):** Dahili `ddddocr` OCR modeli ile otomatik captcha yanıtı üretme, istemci bazlı izole oturum yönetimi (`X-Arac-Session-Key`), manuel captcha doğrulaması ve `server_time` / `cached` zaman damgası metaverisi.
-- **📍 Ultra Hızlı Yakın Durak İndeksi (Spatial R-Tree Indexing):** Sunucu başlangıcında yüklenen R-Tree mekansal indeksi sayesinde kullanıcının koordinatına en yakın durakları milisaniyeler içinde hesaplama (`GET /v1/stops/nearby`).
+- **📍 Canlı & Bellek İçi Yakın Durak İndeksi (Haversine & NTCAPI Failover):** NTCAPI `mainGetBusStopNearby` canlı servisi ve sunucu başlangıcında yüklenen bellek içi Haversine mekansal indeksi sayesinde kullanıcının koordinatına en yakın durakları milisaniyeler içinde hesaplama (`GET /v1/stops/nearby`).
+- **💾 Sunucu Tabanlı Kalıcı Durak Önbelleği (Persistent SQLite Stop Cache):** SQLite WAL tabanlı `data/stops.db` kalıcı önbelleği ve Squid mantığıyla çalışan araya girme kancaları (ingestion hooks); arama, yakın duraklar, hat durakları ve detay uç noktalarından öğrenilen tüm durakları non-destructive `COALESCE` ile kalıcı hafızaya kaydeder ve sunucu yeniden başlatılsa dahi 0ms içinde ayağa kaldırır.
 - **🪪 Standart TR Plaka Normalizasyonu:** Tüm SOAP, NTCAPI, ARAÇ ve SQLite katmanlarında plakaları standart `34 HO 1900` formatına dönüştürme ve boşluk/tire bağımsız $O(1)$ sorgulama.
 - **🛡️ Güvenlik & Rate Limiting:** SlowAPI ile genel (`120/dk`) ve uç nokta bazlı hız sınırlaması, sıkı parametre doğrulaması, hata kalkanı (error shielding) ve ASP.NET iç hata sızıntılarını engelleme.
 - **📊 Canlı Sistem Durumu & Metrikler:** `/health` uç noktası üzerinden uygulama sürümü (`version`), sistem çalışma süresi (`uptime`) ve bellek önbellek istatistikleri sunumu.
@@ -65,8 +66,11 @@ uvicorn app.main:app --reload --port 8000
 |---|---|---|
 | `IETT_SOAP_BASE` | `https://api.ibb.gov.tr/iett` | İETT SOAP temel URL'si |
 | `IETT_REST_BASE` | `https://iett.istanbul` | İETT REST temel URL'si |
-| `ARAC_BASE` | `https://arac.iett.gov.tr/api` | ARAÇ şifreli API temel URL'si |
-| `TRAFIK_BASE` | `https://trafik.ibb.gov.tr` | İBB trafik API temeli |
+| `SOAP_PROXY_URLS` | `http://router1:8888,http://router2:8888` | SOAP proxy havuzu URL listesi |
+| `NTCAPI_CLIENT_ID` | `pLwqtob...` | Mobiett OAuth2 Client ID |
+| `NTCAPI_CLIENT_SECRET` | `JERLUJg...` | Mobiett OAuth2 Client Secret |
+| `STOP_CACHE_PATH` | `data/stops.db` | Kalıcı SQLite durak önbellek dosyası |
+| `VEHICLE_CACHE_PATH` | `data/vehicles.db` | Kalıcı SQLite araç/plaka önbellek dosyası |
 | `CACHE_TTL_FLEET` | `15` | Filo önbellek süresi (saniye) |
 | `CACHE_TTL_ARRIVALS` | `20` | Varış süreleri önbellek süresi |
 | `ENABLE_OUTGOING_TRACE` | `false` | Ayrıntılı giden istek izleme logları |
@@ -89,8 +93,10 @@ GET  /v1/arac/fleet/{kapino}/auto-detail      otomatik OCR captcha ile ARAÇ ara
 GET  /v1/arac/fleet/{kapino}/detail           ARAÇ otobüs detayları, görevleri ve özellikleri (oturum başlıkları gerektirir)
 
 GET  /v1/stops/search?q={name}                 durak arama
-GET  /v1/stops/nearby?lat={lat}&lon={lon}      yakındaki duraklar (konum araması)
+GET  /v1/stops/nearby?lat={lat}&lon={lon}      yakındaki duraklar (konum araması, limit 5-1000)
 GET  /v1/stops/{dcode}                         durak adı ve koordinatları
+GET  /v1/stops/{dcode}/info                    durak ilçe ve fiziki durum bilgileri
+GET  /v1/stops/{dcode}/routes                  duraktan geçen tüm hat kodları
 GET  /v1/stops/{dcode}/arrivals                bir duraktaki canlı tahmini varışlar (20s önbellek)
 GET  /v1/stops/{dcode}/arrivals?via={dcode2}   dcode2 durağından da geçen otobüslere göre filtrelenmiş varışlar
 GET  /v1/stops/{dcode}/announcements           durak bazlı ve hattan gelen aktif duyuruların birleşimi
@@ -114,7 +120,7 @@ GET  /health                                   sürüm, çalışma süresi + ön
 ### 🧪 Testleri Çalıştırma
 
 ```bash
-pytest                                         # Tüm backend testlerini çalıştır (401/401 green)
+pytest                                         # Tüm backend testlerini çalıştır (446/446 green)
 ruff check                                     # Linter denetimi
 pyright                                        # Statik tip denetimi
 ```
@@ -144,8 +150,6 @@ Detaylı KVKK ve veri işleme politikası için:
 
 ## 🇬🇧 English
 
-## 🇬🇧 English
-
 `iett-middle` is a high-performance Python/FastAPI backend proxy service engineered with smart in-memory TTL caching and automatic multi-provider fallback mechanisms for Istanbul public bus transit APIs (IETT), Mobiett mobile endpoints, `arac.iett.gov.tr` encrypted services, and IBB Open Data channels.
 
 [IETT](https://iett.istanbul) is Istanbul's municipal bus operator. Their raw API ecosystem is a chaotic mix of legacy SOAP XML, undocumented HTML parsing, and mobile JSON endpoints from the official Mobiett application (`ntcapi.iett.istanbul`). `iett-middle` normalizes all of them into a clean, strictly typed, versioned REST + JSON architecture with in-memory TTL caching to shield upstream servers and deliver sub-millisecond response times to the frontend.
@@ -165,7 +169,8 @@ Backend component of a three-repository stack:
 - **🔄 Automatic Mobiett & SOAP Failover:** Merges Mobiett JSON endpoints, SOAP XML APIs, and BeautifulSoup HTML parsers in real-time to bypass municipal public API restrictions.
 - **🌐 Adaptive Direct Connection & Multi-Proxy Pool (SOAP Route Manager):** Prioritizes direct upstream connections by default. Transparently falls back to an optional proxy pool (`SOAP_PROXY_URLS`) upon direct failure, continuously probing direct connectivity every 5 minutes. Protects residential/OpenWrt gateway IPs with **isolated per-proxy rate limits (2.0s min interval, 45 req / 2 min cap)** and least-recently-used load balancing.
 - **🔒 ARAC Session & Captcha Engine (`arac.iett.gov.tr`):** Built-in `ddddocr` OCR engine for automated captcha solving, client-isolated session authentication (`X-Arac-Session-Key`), and manual captcha verification endpoints.
-- **📍 Ultra-Fast Spatial R-Tree Indexing:** Memory-mapped spatial R-Tree index populated at startup for instant nearby stop lookup (`GET /v1/stops/nearby`).
+- **📍 Live & In-Memory Spatial Nearby Stop Index (Haversine & NTCAPI Failover):** Live NTCAPI `mainGetBusStopNearby` lookup with sub-millisecond in-memory Haversine distance calculations and graceful fallback (`GET /v1/stops/nearby`).
+- **💾 Server-Side Persistent Stop Cache (SQLite WAL):** Robust `data/stops.db` SQLite WAL persistent store with Squid-style ingestion hooks that non-destructively capture and accumulate stops from search, nearby queries, route stops, and stop info endpoints, bootstrapping in 0ms across restarts.
 - **🛡️ Security & Error Shielding:** Rate-limiting via SlowAPI, sanitizing raw ASP.NET HTML stack traces, preventing internal leakage.
 - **📊 Health & Monitoring Metrics:** Live server metrics and uptime stats via `/health`.
 
