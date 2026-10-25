@@ -165,7 +165,9 @@ async def nearby_stops(
 
             cached_stop = get_stop_info_by_code(stop_code)
             district = c.get("district") or (cached_stop.get("district") if cached_stop else None)
-            direction = c.get("direction") or (cached_stop.get("direction") if cached_stop else None)
+            direction = c.get("direction") or (
+                cached_stop.get("direction") if cached_stop else None
+            )
 
             nearby_results.append(
                 NearbyStop(

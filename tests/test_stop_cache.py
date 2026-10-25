@@ -240,7 +240,9 @@ class TestStopIngestionHooks:
             }
             for i in range(100)
         ]
-        with patch("app.services.ntcapi_client.get_nearby_stops", new=AsyncMock(return_value=fake_stops)):
+        with patch(
+            "app.services.ntcapi_client.get_nearby_stops", new=AsyncMock(return_value=fake_stops)
+        ):
             resp = client.get("/v1/stops/nearby?lat=41.0&lon=29.0&limit=100")
             assert resp.status_code == 200
             data = resp.json()
