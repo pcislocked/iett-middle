@@ -29,7 +29,6 @@
   İETT SOAP servisleri, Mobiett JSON altyapısı ve `arac.iett.gov.tr` şifreli API'lerindeki parçalı verileri arka planda harmanlayarak ön yüze **tek bir HTTP yanıtında** (ör: `/v1/fleet/{kapino}/detail` ile anlık konum, hat bilgisi, sıralı durak listesi ve araç teknik donanımı) sunar. Mobil cihazların ardışık onlarca ağ isteği yapmasını (N+1 problemi) ve hücresel veri gecikmelerini engeller.
 - **⚡ Akıllı Bellek İçi TTL Önbellekleme (In-Memory Cache):** Filo (~7k araç: 15s), Durak Varışları (20s), Sefer Saatleri (1sa), Duyurular (5dk), Resmi Duyurular (1sa + 24sa stale) ve Garajlar (24sa) için optimize edilmiş TTL önbellekleme.
 - **🔄 Otomatik Mobiett & SOAP Fallback (Failover):** İBB açık verilerindeki SOAP kısıtlamalarını ve veri karartmalarını aşmak için arka planda Mobiett JSON servisleri, SOAP XML ve BeautifulSoup HTML kazıma altyapıları arasında otomatik veri birleştirme ve kesintisiz geçiş.
-- **🌐 Adaptif Doğrudan Bağlantı & Çoklu Proxy Havuzu (Multi-Proxy Pool):** Doğrudan bağlantıyı her zaman önceliklendirir. Doğrudan bağlantı koptuğunda yapılandırılan proxy havuzuna (`SOAP_PROXY_URLS`) otomatik geçer; 5 dakikada bir doğrudan hattı yoklayarak hat düzeldiğinde anında geri döner. Konut/OpenWrt ağ geçitlerini banlanmaya karşı korumak için **proxy başına 2 saniye aralık** ve **2 dakikada en fazla 45 istek** kotası uygular, trafiği havuzdaki en soğuk router'lar arasında dengeler.
 - **🔒 ARAÇ Oturum & Otomatik Captcha Çözücü (`arac.iett.gov.tr`):** Dahili `ddddocr` OCR modeli ile otomatik captcha yanıtı üretme, istemci bazlı izole oturum yönetimi (`X-Arac-Session-Key`), manuel captcha doğrulaması ve `server_time` / `cached` zaman damgası metaverisi.
 - **📍 Canlı & Bellek İçi Yakın Durak İndeksi (Haversine & NTCAPI Failover):** NTCAPI `mainGetBusStopNearby` canlı servisi ve sunucu başlangıcında yüklenen bellek içi Haversine mekansal indeksi sayesinde kullanıcının koordinatına en yakın durakları milisaniyeler içinde hesaplama (`GET /v1/stops/nearby`).
 - **💾 Sunucu Tabanlı Kalıcı Durak Önbelleği (Persistent SQLite Stop Cache):** SQLite WAL tabanlı `data/stops.db` kalıcı önbelleği ve Squid mantığıyla çalışan araya girme kancaları (ingestion hooks); arama, yakın duraklar, hat durakları ve detay uç noktalarından öğrenilen tüm durakları non-destructive `COALESCE` ile kalıcı hafızaya kaydeder ve sunucu yeniden başlatılsa dahi 0ms içinde ayağa kaldırır.
@@ -66,7 +65,7 @@ uvicorn app.main:app --reload --port 8000
 |---|---|---|
 | `IETT_SOAP_BASE` | `https://api.ibb.gov.tr/iett` | İETT SOAP temel URL'si |
 | `IETT_REST_BASE` | `https://iett.istanbul` | İETT REST temel URL'si |
-| `SOAP_PROXY_URLS` | `http://router1:8888,http://router2:8888` | SOAP proxy havuzu URL listesi |
+| `SOAP_PROXY_URLS` | `http://proxy1:8080,http://proxy2:8080` | SOAP proxy havuzu URL listesi |
 | `NTCAPI_CLIENT_ID` | `pLwqtob...` | Mobiett OAuth2 Client ID |
 | `NTCAPI_CLIENT_SECRET` | `JERLUJg...` | Mobiett OAuth2 Client Secret |
 | `STOP_CACHE_PATH` | `data/stops.db` | Kalıcı SQLite durak önbellek dosyası |
@@ -167,7 +166,6 @@ Backend component of a three-repository stack:
   Harmonizes fragmented data from IETT SOAP services, Mobiett JSON endpoints, and `arac.iett.gov.tr` APIs into a **single HTTP payload** (e.g. `/v1/fleet/{kapino}/detail` combining live position, resolved route, ordered stop list, and vehicle specs). Completely eliminates mobile N+1 request waterfalls and network latency.
 - **⚡ Smart In-Memory TTL Caching:** Optimized per-endpoint TTL caching (Fleet ~7k buses: 15s, ETAs: 20s, Timetables: 1h, Announcements: 5m, Garages: 24h).
 - **🔄 Automatic Mobiett & SOAP Failover:** Merges Mobiett JSON endpoints, SOAP XML APIs, and BeautifulSoup HTML parsers in real-time to bypass municipal public API restrictions.
-- **🌐 Adaptive Direct Connection & Multi-Proxy Pool (SOAP Route Manager):** Prioritizes direct upstream connections by default. Transparently falls back to an optional proxy pool (`SOAP_PROXY_URLS`) upon direct failure, continuously probing direct connectivity every 5 minutes. Protects residential/OpenWrt gateway IPs with **isolated per-proxy rate limits (2.0s min interval, 45 req / 2 min cap)** and least-recently-used load balancing.
 - **🔒 ARAC Session & Captcha Engine (`arac.iett.gov.tr`):** Built-in `ddddocr` OCR engine for automated captcha solving, client-isolated session authentication (`X-Arac-Session-Key`), and manual captcha verification endpoints.
 - **📍 Live & In-Memory Spatial Nearby Stop Index (Haversine & NTCAPI Failover):** Live NTCAPI `mainGetBusStopNearby` lookup with sub-millisecond in-memory Haversine distance calculations and graceful fallback (`GET /v1/stops/nearby`).
 - **💾 Server-Side Persistent Stop Cache (SQLite WAL):** Robust `data/stops.db` SQLite WAL persistent store with Squid-style ingestion hooks that non-destructively capture and accumulate stops from search, nearby queries, route stops, and stop info endpoints, bootstrapping in 0ms across restarts.
