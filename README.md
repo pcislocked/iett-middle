@@ -65,7 +65,6 @@ uvicorn app.main:app --reload --port 8000
 |---|---|---|
 | `IETT_SOAP_BASE` | `https://api.ibb.gov.tr/iett` | İETT SOAP temel URL'si |
 | `IETT_REST_BASE` | `https://iett.istanbul` | İETT REST temel URL'si |
-| `SOAP_PROXY_URLS` | `http://proxy1:8080,http://proxy2:8080` | SOAP proxy havuzu URL listesi |
 | `NTCAPI_CLIENT_ID` | `pLwqtob...` | Mobiett OAuth2 Client ID |
 | `NTCAPI_CLIENT_SECRET` | `JERLUJg...` | Mobiett OAuth2 Client Secret |
 | `STOP_CACHE_PATH` | `data/stops.db` | Kalıcı SQLite durak önbellek dosyası |
