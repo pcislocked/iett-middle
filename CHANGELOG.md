@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.11] - 2026-10-26
+### Added
+- **Persistent SQLite Stop Cache (`data/stops.db`):** Implemented high-performance WAL-mode SQLite storage with thread-safe connection pooling, non-destructive `COALESCE` upserts, and automatic schema migrations for persistent stop cataloging across server restarts.
+- **Squid Ingestion Hooks:** Seamlessly intercepts and learns stop metadata across `/v1/stops/search`, `/v1/stops/{stop_code}`, `/v1/routes/{code}/stops`, and `/v1/stops/nearby` without blocking the async event loop (`run_in_executor`).
+- **Turkish Case-Insensitive Stop Search:** Normalized dotted and dotless I handling (`i/İ`, `ı/I`) alongside whitespace collapsing in stop name filtering and ranking.
+- **Scaled Nearby Stops Querying:** Expanded `GET /v1/stops/nearby` limit up to 1000 stops with bounding-box spatial filtering, true Haversine distance ordering, and directional variant code filtering.
+
+---
+
 ## [0.4.10.4] - 2026-10-23
 ### Changed
 - **Millisecond Precision for Server Clock (`/v1/time`):** Added `timestamp_ms` to `/v1/time` endpoint response to support sub-second NTP synchronization and eliminate truncation drift in clients.
