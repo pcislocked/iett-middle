@@ -403,9 +403,119 @@ _R_EARTH = 6_371_000.0  # metres
 
 def update_stop_index(stops: list[NearbyStop]) -> None:
     global _stop_index, _stop_by_code, _stop_index_updated_at  # noqa: PLW0603
-    _stop_index = [s.model_dump() for s in stops]
-    _stop_by_code = {s["stop_code"]: s for s in _stop_index}
+    incoming = [s.model_dump() for s in stops]
+    preserve_all = bool(_stop_index) or _stop_index_updated_at is not None
+    new_by_code: dict[str, dict[str, Any]] = dict(_stop_by_code) if preserve_all else {}
+    for s in incoming:
+        code = s["stop_code"]
+        existing = _stop_by_code.get(code)
+        if existing:
+            if not s.get("district") and existing.get("district"):
+                s["district"] = existing["district"]
+            if not s.get("direction") and existing.get("direction"):
+                s["direction"] = existing["direction"]
+            if preserve_all:
+                existing.update(s)
+                new_by_code[code] = existing
+            else:
+                new_by_code[code] = s
+        else:
+            new_by_code[code] = s
+    _stop_by_code = new_by_code
+    _stop_index = [
+        entry
+        for entry in _stop_by_code.values()
+        if entry.get("latitude") is not None and entry.get("longitude") is not None
+    ]
     _stop_index_updated_at = datetime.now(UTC)
+
+
+def clear_stop_store() -> None:
+    """Clear in-memory stop state (used for test teardown)."""
+    global _stop_index_updated_at  # noqa: PLW0603
+    _stop_index.clear()
+    _stop_by_code.clear()
+    _stop_index_updated_at = None
+
+
+def record_stops_batch(items: list[dict[str, Any]], persist: bool = True) -> None:
+    """Record discovered stops into in-memory store and persist asynchronously to SQLite stop cache."""
+    global _stop_index_updated_at  # noqa: PLW0603
+    if not items:
+        return
+
+    cleaned_items: list[dict[str, Any]] = []
+    for item in items:
+        code = str(item.get("stop_code") or item.get("dcode") or "").strip()
+        if not code:
+            continue
+        name = str(item.get("stop_name") or item.get("name") or "").strip()
+        lat = item.get("latitude")
+        if lat is None:
+            lat = item.get("lat")
+        lon = item.get("longitude")
+        if lon is None:
+            lon = item.get("lon")
+
+        district = item.get("district") or item.get("ilce")
+        direction = item.get("direction")
+        if direction and str(direction).strip().upper() in ("G", "D"):
+            direction = None
+
+        cleaned = {
+            "stop_code": code,
+            "stop_name": name,
+            "latitude": float(lat) if lat is not None else None,
+            "longitude": float(lon) if lon is not None else None,
+            "district": str(district).strip() if district else None,
+            "direction": str(direction).strip() if direction else None,
+        }
+
+        existing = _stop_by_code.get(code)
+        if existing:
+            had_coords = (
+                existing.get("latitude") is not None and existing.get("longitude") is not None
+            )
+            if not existing.get("stop_name") and name:
+                existing["stop_name"] = name
+            elif not name and existing.get("stop_name"):
+                cleaned["stop_name"] = existing["stop_name"]
+
+            if existing.get("latitude") is None and cleaned["latitude"] is not None:
+                existing["latitude"] = cleaned["latitude"]
+            if existing.get("longitude") is None and cleaned["longitude"] is not None:
+                existing["longitude"] = cleaned["longitude"]
+            if not existing.get("district") and cleaned["district"]:
+                existing["district"] = cleaned["district"]
+            if not existing.get("direction") and cleaned["direction"]:
+                existing["direction"] = cleaned["direction"]
+
+            if (
+                not had_coords
+                and existing.get("latitude") is not None
+                and existing.get("longitude") is not None
+            ):
+                _stop_index.append(existing)
+                _stop_index_updated_at = datetime.now(UTC)
+        else:
+            entry = cleaned.copy()
+            _stop_by_code[code] = entry
+            if entry["latitude"] is not None and entry["longitude"] is not None:
+                _stop_index.append(entry)
+                _stop_index_updated_at = datetime.now(UTC)
+
+        cleaned_items.append(cleaned)
+
+    if persist and cleaned_items:
+        items_to_persist = [item for item in cleaned_items if item.get("stop_name")]
+        if items_to_persist:
+            from app.services import stop_cache  # noqa: PLC0415
+
+            try:
+                loop = asyncio.get_running_loop()
+                loop.run_in_executor(None, stop_cache.upsert_stops_batch, items_to_persist)
+            except RuntimeError:
+                stop_cache.upsert_stops_batch(items_to_persist)
 
 
 def get_stop_index_updated_at() -> datetime | None:
@@ -415,9 +525,9 @@ def get_stop_index_updated_at() -> datetime | None:
 def get_stop_coords(stop_code: str) -> tuple[float, float] | None:
     """Return (latitude, longitude) for a stop code, or None if not in index."""
     s = _stop_by_code.get(stop_code)
-    if s is None:
+    if s is None or s.get("latitude") is None or s.get("longitude") is None:
         return None
-    return s["latitude"], s["longitude"]
+    return float(s["latitude"]), float(s["longitude"])
 
 
 def get_stop_info_by_code(stop_code: str) -> dict[str, Any] | None:

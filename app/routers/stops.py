@@ -17,12 +17,13 @@ from app.deps import (
     get_stop_info_by_code,
     limiter,
     record_plate_mapping,
+    record_stops_batch,
 )
 from app.models.bus import Arrival
 from app.models.canonical import CanonicalArrival
 from app.models.route import Announcement
 from app.models.stop import NearbyStop, StopDetail, StopInfo, StopSearchResult
-from app.services import normalizers, ntcapi_client
+from app.services import normalizers, ntcapi_client, stop_cache
 from app.services.cache import SkipCache, cache_get_or_fetch
 from app.services.iett_client import IettApiError, IettClient
 from app.services.ntcapi_client import NtcApiError
@@ -59,7 +60,21 @@ async def search_stops(
         try:
             results = await client.search_stops(q)
         except IettApiError as exc:
-            logger.warning("search_stops failed for q=%s: %s", q, exc)
+            logger.warning("search_stops upstream failed for q=%s, checking stop cache: %s", q, exc)
+            fallback = await asyncio.to_thread(stop_cache.search_stops, q)
+            if fallback:
+                return [
+                    {
+                        "dcode": s["stop_code"],
+                        "name": s["stop_name"],
+                        "path": None,
+                        "direction": s.get("direction"),
+                        "district": s.get("district"),
+                        "latitude": s.get("latitude"),
+                        "longitude": s.get("longitude"),
+                    }
+                    for s in fallback
+                ]
             raise HTTPException(502, detail="Durak arama servisine ulaşılamadı.") from exc
         enriched: list[dict[str, Any]] = []
         for r in results:
@@ -70,7 +85,13 @@ async def search_stops(
                     item_dict["direction"] = cached_stop.get("direction")
                 if not item_dict.get("district"):
                     item_dict["district"] = cached_stop.get("district")
+                if item_dict.get("latitude") is None:
+                    item_dict["latitude"] = cached_stop.get("latitude")
+                if item_dict.get("longitude") is None:
+                    item_dict["longitude"] = cached_stop.get("longitude")
             enriched.append(item_dict)
+        if enriched:
+            record_stops_batch(enriched)
         return enriched
 
     from app.deps import get_stop_index_updated_at
@@ -96,7 +117,7 @@ async def nearby_stops(
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
     radius: float = Query(default=500, ge=50, le=3000),
-    limit: int = Query(default=15, ge=5, le=50),
+    limit: int = Query(default=15, ge=5, le=1000),
 ):
     """Find nearby stops within a given radius.
 
@@ -104,7 +125,7 @@ async def nearby_stops(
     sorted by distance (closest first).
 
     - Primary source: Live NTCAPI nearby lookup.
-    - Fallback: Local in-memory spatial index (R-Tree) populated at server startup.
+    - Fallback: Local in-memory spatial index (Haversine distance) populated at server startup.
     """
     session = get_session()
 
@@ -140,19 +161,27 @@ async def nearby_stops(
                 else _haversine_m(lat, lon, latitude, longitude)
             )
 
+            cached_stop = get_stop_info_by_code(stop_code)
+            district = c.get("district") or (cached_stop.get("district") if cached_stop else None)
+            direction = c.get("direction") or (
+                cached_stop.get("direction") if cached_stop else None
+            )
+
             nearby_results.append(
                 NearbyStop(
                     stop_code=stop_code,
                     stop_name=c.get("stop_name") or "",
                     latitude=latitude,
                     longitude=longitude,
-                    district=c.get("district"),
-                    direction=c.get("direction"),
+                    district=district,
+                    direction=direction,
                     distance_m=distance_m,
                 )
             )
 
         nearby_results.sort(key=lambda s: s.distance_m)
+        if nearby_results:
+            record_stops_batch([s.model_dump() for s in nearby_results])
         return nearby_results[:limit]
     except NtcApiError as exc:
         logger.warning(
@@ -425,14 +454,47 @@ async def get_stop_detail(
 
     async def _fetch() -> dict[str, Any]:
         client = IettClient(get_session())
+        cached_stop = get_stop_info_by_code(dcode)
         try:
             detail = await client.get_stop_detail(dcode)
         except IettApiError as exc:
-            logger.warning("get_stop_detail failed for %s: %s", dcode, exc)
+            logger.warning("get_stop_detail upstream failed for %s, checking cache: %s", dcode, exc)
+            active_cache = cached_stop or await asyncio.to_thread(stop_cache.get_stop, dcode)
+            if active_cache and active_cache.get("stop_name"):
+                return {
+                    "dcode": dcode,
+                    "name": active_cache["stop_name"],
+                    "latitude": active_cache.get("latitude"),
+                    "longitude": active_cache.get("longitude"),
+                    "direction": active_cache.get("direction"),
+                    "district": active_cache.get("district"),
+                }
             raise HTTPException(502, detail="Durak detay servisine ulaşılamadı.") from exc
         if detail is None:
+            active_cache = cached_stop or await asyncio.to_thread(stop_cache.get_stop, dcode)
+            if active_cache and active_cache.get("stop_name"):
+                return {
+                    "dcode": dcode,
+                    "name": active_cache["stop_name"],
+                    "latitude": active_cache.get("latitude"),
+                    "longitude": active_cache.get("longitude"),
+                    "direction": active_cache.get("direction"),
+                    "district": active_cache.get("district"),
+                }
             raise HTTPException(404, detail=f"Stop {dcode!r} not found")
-        return detail.model_dump()
+        item_dict = detail.model_dump()
+        active_cache = cached_stop or await asyncio.to_thread(stop_cache.get_stop, dcode)
+        if active_cache:
+            if not item_dict.get("direction"):
+                item_dict["direction"] = active_cache.get("direction")
+            if not item_dict.get("district"):
+                item_dict["district"] = active_cache.get("district")
+            if item_dict.get("latitude") is None and active_cache.get("latitude") is not None:
+                item_dict["latitude"] = active_cache["latitude"]
+            if item_dict.get("longitude") is None and active_cache.get("longitude") is not None:
+                item_dict["longitude"] = active_cache["longitude"]
+        record_stops_batch([item_dict])
+        return item_dict
 
     detail_data = await cache_get_or_fetch(
         key,
@@ -557,7 +619,10 @@ async def get_stop_info(
     async def _fetch():
         client = IettClient(get_session())
         try:
-            return await client.scrape_stop_info(dcode)
+            info = await client.scrape_stop_info(dcode)
+            if info and isinstance(info, dict) and info.get("ilce"):
+                record_stops_batch([{"stop_code": dcode, "district": info.get("ilce")}])
+            return info
         except IettApiError as exc:
             logger.warning("scrape_stop_info failed for %s: %s", dcode, exc)
             raise HTTPException(502, detail="Durak bilgi servisine ulaşılamadı.") from exc

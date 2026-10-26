@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     allow_test_backdoors: bool = False
 
     vehicle_cache_path: str = "data/vehicles.db"
+    stop_cache_path: str = "data/stops.db"
 
     app_version: str = "0.4.10.4"
     proxy_notice_url: str = "https://github.com/pcislocked/iett-middle/blob/master/PROXY_NOTICE.md"
