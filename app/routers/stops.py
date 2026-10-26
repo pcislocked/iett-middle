@@ -61,8 +61,6 @@ async def search_stops(
             results = await client.search_stops(q)
         except IettApiError as exc:
             logger.warning("search_stops upstream failed for q=%s, checking stop cache: %s", q, exc)
-            from app.services import stop_cache  # noqa: PLC0415
-
             fallback = await asyncio.to_thread(stop_cache.search_stops, q)
             if fallback:
                 return [

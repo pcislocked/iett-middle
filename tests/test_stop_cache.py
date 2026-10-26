@@ -342,3 +342,90 @@ class TestStopIngestionHooks:
         record_stops_batch([{"stop_code": "500555", "stop_name": "MEMORY ONLY"}], persist=False)
         assert get_stop_info_by_code("500555") is not None
         assert stop_cache.get_stop("500555") is None
+
+    def test_get_stop_coords_returns_none_when_coordless(self):
+        from app.deps import get_stop_coords
+
+        clear_stop_store()
+        record_stops_batch([{"stop_code": "600111", "stop_name": "COORDLESS"}], persist=False)
+        assert get_stop_coords("600111") is None
+
+        record_stops_batch(
+            [{"stop_code": "600111", "latitude": 41.02, "longitude": 28.97}], persist=False
+        )
+        assert get_stop_coords("600111") == pytest.approx((41.02, 28.97))
+
+    def test_record_stops_batch_sets_updated_at_and_shares_dict_ref(self):
+        from app.deps import get_nearby_stops, get_stop_index_updated_at
+
+        clear_stop_store()
+        assert get_stop_index_updated_at() is None
+
+        record_stops_batch(
+            [
+                {
+                    "stop_code": "700222",
+                    "stop_name": "SHARED REF STOP",
+                    "latitude": 41.0,
+                    "longitude": 29.0,
+                }
+            ],
+            persist=False,
+        )
+        assert get_stop_index_updated_at() is not None
+
+        # Enrich with district & direction later
+        record_stops_batch(
+            [{"stop_code": "700222", "district": "Kadıköy", "direction": "RIHTIM"}],
+            persist=False,
+        )
+        nearby = get_nearby_stops(41.0, 29.0, radius_m=500.0)
+        assert len(nearby) == 1
+        assert nearby[0]["district"] == "Kadıköy"
+        assert nearby[0]["direction"] == "RIHTIM"
+
+    def test_update_stop_index_preserves_preloaded_stops_and_metadata(self):
+        from app.deps import get_nearby_stops, update_stop_index
+        from app.models.stop import NearbyStop
+
+        clear_stop_store()
+        record_stops_batch(
+            [
+                {
+                    "stop_code": "800111",
+                    "stop_name": "PRELOADED ONLY",
+                    "latitude": 41.0,
+                    "longitude": 29.0,
+                    "district": "Beşiktaş",
+                },
+                {
+                    "stop_code": "800222",
+                    "stop_name": "SHARED STOP",
+                    "latitude": 41.0005,
+                    "longitude": 29.0005,
+                    "district": "Şişli",
+                    "direction": "MECİDİYEKÖY",
+                },
+            ],
+            persist=False,
+        )
+
+        # SOAP returns only 800222 without district
+        update_stop_index(
+            [
+                NearbyStop(
+                    stop_code="800222",
+                    stop_name="SHARED STOP UPDATED",
+                    latitude=41.0005,
+                    longitude=29.0005,
+                    distance_m=0.0,
+                )
+            ]
+        )
+
+        nearby = get_nearby_stops(41.0, 29.0, radius_m=1000.0)
+        codes = {s["stop_code"]: s for s in nearby}
+        assert "800111" in codes
+        assert "800222" in codes
+        assert codes["800222"]["district"] == "Şişli"
+        assert codes["800222"]["direction"] == "MECİDİYEKÖY"

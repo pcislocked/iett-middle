@@ -1,6 +1,6 @@
 # iett-middle
 
-[![Tests](https://img.shields.io/badge/tests-446%20passed-brightgreen)](#testleri-çalıştırma)
+[![Tests](https://img.shields.io/badge/tests-454%20passed-brightgreen)](#testleri-çalıştırma)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.141-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
 [![Version](https://img.shields.io/badge/version-0.4.10.4-orange)](./CHANGELOG.md)
@@ -118,7 +118,7 @@ GET  /health                                   sürüm, çalışma süresi + ön
 ### 🧪 Testleri Çalıştırma
 
 ```bash
-pytest                                         # Tüm backend testlerini çalıştır (446/446 green)
+pytest                                         # Tüm backend testlerini çalıştır (454/454 green)
 ruff check                                     # Linter denetimi
 pyright                                        # Statik tip denetimi
 ```

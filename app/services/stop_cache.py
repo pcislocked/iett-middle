@@ -251,11 +251,12 @@ def get_stop(stop_code: str) -> dict[str, Any] | None:
     if not code:
         return None
     conn = get_db_connection()
-    cursor = conn.execute(
-        "SELECT stop_code, stop_name, latitude, longitude, district, direction, updated_at FROM stop_cache WHERE stop_code = ? LIMIT 1;",
-        (code,),
-    )
-    row = cursor.fetchone()
+    sql = "SELECT stop_code, stop_name, latitude, longitude, district, direction, updated_at FROM stop_cache WHERE stop_code = ? LIMIT 1;"
+    if _is_memory:
+        with _write_lock:
+            row = conn.execute(sql, (code,)).fetchone()
+    else:
+        row = conn.execute(sql, (code,)).fetchone()
     if not row:
         return None
     return dict(row)
@@ -263,10 +264,13 @@ def get_stop(stop_code: str) -> dict[str, Any] | None:
 
 def get_all_stops() -> list[dict[str, Any]]:
     conn = get_db_connection()
-    cursor = conn.execute(
-        "SELECT stop_code, stop_name, latitude, longitude, district, direction, updated_at FROM stop_cache;"
-    )
-    return [dict(row) for row in cursor.fetchall()]
+    sql = "SELECT stop_code, stop_name, latitude, longitude, district, direction, updated_at FROM stop_cache;"
+    if _is_memory:
+        with _write_lock:
+            rows = conn.execute(sql).fetchall()
+    else:
+        rows = conn.execute(sql).fetchall()
+    return [dict(row) for row in rows]
 
 
 def search_stops(query: str, limit: int = 20) -> list[dict[str, Any]]:
@@ -275,14 +279,17 @@ def search_stops(query: str, limit: int = 20) -> list[dict[str, Any]]:
         return []
     conn = get_db_connection()
     pattern = f"%{q}%"
-    cursor = conn.execute(
-        """
+    sql = """
         SELECT stop_code, stop_name, latitude, longitude, district, direction, updated_at
         FROM stop_cache
         WHERE tr_upper(stop_name) LIKE tr_upper(?) OR stop_code LIKE ?
         ORDER BY CASE WHEN stop_code = ? THEN 0 WHEN tr_upper(stop_name) LIKE tr_upper(?) THEN 1 ELSE 2 END, stop_name ASC
         LIMIT ?;
-        """,
-        (pattern, pattern, q, f"{q}%", limit),
-    )
-    return [dict(row) for row in cursor.fetchall()]
+    """
+    params = (pattern, pattern, q, f"{q}%", limit)
+    if _is_memory:
+        with _write_lock:
+            rows = conn.execute(sql, params).fetchall()
+    else:
+        rows = conn.execute(sql, params).fetchall()
+    return [dict(row) for row in rows]
