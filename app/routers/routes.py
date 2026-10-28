@@ -68,7 +68,6 @@ async def search_routes(
 
 
 async def get_route_metadata(hat_kodu: str) -> list[dict]:
-    hat_kodu = _normalize_hat_kodu(hat_kodu)
     """Get metadata for a specific route.
 
     Returns the variants and directions (Gidiş/Dönüş) for the route, including their endpoints.
@@ -76,6 +75,7 @@ async def get_route_metadata(hat_kodu: str) -> list[dict]:
     - Primary source: NTCAPI `mainGetLine`.
     - Fallback: IETT SOAP `GetAllRoute`.
     """
+    hat_kodu = _normalize_hat_kodu(hat_kodu)
     key = f"routes:meta:{hat_kodu}"
 
     async def _fetch():
@@ -125,7 +125,6 @@ async def get_route_buses(
     request: Request,
     hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=ROUTE_CODE_PATTERN),
 ):
-    hat_kodu = _normalize_hat_kodu(hat_kodu)
     """Get live GPS positions of all buses currently operating on a route.
 
     Returns a list of buses on the route, including their coordinates, door numbers, and next stops.
@@ -134,6 +133,7 @@ async def get_route_buses(
     - Secondary source: IETT SOAP `GetHatOtoKonum_json`.
     - Fallback: Filters the global in-memory fleet store.
     """
+    hat_kodu = _normalize_hat_kodu(hat_kodu)
     from app.deps import ensure_fleet_fresh, get_buses_by_route  # noqa: PLC0415
 
     session = get_session()
@@ -204,7 +204,6 @@ async def get_route_buses(
 
 
 async def get_route_stops(hat_kodu: str) -> list[dict[str, Any]]:
-    hat_kodu = _normalize_hat_kodu(hat_kodu)
     """Get the ordered sequence of stops for a route.
 
     Returns the complete list of stops for both directions (Gidiş/Dönüş) in their correct order.
@@ -212,6 +211,7 @@ async def get_route_stops(hat_kodu: str) -> list[dict[str, Any]]:
     - Primary source: NTCAPI `mainGetRoute`.
     - Fallback: IETT SOAP `GetHatDuraklari`.
     """
+    hat_kodu = _normalize_hat_kodu(hat_kodu)
     key = f"routes:stops:{hat_kodu}"
 
     async def _fetch():
@@ -293,7 +293,6 @@ async def get_route_schedule(
     request: Request,
     hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=ROUTE_CODE_PATTERN),
 ):
-    hat_kodu = _normalize_hat_kodu(hat_kodu)
     """Get the official timetable schedule for a route.
 
     Returns the planned departure times from the origin stops for all day types 
@@ -302,6 +301,7 @@ async def get_route_schedule(
     - Primary source: NTCAPI timetable.
     - Fallback: IETT SOAP timetable.
     """
+    hat_kodu = _normalize_hat_kodu(hat_kodu)
     key = f"routes:schedule:{hat_kodu}"
 
     async def _fetch():
@@ -371,7 +371,7 @@ def fix_encoding(text: str | None) -> str | None:
 
 
 async def fetch_filtered_announcements(route_list: set[str]) -> list[dict]:
-    route_list = {r.upper().strip() for r in route_list if r.strip()}
+    route_list = {_normalize_hat_kodu(r) for r in route_list if r.strip()}
     if not route_list:
         return []
 
@@ -400,7 +400,7 @@ async def fetch_filtered_announcements(route_list: set[str]) -> list[dict]:
 
     combined = []
     for ann in all_anns:
-        rc = ann.get("route_code", "").upper().strip()
+        rc = _normalize_hat_kodu(ann.get("route_code", ""))
         if rc in route_list:
             a_dict = dict(ann)
             a_dict["title"] = fix_encoding(a_dict.get("title"))
