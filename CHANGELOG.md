@@ -5,6 +5,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.12] - 2026-10-28
+### Fixed
+- **Turkish Characters in Route Codes Support:** Fixed HTTP 422 Unprocessable Entity error when querying routes with Turkish characters (e.g. `15ŞN`, `15KÇ`, `14ŞB`). Expanded route code path parameter regex to `^[A-Za-z0-9ÇĞİÖŞÜçğıöşü_ -]+$` and added locale-aware Turkish casing normalization (`i -> İ`, `ı -> I`) across all route endpoints (`/v1/routes/{hat_kodu}`).
+
+---
+
 ## [0.4.11] - 2026-10-26
 ### Added
 - **Persistent SQLite Stop Cache (`data/stops.db`):** Implemented high-performance WAL-mode SQLite storage with thread-safe connection pooling, non-destructive `COALESCE` upserts, and automatic schema migrations for persistent stop cataloging across server restarts.
