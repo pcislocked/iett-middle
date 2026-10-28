@@ -71,7 +71,7 @@ async def get_route_metadata(hat_kodu: str) -> list[dict]:
     """Get metadata for a specific route.
 
     Returns the variants and directions (Gidiş/Dönüş) for the route, including their endpoints.
-    
+
     - Primary source: NTCAPI `mainGetLine`.
     - Fallback: IETT SOAP `GetAllRoute`.
     """
@@ -295,7 +295,7 @@ async def get_route_schedule(
 ):
     """Get the official timetable schedule for a route.
 
-    Returns the planned departure times from the origin stops for all day types 
+    Returns the planned departure times from the origin stops for all day types
     (Weekdays, Saturdays, Sundays).
 
     - Primary source: NTCAPI timetable.
