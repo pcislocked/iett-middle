@@ -29,6 +29,13 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+ROUTE_CODE_PATTERN = r"^[A-Za-z0-9ÇĞİÖŞÜçğıöşü_ -]+$"
+
+
+def _normalize_hat_kodu(hat_kodu: str) -> str:
+    """Normalize route code to uppercase preserving Turkish characters."""
+    return hat_kodu.strip().replace("i", "İ").replace("ı", "I").upper()
+
 
 @router.get("/search", response_model=list[RouteSearchResult])
 @limiter.limit("60/minute")
@@ -61,14 +68,14 @@ async def search_routes(
 
 
 async def get_route_metadata(hat_kodu: str) -> list[dict]:
-    hat_kodu = hat_kodu.upper().strip()
     """Get metadata for a specific route.
 
     Returns the variants and directions (Gidiş/Dönüş) for the route, including their endpoints.
-    
+
     - Primary source: NTCAPI `mainGetLine`.
     - Fallback: IETT SOAP `GetAllRoute`.
     """
+    hat_kodu = _normalize_hat_kodu(hat_kodu)
     key = f"routes:meta:{hat_kodu}"
 
     async def _fetch():
@@ -107,7 +114,7 @@ async def get_route_metadata(hat_kodu: str) -> list[dict]:
 @limiter.limit("60/minute")
 async def get_route_metadata_endpoint(
     request: Request,
-    hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9_ -]+$"),
+    hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=ROUTE_CODE_PATTERN),
 ):
     return await get_route_metadata(hat_kodu)
 
@@ -116,9 +123,8 @@ async def get_route_metadata_endpoint(
 @limiter.limit("60/minute")
 async def get_route_buses(
     request: Request,
-    hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9_ -]+$"),
+    hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=ROUTE_CODE_PATTERN),
 ):
-    hat_kodu = hat_kodu.upper().strip()
     """Get live GPS positions of all buses currently operating on a route.
 
     Returns a list of buses on the route, including their coordinates, door numbers, and next stops.
@@ -127,6 +133,7 @@ async def get_route_buses(
     - Secondary source: IETT SOAP `GetHatOtoKonum_json`.
     - Fallback: Filters the global in-memory fleet store.
     """
+    hat_kodu = _normalize_hat_kodu(hat_kodu)
     from app.deps import ensure_fleet_fresh, get_buses_by_route  # noqa: PLC0415
 
     session = get_session()
@@ -197,7 +204,6 @@ async def get_route_buses(
 
 
 async def get_route_stops(hat_kodu: str) -> list[dict[str, Any]]:
-    hat_kodu = hat_kodu.upper().strip()
     """Get the ordered sequence of stops for a route.
 
     Returns the complete list of stops for both directions (Gidiş/Dönüş) in their correct order.
@@ -205,6 +211,7 @@ async def get_route_stops(hat_kodu: str) -> list[dict[str, Any]]:
     - Primary source: NTCAPI `mainGetRoute`.
     - Fallback: IETT SOAP `GetHatDuraklari`.
     """
+    hat_kodu = _normalize_hat_kodu(hat_kodu)
     key = f"routes:stops:{hat_kodu}"
 
     async def _fetch():
@@ -275,7 +282,7 @@ async def get_route_stops(hat_kodu: str) -> list[dict[str, Any]]:
 @limiter.limit("60/minute")
 async def get_route_stops_endpoint(
     request: Request,
-    hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9_ -]+$"),
+    hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=ROUTE_CODE_PATTERN),
 ) -> list[dict[str, Any]]:
     return await get_route_stops(hat_kodu)
 
@@ -284,17 +291,17 @@ async def get_route_stops_endpoint(
 @limiter.limit("60/minute")
 async def get_route_schedule(
     request: Request,
-    hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9_ -]+$"),
+    hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=ROUTE_CODE_PATTERN),
 ):
-    hat_kodu = hat_kodu.upper().strip()
     """Get the official timetable schedule for a route.
 
-    Returns the planned departure times from the origin stops for all day types 
+    Returns the planned departure times from the origin stops for all day types
     (Weekdays, Saturdays, Sundays).
 
     - Primary source: NTCAPI timetable.
     - Fallback: IETT SOAP timetable.
     """
+    hat_kodu = _normalize_hat_kodu(hat_kodu)
     key = f"routes:schedule:{hat_kodu}"
 
     async def _fetch():
@@ -364,7 +371,7 @@ def fix_encoding(text: str | None) -> str | None:
 
 
 async def fetch_filtered_announcements(route_list: set[str]) -> list[dict]:
-    route_list = {r.upper().strip() for r in route_list if r.strip()}
+    route_list = {_normalize_hat_kodu(r) for r in route_list if r.strip()}
     if not route_list:
         return []
 
@@ -393,7 +400,7 @@ async def fetch_filtered_announcements(route_list: set[str]) -> list[dict]:
 
     combined = []
     for ann in all_anns:
-        rc = ann.get("route_code", "").upper().strip()
+        rc = _normalize_hat_kodu(ann.get("route_code", ""))
         if rc in route_list:
             a_dict = dict(ann)
             a_dict["title"] = fix_encoding(a_dict.get("title"))
@@ -417,7 +424,7 @@ async def get_batch_announcements(
     return only the notices that match the requested comma-separated list of
     route codes (e.g. "?routes=14M,500T").
     """
-    route_list = {r.strip().upper() for r in routes.split(",") if r.strip()}
+    route_list = {_normalize_hat_kodu(r) for r in routes.split(",") if r.strip()}
     return await fetch_filtered_announcements(route_list)
 
 
@@ -425,7 +432,7 @@ async def get_batch_announcements(
 @limiter.limit("60/minute")
 async def get_route_announcements(
     request: Request,
-    hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9_ -]+$"),
+    hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=ROUTE_CODE_PATTERN),
 ):
     """Active disruption and traffic announcements for a specific route.
 
@@ -435,7 +442,7 @@ async def get_route_announcements(
       1) **Route Disruptions:** Global system announcements filtered by this route (e.g., "GÜZERGAH DEĞİŞİKLİĞİ").
       2) **Live Traffic Notices:** Real-time traffic alerts (e.g., "TRAFİK YOĞUNLUĞU") pulled dynamically for key stops along this route.
     """
-    hat_kodu = hat_kodu.upper().strip()
+    hat_kodu = _normalize_hat_kodu(hat_kodu)
     key = f"routes:announcements:{hat_kodu}"
 
     async def _fetch():
@@ -532,9 +539,10 @@ async def get_route_announcements(
 @limiter.limit("60/minute")
 async def get_route_info(
     request: Request,
-    hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9_ -]+$"),
+    hat_kodu: str = Path(..., min_length=1, max_length=20, pattern=ROUTE_CODE_PATTERN),
 ):
     """Scrape route metadata from iett.istanbul/RouteDetail."""
+    hat_kodu = _normalize_hat_kodu(hat_kodu)
     key = f"route:info:{hat_kodu}"
 
     async def _fetch():
