@@ -575,6 +575,30 @@ class TestRoutesMeta:
             resp = client.get("/v1/routes/500T")
         assert resp.status_code == 200
 
+    def test_200_with_turkish_characters_in_route_code(self, client: TestClient) -> None:
+        """Route codes containing Turkish characters (15ŞN, 15KÇ, etc.) should not return 422."""
+        mock_client = MagicMock()
+        mock_client.get_route_metadata = AsyncMock(return_value=[_route_meta()])
+        with (
+            patch("app.routers.routes.ntcapi_client.get_route_metadata", _NTCAPI_DOWN),
+            patch("app.routers.routes.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.routes.cache_set", AsyncMock(), create=True),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
+            patch("app.routers.routes.IettClient", return_value=mock_client),
+        ):
+            resp = client.get("/v1/routes/15ŞN")
+        assert resp.status_code == 200
+
+        with (
+            patch("app.routers.routes.ntcapi_client.get_route_metadata", _NTCAPI_DOWN),
+            patch("app.routers.routes.cache_get", AsyncMock(return_value=None), create=True),
+            patch("app.routers.routes.cache_set", AsyncMock(), create=True),
+            patch("app.routers.routes.get_session", return_value=MagicMock(), create=True),
+            patch("app.routers.routes.IettClient", return_value=mock_client),
+        ):
+            resp_lower = client.get("/v1/routes/15şn")
+        assert resp_lower.status_code == 200
+
 
 class TestRoutesBuses:
     def test_200_with_buses(self, client: TestClient) -> None:
