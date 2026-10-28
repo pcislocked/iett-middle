@@ -29,7 +29,7 @@ async def get_global_notices_endpoint(request: Request) -> list[dict[str, Any]]:
 
 
 @router.get("/official", response_model=OfficialAnnouncementsResponse)
-@limiter.limit("20/minute")
+@limiter.limit("30/minute")
 async def get_official_announcements(
     request: Request,
     page: int = Query(0, ge=0, le=100, description="Page number (0-indexed)"),

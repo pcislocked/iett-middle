@@ -5,6 +5,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.12.3] - 2026-10-29
+### Changed
+- **Official Announcements Rate Limit Adjusted:** Increased rate limit on `GET /v1/announcements/official` from `20/minute` to `30/minute` to accommodate rapid initial client navigations while maintaining upstream cache protection.
+
+---
+
 ## [0.4.12] - 2026-10-28
 ### Fixed
 - **Turkish Characters in Route Codes Support:** Fixed HTTP 422 Unprocessable Entity error when querying routes with Turkish characters (e.g. `15ŞN`, `15KÇ`, `14ŞB`). Expanded route code path parameter regex to `^[A-Za-z0-9ÇĞİÖŞÜçğıöşü_ -]+$` and added locale-aware Turkish casing normalization (`i -> İ`, `ı -> I`) across all route endpoints (`/v1/routes/{hat_kodu}`).

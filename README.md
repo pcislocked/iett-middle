@@ -3,7 +3,7 @@
 [![Tests](https://img.shields.io/badge/tests-454%20passed-brightgreen)](#testleri-çalıştırma)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.141-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
-[![Version](https://img.shields.io/badge/version-0.4.12-orange)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.4.12.3-orange)](./CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-CC%20BY%204.0-blue)](https://data.ibb.gov.tr/license)
 
 [🇹🇷 Türkçe (Turkish)](#türkçe) | [🇬🇧 English](#english)
