@@ -20,6 +20,7 @@ import aiohttp
 
 from app.config import settings
 from app.services.normalizers.plate import normalize_plate
+from app.utils.http import read_bounded_text
 from app.utils.lock import LazyLock
 
 if TYPE_CHECKING:
@@ -71,7 +72,7 @@ async def _ensure_token(session: aiohttp.ClientSession) -> str:
                 timeout=aiohttp.ClientTimeout(total=8.0, connect=3.0, sock_connect=3.0),
             ) as resp:
                 if resp.status != 200:
-                    text = await resp.text()
+                    text = await read_bounded_text(resp, max_bytes=64 * 1024)
                     raise NtcApiError(f"Token fetch failed {resp.status}: {text[:200]}")
                 data = await resp.json()
         except NtcApiError:
@@ -115,7 +116,7 @@ async def _call_service(
             timeout=aiohttp.ClientTimeout(total=8.0, connect=3.0, sock_connect=3.0),
         ) as resp:
             if resp.status != 200:
-                text = await resp.text()
+                text = await read_bounded_text(resp, max_bytes=64 * 1024)
                 raise NtcApiError(f"Service call '{alias}' failed {resp.status}: {text[:200]}")
             return await resp.json()
     except NtcApiError:

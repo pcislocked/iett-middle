@@ -22,6 +22,7 @@ from app.models.arac import AracMissionItem
 from app.models.bus import BusPosition
 from app.services.normalizers.plate import normalize_plate
 from app.utils.coerce import _as_text, _to_bool, _to_float
+from app.utils.http import ResponseTooLargeError, read_bounded_text
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +169,13 @@ class AracClient:
             kwargs["data"] = ""
 
         async with self._session.post(url, **kwargs) as resp:
-            text = await resp.text()
+            try:
+                text = await read_bounded_text(resp)
+            except ResponseTooLargeError as exc:
+                raise AracApiError(
+                    f"ARAC {path} response exceeded size limit",
+                    status_code=502,
+                ) from exc
             if resp.status >= 400:
                 raise AracApiError(
                     f"ARAC {path} failed with status {resp.status}",

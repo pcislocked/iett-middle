@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, cast
 
@@ -111,6 +112,60 @@ def _require_arac_session_headers(
     return (sid, skey)
 
 
+@asynccontextmanager
+async def _isolated_arac_session(cookies: dict[str, str] | None = None):
+    """Yield an aiohttp.ClientSession with an isolated CookieJar.
+
+    Reuses the global session's TCPConnector (with connector_owner=False) when
+    available so TCP connections and DNS resolvers are pooled without leaking
+    ASP.NET session cookies across concurrent requests. Falls back to an owned
+    connector in unit tests where the lifespan session is not initialized.
+    """
+    shared_connector: aiohttp.BaseConnector | None = None
+    try:
+        from app.deps import get_session
+
+        shared = get_session()
+        if (
+            shared is not None
+            and not shared.closed
+            and shared.connector is not None
+            and not shared.connector.closed
+        ):
+            shared_connector = shared.connector
+    except Exception:
+        shared_connector = None
+
+    if shared_connector is not None:
+        async with aiohttp.ClientSession(
+            connector=shared_connector,
+            connector_owner=False,
+            cookies=cookies,
+            cookie_jar=aiohttp.CookieJar(),
+        ) as temp_session:
+            yield temp_session
+    else:
+        connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
+        async with aiohttp.ClientSession(
+            connector=connector,
+            connector_owner=True,
+            cookies=cookies,
+            cookie_jar=aiohttp.CookieJar(),
+        ) as temp_session:
+            yield temp_session
+
+
+def _get_shared_or_temp_session() -> tuple[aiohttp.ClientSession, bool]:
+    """Return shared session for stateless calls (e.g. /suggest), or a temp session in tests."""
+    try:
+        from app.deps import get_session
+
+        return get_session(), False
+    except Exception:
+        connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
+        return aiohttp.ClientSession(connector=connector), True
+
+
 @router.get("/session/captcha", response_model=AracCaptchaResponse)
 @router.post("/session/captcha", response_model=AracCaptchaResponse)
 @limiter.limit("30/minute")
@@ -121,8 +176,7 @@ async def get_arac_captcha(request: Request) -> AracCaptchaResponse:
     The client should first try the suggestedAnswer automatically.
     If it fails, show the image to the user for manual entry.
     """
-    connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
-    async with aiohttp.ClientSession(connector=connector) as temp_session:
+    async with _isolated_arac_session() as temp_session:
         client = AracClient(temp_session)
         try:
             captcha_data = await client.get_captcha()
@@ -172,11 +226,7 @@ async def create_arac_session(
             detail="Captcha session not found or expired. Please request a new captcha.",
         )
 
-    connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
-    async with aiohttp.ClientSession(
-        connector=connector,
-        cookies=cookies_dict,
-    ) as temp_session:
+    async with _isolated_arac_session(cookies=cookies_dict) as temp_session:
         client = AracClient(temp_session)
         result_cookies: dict[str, str] = {}
         try:
@@ -212,16 +262,6 @@ async def create_arac_session(
         sessionId=payload.kapino,  # kapino as session identifier
         sessionKey=json.dumps(result_cookies),  # cookies as JSON string
     )
-
-
-def _get_shared_or_temp_session() -> tuple[aiohttp.ClientSession, bool]:
-    try:
-        from app.deps import get_session
-
-        return get_session(), False
-    except Exception:
-        connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
-        return aiohttp.ClientSession(connector=connector), True
 
 
 @router.get("/suggest")
@@ -285,73 +325,72 @@ async def get_arac_bus_auto_detail(
     key = f"arac:autodetail:{kapino.upper()}"
 
     async def _fetch():
-        session, must_close = _get_shared_or_temp_session()
-        try:
-            client = AracClient(session)
-            # 1. Get Captcha
-            captcha_data = await client.get_captcha()
-            captcha_image = captcha_data.get("captchaImage") or captcha_data.get("image")
-            if not captcha_image:
-                raise HTTPException(502, detail="No captcha image returned")
+        async with _isolated_arac_session() as session:
+            try:
+                client = AracClient(session)
+                # 1. Get Captcha
+                captcha_data = await client.get_captcha()
+                captcha_image = captcha_data.get("captchaImage") or captcha_data.get("image")
+                if not captcha_image:
+                    raise HTTPException(502, detail="No captcha image returned")
 
-            # 2. Solve Captcha
-            suggested_answer = await asyncio.to_thread(solve_captcha_image, captcha_image)
-            if not suggested_answer:
-                raise HTTPException(502, detail="Auto-captcha solve failed")
+                # 2. Solve Captcha
+                suggested_answer = await asyncio.to_thread(solve_captcha_image, captcha_image)
+                if not suggested_answer:
+                    raise HTTPException(502, detail="Auto-captcha solve failed")
 
-            # 3. Create Session (Submit Captcha)
-            captcha_vehicle_hash = await client.get_vehicle_hash(kapino)
-            success = await client.submit_captcha(captcha_vehicle_hash, suggested_answer)
-            if not success:
-                raise HTTPException(502, detail="Auto-captcha failed")
+                # 3. Create Session (Submit Captcha)
+                captcha_vehicle_hash = await client.get_vehicle_hash(kapino)
+                success = await client.submit_captcha(captcha_vehicle_hash, suggested_answer)
+                if not success:
+                    raise HTTPException(502, detail="Auto-captcha failed")
 
-            # 4. Get Detail (Requires a fresh single-use vehicle_hash!)
-            detail_vehicle_hash = await client.get_vehicle_hash(kapino)
-            detail = await client.get_detail(detail_vehicle_hash)
+                # 4. Get Detail (Requires a fresh single-use vehicle_hash!)
+                detail_vehicle_hash = await client.get_vehicle_hash(kapino)
+                detail = await client.get_detail(detail_vehicle_hash)
 
-            data_vehicle = detail.get("dataVehicle", {})
-            data_task = detail.get("dataTask", [])
+                data_vehicle = detail.get("dataVehicle", {})
+                data_task = detail.get("dataTask", [])
 
-            profile = AracClient.normalize_bus_position(data_vehicle)
-            missions = AracClient.normalize_missions(data_task)
+                profile = AracClient.normalize_bus_position(data_vehicle)
+                missions = AracClient.normalize_missions(data_task)
 
-            completed = sum(1 for m in missions if m.state == "T")
-            pending = sum(1 for m in missions if m.state == "B")
-            line_codes = sorted({m.line_code for m in missions if m.line_code})
+                completed = sum(1 for m in missions if m.state == "T")
+                pending = sum(1 for m in missions if m.state == "B")
+                line_codes = sorted({m.line_code for m in missions if m.line_code})
 
-            active_route = None
-            if data_task and len(data_task) > 0:
-                active_route = str(data_task[0].get("lineCode", "")) or None
-            profile.route_code = active_route
+                active_route = None
+                if data_task and len(data_task) > 0:
+                    active_route = str(data_task[0].get("lineCode", "")) or None
+                profile.route_code = active_route
 
-            now_iso = datetime.now(timezone.utc).isoformat()
-            return {
-                "profile": profile.model_dump(),
-                "missions": AracMissionsResponse(
-                    kapino=kapino,
-                    summary=AracMissionSummary(
-                        mission_count=len(missions),
-                        completed_count=completed,
-                        pending_count=pending,
-                        distinct_line_codes=line_codes,
-                    ),
-                    missions=missions,
-                ).model_dump(),
-                "server_time": now_iso,
-                "cached": False,
-            }
-        except AracApiError as exc:
-            logger.warning("get_arac_bus_auto_detail failed: %s", exc)
-            status = _status_from_arac_error(exc, 503)
-            detail_msg = (
-                exc.payload
-                if exc.payload and isinstance(exc.payload, str) and not exc.payload.startswith("<")
-                else str(exc)
-            )
-            raise HTTPException(status, detail=detail_msg) from exc
-        finally:
-            if must_close:
-                await session.close()
+                now_iso = datetime.now(timezone.utc).isoformat()
+                return {
+                    "profile": profile.model_dump(),
+                    "missions": AracMissionsResponse(
+                        kapino=kapino,
+                        summary=AracMissionSummary(
+                            mission_count=len(missions),
+                            completed_count=completed,
+                            pending_count=pending,
+                            distinct_line_codes=line_codes,
+                        ),
+                        missions=missions,
+                    ).model_dump(),
+                    "server_time": now_iso,
+                    "cached": False,
+                }
+            except AracApiError as exc:
+                logger.warning("get_arac_bus_auto_detail failed: %s", exc)
+                status = _status_from_arac_error(exc, 503)
+                detail_msg = (
+                    exc.payload
+                    if exc.payload
+                    and isinstance(exc.payload, str)
+                    and not exc.payload.startswith("<")
+                    else str(exc)
+                )
+                raise HTTPException(status, detail=detail_msg) from exc
 
     cached_hit = await cache_get(key)
     res = cast(dict[str, Any], await cache_get_or_fetch(key, 30, _fetch, stale_ttl=60))
@@ -388,11 +427,7 @@ async def get_arac_bus_detail(
     except (ValueError, TypeError) as exc:
         raise HTTPException(400, detail="X-Arac-Session-Key is not valid JSON.") from exc
 
-    connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
-    async with aiohttp.ClientSession(
-        connector=connector,
-        cookies=cookies_dict,
-    ) as temp_session:
+    async with _isolated_arac_session(cookies=cookies_dict) as temp_session:
         client = AracClient(temp_session)
         try:
             vehicle_hash = await client.get_vehicle_hash(kapino)

@@ -201,27 +201,38 @@ async def nearby_stops(
     return results[:limit]
 
 
-@router.get("/{dcode}/arrivals/raw")
+@router.get("/{dcode}/arrivals/raw", include_in_schema=False)
 @limiter.limit("10/minute")
 async def get_arrivals_raw(
     request: Request,
     dcode: str = Path(..., pattern=r"^\d{4,10}$"),
 ):
-    dcode = dcode.strip()
     """Return the raw HTML from IETT GetStationInfo (Internal/Debug).
-    
+
     Provides the unparsed HTML payload directly from the legacy IETT stop arrival system.
     Primarily used for debugging parser issues.
     """
-    client = IettClient(get_session())
-    try:
-        html = await client._get_text(
-            f"{settings.iett_rest_base}/tr/RouteStation/GetStationInfo",
-            params={"dcode": dcode, "langid": "1"},
-        )
-    except IettApiError as exc:
-        logger.warning("get_arrivals_raw failed for %s: %s", dcode, exc)
-        raise HTTPException(502, detail="Durak varış ham verisine ulaşılamadı.") from exc
+    dcode = dcode.strip()
+    key = f"stops:arrivals:raw:{dcode}"
+
+    async def _fetch() -> str:
+        client = IettClient(get_session())
+        try:
+            return await client._get_text(
+                f"{settings.iett_rest_base}/tr/RouteStation/GetStationInfo",
+                params={"dcode": dcode, "langid": "1"},
+            )
+        except IettApiError as exc:
+            logger.warning("get_arrivals_raw failed for %s: %s", dcode, exc)
+            raise HTTPException(502, detail="Durak varış ham verisine ulaşılamadı.") from exc
+
+    html = await cache_get_or_fetch(
+        key,
+        settings.cache_ttl_arrivals,
+        _fetch,
+        stale_ttl=settings.cache_stale_ttl,
+        jitter=True,
+    )
     from fastapi.responses import PlainTextResponse  # noqa: PLC0415
 
     return PlainTextResponse(content=html)
