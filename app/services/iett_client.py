@@ -37,6 +37,7 @@ from app.services.iett_parser import (
     parse_stop_arrivals_html,
     parse_stop_detail_xml,
 )
+from app.utils.http import read_bounded_text
 
 _VALID_DCODE = re.compile(r"^\d{6}$")
 
@@ -187,7 +188,7 @@ class IettClient:
                 timeout=timeout,
             ) as resp:
                 resp.raise_for_status()
-                return await resp.text()
+                return await read_bounded_text(resp)
         except Exception as exc:
             raise IettApiError(f"GET {url} failed: {exc}") from exc
 

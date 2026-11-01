@@ -17,6 +17,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 from app.services.cache import cache_get_or_fetch
+from app.utils.http import read_bounded_text
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,7 @@ async def _fetch_official_footnotes(
             if resp.status != 200:
                 logger.warning("IETT scraper HTTP %s for %s", resp.status, hat_kodu)
                 return {}
-            html = await resp.text()
+            html = await read_bounded_text(resp)
     except Exception as exc:
         logger.warning("IETT scraper network error for %s: %s", hat_kodu, exc)
         return {}
@@ -264,7 +265,7 @@ async def fetch_official_announcements(
             if resp.status != 200:
                 logger.warning("iett.istanbul announcements returned HTTP %s", resp.status)
                 return {"page": page, "total_items": 0, "items": []}
-            html = await resp.text()
+            html = await read_bounded_text(resp)
 
         return await asyncio.to_thread(_parse_official_announcements_html, html, page)
     except Exception as exc:

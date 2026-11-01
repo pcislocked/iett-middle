@@ -259,6 +259,9 @@ def get_plate_by_kapino(kapino: str) -> str | None:
     return None
 
 
+_MAX_KNOWN_PLATE_MAPPINGS = 20_000
+
+
 def record_plate_mapping(kapino: str, plate: str) -> None:
     """Record a known kapino <-> plate pair into in-memory fleet and persistent cache."""
     if not kapino or not plate:
@@ -269,19 +272,27 @@ def record_plate_mapping(kapino: str, plate: str) -> None:
     if not clean_k or not clean_p:
         return
 
+    if (
+        len(_known_plate_mappings) >= _MAX_KNOWN_PLATE_MAPPINGS
+        and clean_k not in _known_plate_mappings
+    ):
+        # Evict oldest 10% insertion-ordered entries to guarantee bounded memory
+        for old_k in list(_known_plate_mappings.keys())[: _MAX_KNOWN_PLATE_MAPPINGS // 10]:
+            _known_plate_mappings.pop(old_k, None)
+
     _known_plate_mappings[clean_k] = clean_p
 
+    # Only mutate in-memory fleet dicts if the bus is already present with valid coordinates;
+    # never insert coordinate-less partial dicts into _fleet (which would break BusPosition validation).
     if clean_k in _clean_fleet:
         _clean_fleet[clean_k]["plate"] = norm_p
-    else:
-        _clean_fleet[clean_k] = {"kapino": kapino, "plate": norm_p}
+        _plate_fleet[clean_p] = _clean_fleet[clean_k]
 
     if kapino in _fleet:
         _fleet[kapino]["plate"] = norm_p
-    else:
-        _fleet[kapino] = {"kapino": kapino, "plate": norm_p}
-
-    _plate_fleet[clean_p] = _clean_fleet[clean_k]
+        if clean_k not in _clean_fleet:
+            _clean_fleet[clean_k] = _fleet[kapino]
+            _plate_fleet[clean_p] = _fleet[kapino]
 
     try:
         from app.services import vehicle_cache  # noqa: PLC0415
@@ -310,22 +321,30 @@ def update_fleet(buses: list[BusPosition], is_full_snapshot: bool = True) -> Non
     for b in buses:
         k = b.kapino
         prev = _fleet.get(k)
+        prev_lat = prev.get("latitude") if prev is not None else None
+        prev_lon = prev.get("longitude") if prev is not None else None
         # Append previous position to trail when bus actually moved
-        if prev is not None and (
-            prev["latitude"] != b.latitude or prev["longitude"] != b.longitude
+        if (
+            prev is not None
+            and prev_lat is not None
+            and prev_lon is not None
+            and (prev_lat != b.latitude or prev_lon != b.longitude)
         ):
             if k not in _trail:
                 _trail[k] = deque(maxlen=max_entries)
             _trail[k].append(
                 {
-                    "lat": prev["latitude"],
-                    "lon": prev["longitude"],
-                    "ts": prev["last_seen"],
+                    "lat": prev_lat,
+                    "lon": prev_lon,
+                    "ts": prev.get("last_seen", ""),
                 }
             )
         elif k not in _trail:
             _trail[k] = deque(maxlen=max_entries)
-        _fleet[k] = b.model_dump()
+        dumped = b.model_dump()
+        if not dumped.get("plate") and prev is not None and prev.get("plate"):
+            dumped["plate"] = prev["plate"]
+        _fleet[k] = dumped
         # Persist last known route even when bus later goes offline / parks
         if b.route_code:
             _kapino_last_route[k.upper()] = b.route_code.strip().upper()
@@ -340,6 +359,9 @@ def update_fleet(buses: list[BusPosition], is_full_snapshot: bool = True) -> Non
         _fleet.pop(k, None)
         _trail.pop(k, None)
         _kapino_last_route.pop(k.upper(), None)
+        clean_exp = re.sub(r"[^A-Z0-9]", "", k.upper())
+        if clean_exp:
+            _known_plate_mappings.pop(clean_exp, None)
 
     if is_full_snapshot:
         current_kapinos = {b.kapino for b in buses}

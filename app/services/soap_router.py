@@ -24,6 +24,7 @@ import time
 import aiohttp
 
 from app.config import settings
+from app.utils.http import read_bounded_text
 from app.utils.lock import LazyLock
 
 logger = logging.getLogger(__name__)
@@ -186,7 +187,7 @@ class SoapRouteManager:
                 url, data=data, headers=direct_headers, timeout=timeout
             ) as resp:
                 resp.raise_for_status()
-                return await resp.text()
+                return await read_bounded_text(resp)
 
         # Mode 2: Direct connection attempt (preferred if healthy or due for periodic probe)
         direct_exc: Exception | None = None
@@ -210,7 +211,7 @@ class SoapRouteManager:
                     timeout=direct_timeout,
                 ) as resp:
                     resp.raise_for_status()
-                    text = await resp.text()
+                    text = await read_bounded_text(resp)
                     if is_probe:
                         logger.info("SOAP direct connection restored! Resuming direct routing.")
                         self._direct_healthy = True
@@ -248,7 +249,7 @@ class SoapRouteManager:
                     proxy=ep.url,
                 ) as resp:
                     resp.raise_for_status()
-                    text = await resp.text()
+                    text = await read_bounded_text(resp)
                     ep.is_healthy = True
                     ep.record_call()
                     return text
