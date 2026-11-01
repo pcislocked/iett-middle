@@ -250,6 +250,9 @@ def get_plate_by_kapino(kapino: str) -> str | None:
         if bus and bus.get("plate"):
             return bus["plate"]
 
+        if clean_k in _known_plate_mappings:
+            return _known_plate_mappings[clean_k]
+
         from app.services import vehicle_cache  # noqa: PLC0415
 
         veh = vehicle_cache.get_vehicle(clean_k)
@@ -280,7 +283,7 @@ def record_plate_mapping(kapino: str, plate: str) -> None:
         for old_k in list(_known_plate_mappings.keys())[: _MAX_KNOWN_PLATE_MAPPINGS // 10]:
             _known_plate_mappings.pop(old_k, None)
 
-    _known_plate_mappings[clean_k] = clean_p
+    _known_plate_mappings[clean_k] = norm_p
 
     # Only mutate in-memory fleet dicts if the bus is already present with valid coordinates;
     # never insert coordinate-less partial dicts into _fleet (which would break BusPosition validation).
@@ -297,7 +300,16 @@ def record_plate_mapping(kapino: str, plate: str) -> None:
     try:
         from app.services import vehicle_cache  # noqa: PLC0415
 
-        vehicle_cache.upsert_vehicle(door_number=kapino, plate=norm_p)
+        try:
+            loop = asyncio.get_running_loop()
+            loop.run_in_executor(
+                None,
+                vehicle_cache.upsert_vehicle,
+                kapino,
+                norm_p,
+            )
+        except RuntimeError:
+            vehicle_cache.upsert_vehicle(door_number=kapino, plate=norm_p)
     except Exception as exc:
         logger.debug("Failed to persist plate mapping to sqlite: %s", exc)
 
@@ -396,9 +408,9 @@ def update_fleet(buses: list[BusPosition], is_full_snapshot: bool = True) -> Non
             continue
         clean_k = re.sub(r"[^A-Z0-9]", "", b.kapino.upper())
         clean_p = re.sub(r"[^A-Z0-9]", "", b.plate.upper())
-        if clean_k and clean_p and _known_plate_mappings.get(clean_k) != clean_p:
-            _known_plate_mappings[clean_k] = clean_p
-            norm_p = normalize_plate(b.plate) or b.plate
+        norm_p = normalize_plate(b.plate) or b.plate
+        if clean_k and clean_p and _known_plate_mappings.get(clean_k) != norm_p:
+            _known_plate_mappings[clean_k] = norm_p
             new_pairs.append({"door_number": b.kapino, "plate": norm_p})
 
     if new_pairs:

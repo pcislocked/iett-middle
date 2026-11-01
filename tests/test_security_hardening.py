@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import aiohttp
@@ -24,11 +25,23 @@ async def test_read_bounded_text_rejects_large_content_length() -> None:
 
 
 @pytest.mark.asyncio
-async def test_read_bounded_text_rejects_streaming_body_exceeding_limit() -> None:
+async def test_read_bounded_text_multi_chunk_streaming_reassembly() -> None:
     resp = MagicMock(spec=aiohttp.ClientResponse)
     resp.content_length = None
     resp.charset = "utf-8"
-    resp.content.read = AsyncMock(return_value=b"x" * 1025)
+    # Simulates multi-packet TCP chunks that must be reassembled until EOF
+    resp.content.readany = AsyncMock(side_effect=[b"chunk_1_", b"chunk_2_", b"chunk_3", b""])
+    text = await read_bounded_text(resp, max_bytes=1024)
+    assert text == "chunk_1_chunk_2_chunk_3"
+    assert resp.content.readany.call_count == 4
+
+
+@pytest.mark.asyncio
+async def test_read_bounded_text_streaming_body_exceeding_max_bytes_mid_stream() -> None:
+    resp = MagicMock(spec=aiohttp.ClientResponse)
+    resp.content_length = None
+    resp.charset = "utf-8"
+    resp.content.readany = AsyncMock(side_effect=[b"x" * 600, b"y" * 600, b"z" * 600, b""])
     with pytest.raises(ResponseTooLargeError, match="exceeded maximum allowed size"):
         await read_bounded_text(resp, max_bytes=1024)
 
@@ -38,7 +51,7 @@ async def test_read_bounded_text_accepts_valid_streaming_body() -> None:
     resp = MagicMock(spec=aiohttp.ClientResponse)
     resp.content_length = 5
     resp.charset = "utf-8"
-    resp.content.read = AsyncMock(return_value=b"hello")
+    resp.content.readany = AsyncMock(side_effect=[b"hello", b""])
     text = await read_bounded_text(resp, max_bytes=1024)
     assert text == "hello"
 
@@ -55,6 +68,32 @@ async def test_isolated_arac_session_reuses_shared_connector_without_closing_it(
 
         # Connector must remain open after isolated session exits
         assert not connector.closed
+        assert len(shared_session.cookie_jar) == 0
+    finally:
+        await deps.close_session()
+
+
+@pytest.mark.asyncio
+async def test_isolated_arac_session_cookie_isolation_concurrent() -> None:
+    connector = aiohttp.TCPConnector()
+    shared_session = aiohttp.ClientSession(connector=connector)
+    deps.set_session(shared_session)
+    try:
+
+        async def session_task(sid: str) -> str:
+            async with _isolated_arac_session(cookies={"ASP.NET_SessionId": sid}) as sess:
+                await asyncio.sleep(0.01)
+                for cookie in sess.cookie_jar:
+                    if cookie.key == "ASP.NET_SessionId":
+                        return cookie.value
+            return ""
+
+        res_a, res_b = await asyncio.gather(
+            session_task("SESSION_A"),
+            session_task("SESSION_B"),
+        )
+        assert res_a == "SESSION_A"
+        assert res_b == "SESSION_B"
         assert len(shared_session.cookie_jar) == 0
     finally:
         await deps.close_session()
@@ -82,6 +121,23 @@ def test_record_plate_mapping_does_not_corrupt_fleet_with_headless_dict() -> Non
         ]
     )
     assert deps._fleet["C-1753"]["latitude"] == 41.01
+
+
+def test_record_plate_mapping_eviction_boundary() -> None:
+    deps.clear_fleet_store()
+    max_limit = deps._MAX_KNOWN_PLATE_MAPPINGS
+
+    for i in range(max_limit + 5):
+        deps.record_plate_mapping(f"TEST{i}", f"34 TEST {i}")
+
+    # Eviction should have run once, removing 10% (2000 entries)
+    # Remaining: max_limit - 2000 + 5 = 18005
+    assert len(deps._known_plate_mappings) <= max_limit
+    assert len(deps._known_plate_mappings) == (max_limit - (max_limit // 10) + 5)
+    # Oldest key should have been evicted
+    assert "TEST0" not in deps._known_plate_mappings
+    # Latest keys must still exist
+    assert f"TEST{max_limit + 4}" in deps._known_plate_mappings
 
 
 def test_arrivals_raw_is_cached_and_hidden_from_openapi() -> None:
