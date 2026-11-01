@@ -5,6 +5,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.12.4] - 2026-11-01
+### Changed
+- Güvenlik ve hız iyileştirmeleri
+
+---
+
 ## [0.4.12.3] - 2026-10-29
 ### Changed
 - **Official Announcements Rate Limit Adjusted:** Increased rate limit on `GET /v1/announcements/official` from `20/minute` to `30/minute` to accommodate rapid initial client navigations while maintaining upstream cache protection.
