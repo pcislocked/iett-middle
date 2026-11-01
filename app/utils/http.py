@@ -35,20 +35,24 @@ async def read_bounded_text(
     if isinstance(resp, aiohttp.ClientResponse):
         chunks: list[bytes] = []
         total_bytes = 0
-        read_chunk = getattr(resp.content, "readany", None)
-        if not callable(read_chunk):
-            read_chunk = getattr(resp.content, "read", None)
+        read_fn: Any = getattr(resp.content, "readany", None)
+        if not callable(read_fn):
+            read_fn = getattr(resp.content, "read", None)
 
-        while True:
-            chunk = await read_chunk() if callable(read_chunk) else b""
-            if not chunk:
-                break
-            total_bytes += len(chunk)
-            if total_bytes > max_bytes:
-                raise ResponseTooLargeError(
-                    f"Upstream response body exceeded maximum allowed size ({max_bytes} bytes)"
-                )
-            chunks.append(chunk)
+        if callable(read_fn):
+            while True:
+                res: Any = read_fn()
+                chunk: Any = await res if inspect.isawaitable(res) else res
+                if not isinstance(chunk, (bytes, bytearray)):
+                    break
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > max_bytes:
+                    raise ResponseTooLargeError(
+                        f"Upstream response body exceeded maximum allowed size ({max_bytes} bytes)"
+                    )
+                chunks.append(bytes(chunk))
 
         raw = b"".join(chunks)
         charset = getattr(resp, "charset", None) or "utf-8"
@@ -56,7 +60,7 @@ async def read_bounded_text(
 
     # Fallback for unit-test mocks or custom response wrappers
     if hasattr(resp, "text") and callable(resp.text):
-        res = resp.text()
+        res: Any = resp.text()
         text: Any = await res if inspect.isawaitable(res) else res
         if not isinstance(text, str):
             return "" if hasattr(text, "_mock_return_value") else str(text)
@@ -66,17 +70,17 @@ async def read_bounded_text(
             )
         return text
 
-    content = getattr(resp, "content", None)
+    content: Any = getattr(resp, "content", None)
     if content is not None:
-        read_chunk = getattr(content, "readany", None)
+        read_chunk: Any = getattr(content, "readany", None)
         if not callable(read_chunk):
             read_chunk = getattr(content, "read", None)
         if callable(read_chunk):
-            chunks: list[bytes] = []
+            fallback_chunks: list[bytes] = []
             total_bytes = 0
             while True:
                 res = read_chunk()
-                chunk_b = await res if inspect.isawaitable(res) else res
+                chunk_b: Any = await res if inspect.isawaitable(res) else res
                 if not isinstance(chunk_b, (bytes, bytearray)):
                     break
                 if not chunk_b:
@@ -86,8 +90,8 @@ async def read_bounded_text(
                     raise ResponseTooLargeError(
                         f"Upstream response body exceeded maximum allowed size ({max_bytes} bytes)"
                     )
-                chunks.append(chunk_b)
-            raw_b = b"".join(chunks)
+                fallback_chunks.append(bytes(chunk_b))
+            raw_b = b"".join(fallback_chunks)
             charset = getattr(resp, "charset", None) or "utf-8"
             return raw_b.decode(charset, errors="replace")
 
