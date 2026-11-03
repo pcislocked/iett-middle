@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     vehicle_cache_path: str = "data/vehicles.db"
     stop_cache_path: str = "data/stops.db"
 
-    app_version: str = "0.4.12.4"
+    app_version: str = "0.4.12.5"
     proxy_notice_url: str = "https://github.com/pcislocked/iett-middle/blob/master/PROXY_NOTICE.md"
 
     def user_agent(self, via_proxy: bool = False) -> str:
