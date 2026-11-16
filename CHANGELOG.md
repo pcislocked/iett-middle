@@ -5,6 +5,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.12.6] - 2026-11-16
+### Changed
+- Bağlantı kararlılığı ve yedek servis iyileştirmeleri
+
+---
+
 ## [0.4.12.5] - 2026-11-03
 ### Changed
 - Sürüm senkronizasyonu
