@@ -30,12 +30,15 @@ from app.services.iett_parser import (
     parse_announcements_xml,
     parse_garages_xml,
     parse_route_fleet_xml,
+    parse_route_info_soap_json,
     parse_route_metadata_json,
     parse_route_schedule_xml,
     parse_route_stops_html,
+    parse_route_stops_xml,
     parse_routes_from_html,
     parse_stop_arrivals_html,
     parse_stop_detail_xml,
+    parse_stop_info_soap_json,
 )
 from app.utils.http import read_bounded_text
 
@@ -225,7 +228,9 @@ class IettClient:
         )
         return await asyncio.to_thread(parse_all_fleet_xml, xml)
 
-    async def get_route_buses(self, hat_kodu: str) -> list[BusPosition]:
+    async def get_route_buses(
+        self, hat_kodu: str, *, use_mobiett: bool = True
+    ) -> list[BusPosition]:
         """Fetch live bus positions for a specific route."""
         if _is_test_mode() and str(hat_kodu) == "31AMK":
             from datetime import datetime, timezone
@@ -279,6 +284,9 @@ class IettClient:
                 '"http://tempuri.org/GetHatOtoKonum_json"',
             )
             return parse_route_fleet_xml(xml)
+
+        if not use_mobiett:
+            return await fetch_soap()
 
         async def fetch_json():
             data = await self.mobiett.get_live_fleet(hat_kodu)
@@ -643,3 +651,33 @@ class IettClient:
             params={"dkod": dcode},
         )
         return await asyncio.to_thread(_parse_stop_info_html, html, dcode)
+
+    async def get_route_stops_soap(self, hat_kodu: str) -> list[RouteStop]:
+        """Fallback: ordered route stops with coordinates via DurakDetay_GYY (ibb.asmx)."""
+        safe_hat = xml_escape(hat_kodu)
+        xml = await self._soap_post(
+            f"{settings.iett_soap_base}/ibb/ibb.asmx",
+            f'<DurakDetay_GYY xmlns="http://tempuri.org/"><hat_kodu>{safe_hat}</hat_kodu></DurakDetay_GYY>',
+            '"http://tempuri.org/DurakDetay_GYY"',
+        )
+        return await asyncio.to_thread(parse_route_stops_xml, xml)
+
+    async def get_route_info_soap(self, hat_kodu: str) -> dict[str, Any] | None:
+        """Fallback: route fare and duration metadata via GetHat_json."""
+        safe_hat = xml_escape(hat_kodu)
+        xml = await self._soap_post(
+            f"{settings.iett_soap_base}/UlasimAnaVeri/HatDurakGuzergah.asmx",
+            f'<GetHat_json xmlns="http://tempuri.org/"><HatKodu>{safe_hat}</HatKodu></GetHat_json>',
+            '"http://tempuri.org/GetHat_json"',
+        )
+        return await asyncio.to_thread(parse_route_info_soap_json, xml, hat_kodu)
+
+    async def get_stop_info_soap(self, dcode: str) -> dict[str, Any] | None:
+        """Fallback: stop physical metadata via GetDurak_json(DurakKodu)."""
+        safe_dcode = xml_escape(dcode)
+        xml = await self._soap_post(
+            f"{settings.iett_soap_base}/UlasimAnaVeri/HatDurakGuzergah.asmx",
+            f'<GetDurak_json xmlns="http://tempuri.org/"><DurakKodu>{safe_dcode}</DurakKodu></GetDurak_json>',
+            '"http://tempuri.org/GetDurak_json"',
+        )
+        return await asyncio.to_thread(parse_stop_info_soap_json, xml, dcode)

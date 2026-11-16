@@ -473,6 +473,47 @@ def parse_stop_detail_xml(xml_text: str, dcode: str) -> StopDetail | None:
 _POINT_RE = re.compile(r"POINT \(([\d.]+) ([\d.]+)\)")
 
 
+def _parse_akilli_flag(val: Any) -> bool | None:
+    """Convert GetDurak_json AKILLI flag ('VAR'/'YOK'/bool) to bool | None."""
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, str):
+        upper = val.strip().upper()
+        if upper in ("VAR", "TRUE", "1", "EVET"):
+            return True
+        if upper in ("YOK", "FALSE", "0", "HAYIR"):
+            return False
+    return None
+
+
+def _extract_stop_info_fields(r: dict[str, Any], dcode: str) -> dict[str, Any]:
+    """Extract StopInfo-compatible physical metadata from a GetDurak_json record."""
+    ilce = (r.get("ILCEADI") or "").strip() or None
+    fiziki = (r.get("FIZIKI") or "").strip() or None
+    akilli = _parse_akilli_flag(r.get("AKILLI"))
+    durak_tipi = (r.get("DURAK_TIPI") or "").strip() or None
+    engelli = (r.get("ENGELLIKULLANIM") or "").strip() or None
+    return {
+        "dcode": dcode,
+        "ilce": ilce,
+        "fiziki_durum": fiziki,
+        "akilli_durak": akilli,
+        "durak_tipi": durak_tipi,
+        "engelli_kullanim": engelli,
+    }
+
+
+def parse_stop_info_soap_json(xml_text: str, dcode: str) -> dict[str, Any] | None:
+    """Parse GetDurak_json SOAP response into StopInfo-compatible metadata dict."""
+    records = _extract_soap_json(xml_text, "GetDurak_jsonResult")
+    if not records:
+        return None
+    r = records[0]
+    if not isinstance(r, dict):
+        return None
+    return _extract_stop_info_fields(r, dcode)
+
+
 def parse_all_stops_json(xml_text: str) -> list[NearbyStop]:
     """Parse GetDurak_json (empty DurakKodu) → full stop catalogue.
 
@@ -496,16 +537,21 @@ def parse_all_stops_json(xml_text: str) -> list[NearbyStop]:
             stop_code = str(r.get("SDURAKKODU", "")).strip()
             if not stop_code:
                 continue
-            result.append(
-                NearbyStop(
-                    stop_code=stop_code,
-                    stop_name=(r.get("SDURAKADI") or "").strip(),
-                    latitude=lat,
-                    longitude=lon,
-                    district=(r.get("ILCEADI") or None),
-                    direction=((r.get("SYON") or "").strip() or None),
-                )
+            stop = NearbyStop(
+                stop_code=stop_code,
+                stop_name=(r.get("SDURAKADI") or "").strip(),
+                latitude=lat,
+                longitude=lon,
+                district=(r.get("ILCEADI") or None),
+                direction=((r.get("SYON") or "").strip() or None),
             )
+            meta = _extract_stop_info_fields(r, stop_code)
+            if any(
+                meta.get(k) is not None
+                for k in ("fiziki_durum", "akilli_durak", "durak_tipi", "engelli_kullanim")
+            ):
+                stop._stop_meta = meta
+            result.append(stop)
         except (TypeError, ValueError):
             continue
     return result
@@ -595,3 +641,54 @@ def parse_mobiett_stop(raw: dict[str, Any]) -> StopDetail | None:
         )
     except (TypeError, ValueError):
         return None
+
+
+def parse_route_info_soap_json(xml_text: str, hat_kodu: str) -> dict[str, Any] | None:
+    """Parse GetHat_json SOAP response into RouteInfo-compatible metadata dict.
+
+    Note: ``SEFER_SURESI`` in GetHat_json represents round-trip duration in minutes;
+    dividing by 2 approximates the one-way ``trip_duration_min`` shown by RouteDetail.
+    """
+    records = _extract_soap_json(xml_text, "GetHat_jsonResult")
+    if not records:
+        return None
+    target = hat_kodu.strip().upper()
+    record = next(
+        (
+            r
+            for r in records
+            if isinstance(r, dict) and str(r.get("SHATKODU") or "").strip().upper() == target
+        ),
+        records[0] if isinstance(records[0], dict) else None,
+    )
+    if not record:
+        return None
+
+    trip_duration_min: int | None = None
+    raw_duration = record.get("SEFER_SURESI")
+    if raw_duration is not None:
+        try:
+            round_trip = float(raw_duration)
+            if round_trip > 0:
+                trip_duration_min = max(1, round(round_trip / 2.0))
+        except (TypeError, ValueError):
+            pass
+
+    tarife = (str(record.get("TARIFE") or "")).strip() or None
+    details: list[str] = []
+    raw_len = record.get("HAT_UZUNLUGU")
+    if raw_len is not None:
+        try:
+            dist = float(raw_len)
+            if dist > 0:
+                details.append(f"Hat Uzunluğu: {dist:.2f} km")
+        except (TypeError, ValueError):
+            pass
+
+    return {
+        "hat_kodu": hat_kodu,
+        "trip_duration_min": trip_duration_min,
+        "hat_tipi": None,
+        "tarife": tarife,
+        "details": details,
+    }

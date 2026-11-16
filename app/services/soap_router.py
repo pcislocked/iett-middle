@@ -33,17 +33,39 @@ logger = logging.getLogger(__name__)
 class ProxyEndpoint:
     """Tracks health, spacing, and sliding-window quota for an individual proxy gateway."""
 
+    MAX_COOLDOWN_SECONDS = 600.0
+
     def __init__(self, url: str) -> None:
         self.url: str = url
         self.is_healthy: bool = True
         self.last_failure: float = 0.0
+        self.consecutive_failures: int = 0
         self.last_call: float = 0.0
         self.history: list[float] = []
 
-    def is_available(self, cooldown: float = 60.0) -> bool:
+    def effective_cooldown(self, base_cooldown: float = 60.0) -> float:
+        """Compute exponential backoff cooldown for repeated proxy connection failures."""
+        exponent = max(0, self.consecutive_failures - 1)
+        return min(self.MAX_COOLDOWN_SECONDS, base_cooldown * (3**exponent))
+
+    def mark_success(self) -> None:
+        """Mark proxy healthy after an upstream TLS session succeeded."""
+        self.is_healthy = True
+        self.consecutive_failures = 0
+        self.record_call()
+
+    def mark_failure(self, base_cooldown: float = 60.0) -> float:
+        """Mark proxy degraded and return applied cooldown seconds."""
+        self.is_healthy = False
+        self.last_failure = time.monotonic()
+        self.consecutive_failures += 1
+        return self.effective_cooldown(base_cooldown)
+
+    def is_available(self, cooldown: float | None = None) -> bool:
         """Check if endpoint is healthy or past its failure cooldown."""
         if not self.is_healthy:
-            if (time.monotonic() - self.last_failure) < cooldown:
+            wait = self.effective_cooldown() if cooldown is None else cooldown
+            if (time.monotonic() - self.last_failure) < wait:
                 return False
         return True
 
@@ -108,6 +130,8 @@ class SoapRouteManager:
         """Check if direct connection should be attempted."""
         if self._direct_healthy:
             return True
+        if settings.soap_direct_probe_interval <= 0:
+            return False
         now = time.monotonic()
         return (now - self._last_direct_failure) >= settings.soap_direct_probe_interval
 
@@ -193,9 +217,15 @@ class SoapRouteManager:
         direct_exc: Exception | None = None
         if self.should_probe_direct():
             is_probe = not self._direct_healthy
-            conn_timeout = 2.5 if timeout.connect is None else min(2.5, timeout.connect)
-            sock_timeout = 2.5 if timeout.sock_connect is None else min(2.5, timeout.sock_connect)
-            probe_total = min(timeout.total, 10.0) if timeout.total is not None else 10.0
+            conn_cap = 1.5 if is_probe else 2.5
+            conn_timeout = conn_cap if timeout.connect is None else min(conn_cap, timeout.connect)
+            sock_timeout = (
+                conn_cap if timeout.sock_connect is None else min(conn_cap, timeout.sock_connect)
+            )
+            probe_limit = 3.0 if is_probe else 10.0
+            probe_total = (
+                min(timeout.total, probe_limit) if timeout.total is not None else probe_limit
+            )
             direct_timeout = aiohttp.ClientTimeout(
                 total=probe_total if is_probe else timeout.total,
                 connect=conn_timeout,
@@ -225,6 +255,14 @@ class SoapRouteManager:
         # Mode 3: Proxy pool fallback
         excluded_urls: set[str] = set()
         last_proxy_exc: Exception | None = None
+        proxy_conn_cap = 2.5 if timeout.connect is None else min(2.5, timeout.connect)
+        proxy_sock_cap = 2.5 if timeout.sock_connect is None else min(2.5, timeout.sock_connect)
+        proxy_timeout = aiohttp.ClientTimeout(
+            total=timeout.total,
+            connect=proxy_conn_cap,
+            sock_connect=proxy_sock_cap,
+            sock_read=timeout.sock_read,
+        )
 
         while len(excluded_urls) < len(proxy_urls):
             try:
@@ -245,23 +283,52 @@ class SoapRouteManager:
                     url,
                     data=data,
                     headers=proxy_headers,
-                    timeout=timeout,
+                    timeout=proxy_timeout,
                     proxy=ep.url,
                 ) as resp:
                     resp.raise_for_status()
                     text = await read_bounded_text(resp)
-                    ep.is_healthy = True
-                    ep.record_call()
+                    ep.mark_success()
                     return text
-            except Exception as proxy_exc:
-                ep.is_healthy = False
-                ep.last_failure = time.monotonic()
+            except aiohttp.ClientHttpProxyError as proxy_exc:
+                cooldown = ep.mark_failure()
                 excluded_urls.add(ep.url)
                 last_proxy_exc = proxy_exc
                 logger.warning(
-                    "SOAP proxy %s failed (%s). Marked degraded for 60s; trying next proxy in pool.",
+                    "SOAP proxy %s tunnel failed (%s). Marked degraded for %.0fs; trying next proxy in pool.",
                     ep.url,
                     proxy_exc,
+                    cooldown,
+                )
+            except aiohttp.ClientResponseError as resp_exc:
+                # Tunnel succeeded and upstream responded over TLS; only rotate on per-IP 403/429 blocks.
+                if resp_exc.status in (403, 429):
+                    cooldown = ep.mark_failure()
+                    excluded_urls.add(ep.url)
+                    last_proxy_exc = resp_exc
+                    logger.warning(
+                        "SOAP proxy %s rate-limited/blocked by upstream (HTTP %s). Marked degraded for %.0fs; trying next proxy in pool.",
+                        ep.url,
+                        resp_exc.status,
+                        cooldown,
+                    )
+                else:
+                    ep.mark_success()
+                    logger.warning(
+                        "SOAP upstream returned HTTP %s via proxy %s; not retrying pool.",
+                        resp_exc.status,
+                        ep.url,
+                    )
+                    raise
+            except Exception as proxy_exc:
+                cooldown = ep.mark_failure()
+                excluded_urls.add(ep.url)
+                last_proxy_exc = proxy_exc
+                logger.warning(
+                    "SOAP proxy %s failed (%s). Marked degraded for %.0fs; trying next proxy in pool.",
+                    ep.url,
+                    proxy_exc,
+                    cooldown,
                 )
 
         from app.services.iett_client import IettApiError

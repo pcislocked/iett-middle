@@ -37,7 +37,14 @@ async def index_stops_forever() -> None:
             client = IettClient(get_session())
             stops = await client.get_all_stops()
             update_stop_index(stops)
-            record_stops_batch([s.model_dump() for s in stops])
+            stop_records = []
+            for s in stops:
+                rec = s.model_dump()
+                meta = getattr(s, "_stop_meta", None)
+                if isinstance(meta, dict):
+                    rec.update(meta)
+                stop_records.append(rec)
+            record_stops_batch(stop_records)
             logger.info("Stop index ready: %d stops indexed and persisted", len(stops))
         except IettApiError as exc:
             logger.warning("Stop index fetch failed (will retry in 60 s): %s", exc)
