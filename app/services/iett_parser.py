@@ -473,10 +473,19 @@ def parse_stop_detail_xml(xml_text: str, dcode: str) -> StopDetail | None:
 _POINT_RE = re.compile(r"POINT \(([\d.]+) ([\d.]+)\)")
 
 
+def _clean_opt_str(val: Any) -> str | None:
+    if val is None:
+        return None
+    s = str(val).strip()
+    return s or None
+
+
 def _parse_akilli_flag(val: Any) -> bool | None:
-    """Convert GetDurak_json AKILLI flag ('VAR'/'YOK'/bool) to bool | None."""
+    """Convert GetDurak_json AKILLI flag ('VAR'/'YOK'/bool/0/1) to bool | None."""
     if isinstance(val, bool):
         return val
+    if isinstance(val, int) and val in (0, 1):
+        return bool(val)
     if isinstance(val, str):
         upper = val.strip().upper()
         if upper in ("VAR", "TRUE", "1", "EVET"):
@@ -488,18 +497,13 @@ def _parse_akilli_flag(val: Any) -> bool | None:
 
 def _extract_stop_info_fields(r: dict[str, Any], dcode: str) -> dict[str, Any]:
     """Extract StopInfo-compatible physical metadata from a GetDurak_json record."""
-    ilce = (r.get("ILCEADI") or "").strip() or None
-    fiziki = (r.get("FIZIKI") or "").strip() or None
-    akilli = _parse_akilli_flag(r.get("AKILLI"))
-    durak_tipi = (r.get("DURAK_TIPI") or "").strip() or None
-    engelli = (r.get("ENGELLIKULLANIM") or "").strip() or None
     return {
         "dcode": dcode,
-        "ilce": ilce,
-        "fiziki_durum": fiziki,
-        "akilli_durak": akilli,
-        "durak_tipi": durak_tipi,
-        "engelli_kullanim": engelli,
+        "ilce": _clean_opt_str(r.get("ILCEADI")),
+        "fiziki_durum": _clean_opt_str(r.get("FIZIKI")),
+        "akilli_durak": _parse_akilli_flag(r.get("AKILLI")),
+        "durak_tipi": _clean_opt_str(r.get("DURAK_TIPI")),
+        "engelli_kullanim": _clean_opt_str(r.get("ENGELLIKULLANIM")),
     }
 
 
@@ -659,8 +663,12 @@ def parse_route_info_soap_json(xml_text: str, hat_kodu: str) -> dict[str, Any] |
             for r in records
             if isinstance(r, dict) and str(r.get("SHATKODU") or "").strip().upper() == target
         ),
-        records[0] if isinstance(records[0], dict) else None,
+        None,
     )
+    if record is None and len(records) == 1 and isinstance(records[0], dict):
+        sole_code = str(records[0].get("SHATKODU") or "").strip().upper()
+        if not sole_code or sole_code == target:
+            record = records[0]
     if not record:
         return None
 

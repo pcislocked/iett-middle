@@ -680,15 +680,24 @@ async def get_stop_info(
 
         # Tier 3: Local SQLite / memory stop_cache fallback
         cached = await asyncio.to_thread(stop_cache.get_stop, dcode)
-        mem_cached = cached or get_stop_info_by_code(dcode)
-        if mem_cached:
+        mem = get_stop_info_by_code(dcode)
+        if cached or mem:
+            src_mem = mem or {}
+            src_db = cached or {}
             cache_info = {
                 "dcode": dcode,
-                "ilce": mem_cached.get("district"),
-                "fiziki_durum": mem_cached.get("fiziki_durum"),
-                "akilli_durak": mem_cached.get("akilli_durak"),
+                "ilce": src_db.get("district") or src_mem.get("district"),
+                "fiziki_durum": src_db.get("fiziki_durum") or src_mem.get("fiziki_durum"),
+                "akilli_durak": (
+                    src_db.get("akilli_durak")
+                    if src_db.get("akilli_durak") is not None
+                    else src_mem.get("akilli_durak")
+                ),
             }
             if _has_stop_info_fields(cache_info):
+                # Avoid locking partial/degraded fallback rows into the 24 h cache.
+                if cache_info["fiziki_durum"] is None or cache_info["akilli_durak"] is None:
+                    raise SkipCache(cache_info)
                 return cache_info
 
         if info is not None:

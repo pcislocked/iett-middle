@@ -376,3 +376,183 @@ class TestRouterFallbacks:
         ):
             resp3 = client.get("/v1/stops/999999/info")
         assert resp3.status_code == 502
+
+    def test_route_stops_falls_back_to_html_when_durak_detay_gyy_fails(self) -> None:
+        from app.services.ntcapi_client import NtcApiError
+
+        client = TestClient(app)
+        html_stop = RouteStop(
+            route_code="500T",
+            direction="G",
+            sequence=1,
+            stop_code="301342",
+            stop_name="LEVENT HTML",
+            latitude=41.085,
+            longitude=29.008,
+            district="Şişli",
+        )
+        mock_client = MagicMock()
+        mock_client.get_route_stops_soap = AsyncMock(side_effect=IettApiError("gyy failed"))
+        mock_client.get_route_stops = AsyncMock(return_value=[html_stop])
+        with (
+            patch("app.routers.routes.get_session", return_value=MagicMock()),
+            patch(
+                "app.routers.routes.ntcapi_client.get_route_stops",
+                AsyncMock(side_effect=NtcApiError("ntc down")),
+            ),
+            patch("app.routers.routes.IettClient", return_value=mock_client),
+        ):
+            resp = client.get("/v1/routes/500T/stops")
+        assert resp.status_code == 200
+        assert resp.json()[0]["stop_code"] == "301342"
+        mock_client.get_route_stops.assert_awaited_once()
+
+    def test_route_buses_secondary_fallback_disables_mobiett(self) -> None:
+        from app.models.bus import BusPosition
+        from app.services.ntcapi_client import NtcApiError
+
+        client = TestClient(app)
+        bus = BusPosition(
+            kapino="A-5108",
+            route_code="34AS",
+            latitude=40.984,
+            longitude=28.724,
+            speed=30,
+            last_seen="11:00:00",
+        )
+        mock_client = MagicMock()
+        mock_client.get_route_buses = AsyncMock(return_value=[bus])
+        with (
+            patch("app.routers.routes.get_session", return_value=MagicMock()),
+            patch(
+                "app.routers.routes.ntcapi_client.get_route_metadata",
+                AsyncMock(side_effect=NtcApiError("down")),
+            ),
+            patch("app.routers.routes.IettClient", return_value=mock_client),
+        ):
+            resp = client.get("/v1/routes/34AS/buses")
+        assert resp.status_code == 200
+        mock_client.get_route_buses.assert_awaited_once_with("34AS", use_mobiett=False)
+
+    def test_route_info_merges_partial_html_with_soap_fallback(self) -> None:
+        client = TestClient(app)
+        mock_client = MagicMock()
+        mock_client.scrape_route_info = AsyncMock(
+            return_value={
+                "hat_kodu": "500T",
+                "trip_duration_min": None,
+                "hat_tipi": "2.BOĞAZGEÇ",
+                "tarife": None,
+                "details": [],
+            }
+        )
+        mock_client.get_route_info_soap = AsyncMock(
+            return_value={
+                "hat_kodu": "500T",
+                "trip_duration_min": 136,
+                "hat_tipi": None,
+                "tarife": "2 BİLETLİ",
+                "details": ["Hat Uzunluğu: 56.75 km"],
+            }
+        )
+        with (
+            patch("app.routers.routes.get_session", return_value=MagicMock()),
+            patch("app.routers.routes.IettClient", return_value=mock_client),
+        ):
+            resp = client.get("/v1/routes/500T/info")
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "hat_kodu": "500T",
+            "trip_duration_min": 136,
+            "hat_tipi": "2.BOĞAZGEÇ",
+            "tarife": "2 BİLETLİ",
+        }
+
+    def test_stop_info_partial_tier3_skips_24h_cache(self) -> None:
+        from app.services.cache import _store
+
+        client = TestClient(app)
+        stop_cache.upsert_stop(
+            stop_code="260213",
+            stop_name="KISMI",
+            district="Beykoz",
+        )
+        mock_client = MagicMock()
+        mock_client.scrape_stop_info = AsyncMock(side_effect=IettApiError("down"))
+        mock_client.get_stop_info_soap = AsyncMock(side_effect=IettApiError("down"))
+        with (
+            patch("app.routers.stops.get_session", return_value=MagicMock()),
+            patch("app.routers.stops.IettClient", return_value=mock_client),
+        ):
+            resp = client.get("/v1/stops/260213/info")
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "dcode": "260213",
+            "ilce": "Beykoz",
+            "fiziki_durum": None,
+            "akilli_durak": None,
+        }
+        assert "stop:info:260213" not in _store
+
+    def test_parse_route_info_soap_json_mismatched_route_and_invalid_duration(self) -> None:
+        multi_xml = _soap_envelope(
+            "GetHat_json",
+            json.dumps([{"SHATKODU": "15F", "TARIFE": "STANDART", "SEFER_SURESI": 90}]),
+        )
+        assert parse_route_info_soap_json(multi_xml, "500T") is None
+
+        bad_dur_xml = _soap_envelope(
+            "GetHat_json",
+            json.dumps([{"SHATKODU": "500T", "TARIFE": "STANDART", "SEFER_SURESI": -5}]),
+        )
+        res = parse_route_info_soap_json(bad_dur_xml, "500T")
+        assert res is not None
+        assert res["trip_duration_min"] is None
+
+    def test_extract_stop_info_handles_non_string_values(self) -> None:
+        xml = _soap_envelope(
+            "GetDurak_json",
+            json.dumps([{"SDURAKKODU": 260211, "ILCEADI": 34, "AKILLI": 1, "FIZIKI": 0}]),
+        )
+        info = parse_stop_info_soap_json(xml, "260211")
+        assert info is not None
+        assert info["ilce"] == "34"
+        assert info["akilli_durak"] is True
+        assert info["fiziki_durum"] == "0"
+
+    def test_stop_indexer_persists_physical_metadata(self) -> None:
+        import asyncio
+
+        from app.services.stop_indexer import index_stops_forever
+
+        payload = json.dumps(
+            [
+                {
+                    "SDURAKKODU": 260211,
+                    "SDURAKADI": "KAVACIK",
+                    "KOORDINAT": "POINT (29.087 41.088)",
+                    "ILCEADI": "Beykoz",
+                    "AKILLI": "VAR",
+                    "FIZIKI": "FULL KAPALI",
+                }
+            ]
+        )
+        stops = parse_all_stops_json(_soap_envelope("GetDurak_json", payload))
+        mock_client = MagicMock()
+        mock_client.get_all_stops = AsyncMock(return_value=stops)
+
+        async def stop_sleep(_: float) -> None:
+            raise asyncio.CancelledError
+
+        with (
+            patch("app.services.iett_client.IettClient", return_value=mock_client),
+            patch("app.deps.get_session", return_value=MagicMock()),
+            patch("asyncio.sleep", side_effect=stop_sleep),
+        ):
+            with pytest.raises(asyncio.CancelledError):
+                asyncio.run(index_stops_forever())
+
+        row = stop_cache.get_stop("260211")
+        assert row is not None
+        assert row["fiziki_durum"] == "FULL KAPALI"
+        assert row["akilli_durak"] is True

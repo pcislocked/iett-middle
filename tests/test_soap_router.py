@@ -327,7 +327,12 @@ async def test_soap_router_proxy_tunnel_error_and_429_failover(
 def test_soap_router_exponential_cooldown_and_disabled_probe(router: SoapRouteManager) -> None:
     ep = router.get_endpoint(DUMMY_PROXY_1)
     assert ep.mark_failure(base_cooldown=60.0) == 60.0
+    assert ep.is_available() is False
     assert ep.mark_failure(base_cooldown=60.0) == 180.0
+    with patch("app.services.soap_router.time.monotonic", return_value=ep.last_failure + 100.0):
+        assert ep.is_available() is False
+    with patch("app.services.soap_router.time.monotonic", return_value=ep.last_failure + 181.0):
+        assert ep.is_available() is True
     assert ep.mark_failure(base_cooldown=60.0) == 540.0
     assert ep.mark_failure(base_cooldown=60.0) == 600.0
     ep.mark_success()
@@ -338,3 +343,36 @@ def test_soap_router_exponential_cooldown_and_disabled_probe(router: SoapRouteMa
     router._last_direct_failure = 0.0
     with patch.object(settings, "soap_direct_probe_interval", 0.0):
         assert router.should_probe_direct() is False
+
+
+@pytest.mark.asyncio()
+async def test_soap_router_403_failover(router: SoapRouteManager) -> None:
+    """HTTP 403 triggers proxy rotation to protect against single-IP WAF blocks."""
+    session = AsyncMock(spec=aiohttp.ClientSession)
+    router._direct_healthy = False
+    router._last_direct_failure = time.monotonic()
+
+    err_403 = aiohttp.ClientResponseError(
+        request_info=Mock(), history=(), status=403, message="Forbidden"
+    )
+    resp_403 = Mock()
+    resp_403.raise_for_status = Mock(side_effect=err_403)
+    resp_ok = _mock_response("<soap>ok</soap>")
+    session.post.side_effect = [
+        AsyncMock(
+            __aenter__=AsyncMock(return_value=resp_403), __aexit__=AsyncMock(return_value=False)
+        ),
+        AsyncMock(
+            __aenter__=AsyncMock(return_value=resp_ok), __aexit__=AsyncMock(return_value=False)
+        ),
+    ]
+
+    with (
+        patch.object(settings, "soap_proxy_urls", f"{DUMMY_PROXY_1},{DUMMY_PROXY_2}"),
+        patch.object(settings, "soap_proxy_min_interval", 0.0),
+        patch.object(settings, "soap_direct_probe_interval", 3600.0),
+    ):
+        res = await router.post(session, "https://test", b"", {}, aiohttp.ClientTimeout())
+    assert res == "<soap>ok</soap>"
+    assert router.get_endpoint(DUMMY_PROXY_1).is_healthy is False
+    assert router.get_endpoint(DUMMY_PROXY_2).is_healthy is True

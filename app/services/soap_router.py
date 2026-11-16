@@ -8,11 +8,13 @@ Guiding Principles:
 2. Proxy pool is NEVER hardwired; it is only invoked when direct connection fails.
 3. If no proxies are configured, or if all proxies are down/failing, fails gracefully
    so downstream fallbacks (NTCAPI, in-memory cache) can take over.
-4. Periodically probes direct connectivity (every 5 min) to switch back to direct as soon as reachable.
+4. Periodically probes direct connectivity (default 1h; configurable via
+   SOAP_DIRECT_PROBE_INTERVAL) to switch back to direct as soon as reachable.
 5. Strictly throttles requests PER PROXY (minimum 2.0s interval + 45 req / 120s sliding window)
    to protect each OpenWrt/residential gateway IP from upstream rate-limits or bans.
 6. Automatically balances load across available proxies (least-recently-used rotation)
-   and isolates failing proxies with a 60-second cooldown without affecting the rest of the pool.
+   and isolates failing proxies with exponential cooldown (60s -> 180s -> 600s) without
+   penalizing the pool on upstream 5xx responses over established TLS tunnels.
 """
 
 from __future__ import annotations
@@ -230,6 +232,7 @@ class SoapRouteManager:
                 total=probe_total if is_probe else timeout.total,
                 connect=conn_timeout,
                 sock_connect=sock_timeout,
+                sock_read=timeout.sock_read,
             )
             direct_headers = dict(headers)
             direct_headers["User-Agent"] = settings.user_agent(via_proxy=False)
