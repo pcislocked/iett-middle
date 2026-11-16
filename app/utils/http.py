@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 from typing import Any
 
@@ -96,3 +97,18 @@ async def read_bounded_text(
             return raw_b.decode(charset, errors="replace")
 
     raise TypeError(f"Unsupported response type for read_bounded_text: {type(resp)}")
+
+
+async def call_optional_async(
+    obj: Any,
+    method_name: str,
+    *args: Any,
+    timeout: float | None = None,
+    **kwargs: Any,
+) -> Any:
+    """Invoke an async method if present and truly awaitable (skips sync/unconfigured mocks)."""
+    fn = getattr(obj, method_name, None)
+    if not inspect.iscoroutinefunction(fn):
+        return None
+    coro = fn(*args, **kwargs)
+    return await (asyncio.wait_for(coro, timeout=timeout) if timeout is not None else coro)

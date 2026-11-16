@@ -24,6 +24,7 @@ from app.services.cache import SkipCache, cache_get_or_fetch, cache_set
 from app.services.iett_client import IettApiError, IettClient
 from app.services.mobiett_client import MobiettClient
 from app.services.ntcapi_client import NtcApiError
+from app.utils.http import call_optional_async
 
 logger = logging.getLogger(__name__)
 
@@ -183,7 +184,10 @@ async def get_route_buses(
         # ── secondary: IETT SOAP GetHatOtoKonum ────────────────────────────────
         try:
             client = IettClient(session)
-            buses = await asyncio.wait_for(client.get_route_buses(hat_kodu), timeout=3.0)
+            buses = await asyncio.wait_for(
+                client.get_route_buses(hat_kodu, use_mobiett=False),
+                timeout=8.0,
+            )
             if buses:
                 from app.deps import update_fleet
 
@@ -250,19 +254,37 @@ async def get_route_stops(hat_kodu: str) -> list[dict[str, Any]]:
             if has_null_coords:
                 logger.warning("ntcapi stops missing coords for %s, trying SOAP fallback", hat_kodu)
             client = IettClient(session)
+            fallback_stops: list[RouteStop] = []
             try:
-                soap_stops = await asyncio.wait_for(client.get_route_stops(hat_kodu), timeout=3.0)
-                if soap_stops:
-                    stops = soap_stops
-            except (IettApiError, asyncio.TimeoutError) as exc:
-                if not stops:
-                    logger.warning("get_route_stops failed for %s: %s", hat_kodu, exc)
-                    raise HTTPException(502, detail="Hat durakları servisine ulaşılamadı.") from exc
-                logger.warning(
-                    "SOAP fallback failed or timed out for %s, proceeding with NTCAPI stops: %s",
-                    hat_kodu,
-                    exc,
+                soap_stops = await call_optional_async(
+                    client, "get_route_stops_soap", hat_kodu, timeout=5.0
                 )
+                if soap_stops:
+                    fallback_stops = soap_stops
+            except (IettApiError, asyncio.TimeoutError) as exc:
+                logger.warning("DurakDetay_GYY SOAP fallback failed for %s: %s", hat_kodu, exc)
+
+            if not fallback_stops:
+                try:
+                    html_stops = await asyncio.wait_for(
+                        client.get_route_stops(hat_kodu), timeout=5.0
+                    )
+                    if html_stops:
+                        fallback_stops = html_stops
+                except (IettApiError, asyncio.TimeoutError) as exc:
+                    if not stops:
+                        logger.warning("get_route_stops failed for %s: %s", hat_kodu, exc)
+                        raise HTTPException(
+                            502, detail="Hat durakları servisine ulaşılamadı."
+                        ) from exc
+                    logger.warning(
+                        "SOAP/HTML fallback failed or timed out for %s, proceeding with NTCAPI stops: %s",
+                        hat_kodu,
+                        exc,
+                    )
+
+            if fallback_stops:
+                stops = fallback_stops
 
         dumped = [s.model_dump() for s in stops]
         if dumped:
@@ -547,11 +569,40 @@ async def get_route_info(
 
     async def _fetch():
         client = IettClient(get_session())
+        info: dict[str, Any] | None = None
+        scrape_exc: IettApiError | None = None
         try:
-            return await client.scrape_route_info(hat_kodu)
+            info = await client.scrape_route_info(hat_kodu)
         except IettApiError as exc:
-            logger.warning("scrape_route_info failed for %s: %s", hat_kodu, exc)
-            raise HTTPException(502, detail="Hat bilgi servisine ulaşılamadı.") from exc
+            scrape_exc = exc
+            logger.warning(
+                "scrape_route_info failed for %s, trying GetHat_json fallback: %s", hat_kodu, exc
+            )
+
+        needs_fallback = not info or (
+            info.get("tarife") is None and info.get("trip_duration_min") is None
+        )
+        if needs_fallback:
+            try:
+                soap_info = await call_optional_async(
+                    client, "get_route_info_soap", hat_kodu, timeout=5.0
+                )
+                if isinstance(soap_info, dict) and (
+                    soap_info.get("tarife") is not None
+                    or soap_info.get("trip_duration_min") is not None
+                ):
+                    if info:
+                        return {
+                            **soap_info,
+                            **{k: v for k, v in info.items() if v is not None and v != []},
+                        }
+                    return soap_info
+            except (IettApiError, asyncio.TimeoutError) as soap_exc:
+                logger.warning("get_route_info_soap fallback failed for %s: %s", hat_kodu, soap_exc)
+
+        if info is not None:
+            return info
+        raise HTTPException(502, detail="Hat bilgi servisine ulaşılamadı.") from scrape_exc
 
     return await cache_get_or_fetch(
         key,

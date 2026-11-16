@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from typing import Any
+
+from pydantic import BaseModel, PrivateAttr
 
 
 class StopSearchResult(BaseModel):
@@ -47,6 +49,7 @@ class NearbyStop(BaseModel):
     district: str | None = None
     direction: str | None = None
     distance_m: float = 0.0
+    _stop_meta: dict[str, Any] | None = PrivateAttr(default=None)
 
 
 class StopInfo(BaseModel):

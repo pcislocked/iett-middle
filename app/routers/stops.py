@@ -27,6 +27,7 @@ from app.services import normalizers, ntcapi_client, stop_cache
 from app.services.cache import SkipCache, cache_get_or_fetch
 from app.services.iett_client import IettApiError, IettClient
 from app.services.ntcapi_client import NtcApiError
+from app.utils.http import call_optional_async
 
 logger = logging.getLogger(__name__)
 
@@ -618,25 +619,90 @@ async def get_stop_announcements(
     return [Announcement.model_validate(a) for a in announcements_data]
 
 
+def _has_stop_info_fields(info: dict[str, Any] | None) -> bool:
+    return bool(
+        info
+        and (
+            info.get("ilce") is not None
+            or info.get("fiziki_durum") is not None
+            or info.get("akilli_durak") is not None
+        )
+    )
+
+
 @router.get("/{dcode}/info", response_model=StopInfo)
 @limiter.limit("60/minute")
 async def get_stop_info(
     request: Request,
     dcode: str = Path(..., pattern=r"^\d{4,10}$"),
 ):
-    """Scrape stop metadata from iett.istanbul/StationDetail."""
+    """Fetch stop metadata with 3-tier fallback (StationDetail HTML -> GetDurak_json SOAP -> stop_cache)."""
     key = f"stop:info:{dcode}"
 
     async def _fetch():
         client = IettClient(get_session())
+        info: dict[str, Any] | None = None
+        scrape_exc: IettApiError | None = None
+
+        # Tier 1: StationDetail HTML scrape (primary, zero extra SOAP unless needed)
         try:
-            info = await client.scrape_stop_info(dcode)
-            if info and isinstance(info, dict) and info.get("ilce"):
-                record_stops_batch([{"stop_code": dcode, "district": info.get("ilce")}])
-            return info
+            scraped = await client.scrape_stop_info(dcode)
+            if isinstance(scraped, dict):
+                info = scraped
         except IettApiError as exc:
-            logger.warning("scrape_stop_info failed for %s: %s", dcode, exc)
-            raise HTTPException(502, detail="Durak bilgi servisine ulaşılamadı.") from exc
+            scrape_exc = exc
+            logger.warning(
+                "scrape_stop_info failed for %s, trying GetDurak_json fallback: %s", dcode, exc
+            )
+
+        # Tier 2: GetDurak_json SOAP fallback
+        if not _has_stop_info_fields(info):
+            try:
+                soap_info = await call_optional_async(
+                    client, "get_stop_info_soap", dcode, timeout=5.0
+                )
+                if isinstance(soap_info, dict) and _has_stop_info_fields(soap_info):
+                    info = (
+                        {
+                            **soap_info,
+                            **{k: v for k, v in info.items() if v is not None},
+                        }
+                        if info
+                        else soap_info
+                    )
+            except (IettApiError, asyncio.TimeoutError) as soap_exc:
+                logger.warning("get_stop_info_soap fallback failed for %s: %s", dcode, soap_exc)
+
+        if _has_stop_info_fields(info):
+            assert info is not None
+            record_stops_batch([info])
+            return info
+
+        # Tier 3: Local SQLite / memory stop_cache fallback
+        cached = await asyncio.to_thread(stop_cache.get_stop, dcode)
+        mem = get_stop_info_by_code(dcode)
+        if cached or mem:
+            src_mem = mem or {}
+            src_db = cached or {}
+            cache_info = {
+                "dcode": dcode,
+                "ilce": src_db.get("district") or src_mem.get("district"),
+                "fiziki_durum": src_db.get("fiziki_durum") or src_mem.get("fiziki_durum"),
+                "akilli_durak": (
+                    src_db.get("akilli_durak")
+                    if src_db.get("akilli_durak") is not None
+                    else src_mem.get("akilli_durak")
+                ),
+            }
+            if _has_stop_info_fields(cache_info):
+                # Avoid locking partial/degraded fallback rows into the 24 h cache.
+                if cache_info["fiziki_durum"] is None or cache_info["akilli_durak"] is None:
+                    raise SkipCache(cache_info)
+                return cache_info
+
+        if info is not None:
+            return info
+        raise HTTPException(502, detail="Durak bilgi servisine ulaşılamadı.") from scrape_exc
 
     return await cache_get_or_fetch(
         key,

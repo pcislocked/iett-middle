@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     soap_proxy_max_per_window: int = 45
     soap_proxy_window_seconds: float = 120.0
     soap_proxy_min_interval: float = 2.0
-    soap_direct_probe_interval: float = 300.0
+    soap_direct_probe_interval: float = 3600.0
 
     @property
     def effective_soap_proxy_urls(self) -> list[str]:

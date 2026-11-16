@@ -496,6 +496,11 @@ def record_stops_batch(items: list[dict[str, Any]], persist: bool = True) -> Non
         if direction and str(direction).strip().upper() in ("G", "D"):
             direction = None
 
+        fiziki = item.get("fiziki_durum")
+        akilli = item.get("akilli_durak")
+        durak_tipi = item.get("durak_tipi")
+        engelli = item.get("engelli_kullanim")
+
         cleaned = {
             "stop_code": code,
             "stop_name": name,
@@ -503,6 +508,10 @@ def record_stops_batch(items: list[dict[str, Any]], persist: bool = True) -> Non
             "longitude": float(lon) if lon is not None else None,
             "district": str(district).strip() if district else None,
             "direction": str(direction).strip() if direction else None,
+            "fiziki_durum": str(fiziki).strip() if fiziki else None,
+            "akilli_durak": akilli if isinstance(akilli, bool) else None,
+            "durak_tipi": str(durak_tipi).strip() if durak_tipi else None,
+            "engelli_kullanim": str(engelli).strip() if engelli else None,
         }
 
         existing = _stop_by_code.get(code)
@@ -523,6 +532,14 @@ def record_stops_batch(items: list[dict[str, Any]], persist: bool = True) -> Non
                 existing["district"] = cleaned["district"]
             if not existing.get("direction") and cleaned["direction"]:
                 existing["direction"] = cleaned["direction"]
+            if not existing.get("fiziki_durum") and cleaned["fiziki_durum"]:
+                existing["fiziki_durum"] = cleaned["fiziki_durum"]
+            if existing.get("akilli_durak") is None and cleaned["akilli_durak"] is not None:
+                existing["akilli_durak"] = cleaned["akilli_durak"]
+            if not existing.get("durak_tipi") and cleaned["durak_tipi"]:
+                existing["durak_tipi"] = cleaned["durak_tipi"]
+            if not existing.get("engelli_kullanim") and cleaned["engelli_kullanim"]:
+                existing["engelli_kullanim"] = cleaned["engelli_kullanim"]
 
             if (
                 not had_coords
