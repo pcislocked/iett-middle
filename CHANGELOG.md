@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.13] - 2026-11-26
+### Fixed
+- SOAP vekil geri çekilme (backoff) taşma hatası (`OverflowError`) ve eşzamanlı hız sınırı yarış durumu giderildi
+- Upstream hata yakalama, önbellek/SQLite eşzamanlılığı, kısmi filo koruması ve token yenileme kararlılığı iyileştirildi
+
+---
+
 ## [0.4.12.6] - 2026-11-16
 ### Changed
 - Bağlantı kararlılığı ve yedek servis iyileştirmeleri
