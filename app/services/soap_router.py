@@ -47,14 +47,13 @@ class ProxyEndpoint:
 
     def effective_cooldown(self, base_cooldown: float = 60.0) -> float:
         """Compute exponential backoff cooldown for repeated proxy connection failures."""
-        exponent = max(0, self.consecutive_failures - 1)
+        exponent = min(max(0, self.consecutive_failures - 1), 10)
         return min(self.MAX_COOLDOWN_SECONDS, base_cooldown * (3**exponent))
 
     def mark_success(self) -> None:
         """Mark proxy healthy after an upstream TLS session succeeded."""
         self.is_healthy = True
         self.consecutive_failures = 0
-        self.record_call()
 
     def mark_failure(self, base_cooldown: float = 60.0) -> float:
         """Mark proxy degraded and return applied cooldown seconds."""
@@ -192,6 +191,11 @@ class SoapRouteManager:
             best_ep, best_wait = min(
                 ready_candidates, key=lambda pair: (pair[1], pair[0].last_call)
             )
+            # Reserve the rate-limit slot atomically under self._lock so concurrent
+            # callers cannot observe stale last_call/history and stampede the same proxy.
+            scheduled_at = time.monotonic() + best_wait
+            best_ep.last_call = scheduled_at
+            best_ep.history.append(scheduled_at)
             return best_ep, best_wait
 
     async def post(

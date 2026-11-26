@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, Request
 
 from app.deps import get_session, limiter
 from app.models.announcement import OfficialAnnouncementsResponse
-from app.services.cache import cache_get, cache_get_or_fetch
+from app.services.cache import cache_get_or_fetch, cache_get_stale_ok
 from app.services.iett_scraper import fetch_official_announcements
 from app.services.notice_poller import GLOBAL_NOTICES_CACHE_KEY
 
@@ -22,7 +22,7 @@ async def get_global_notices_endpoint(request: Request) -> list[dict[str, Any]]:
     such as major disruptions, holidays, severe weather warnings, or system-wide changes.
     These are overarching alerts that are **not** tied to a specific route or stop.
     """
-    notices = await cache_get(GLOBAL_NOTICES_CACHE_KEY)
+    notices = await cache_get_stale_ok(GLOBAL_NOTICES_CACHE_KEY)
     if notices is None:
         return []
     return notices

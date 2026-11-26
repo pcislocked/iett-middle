@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from http.cookies import CookieError
 from typing import Any, cast
 
 import aiohttp
@@ -74,6 +76,36 @@ def _ms_to_iso(val: Any) -> str | None:
         return None
 
 
+_COOKIE_NAME_RE = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
+
+
+def _parse_cookies_json(raw: str) -> dict[str, str]:
+    """Parse X-Arac-Session-Key JSON into a validated flat cookie dict."""
+    import json
+
+    try:
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict) or not all(
+            isinstance(k, str) and isinstance(v, str) and _COOKIE_NAME_RE.match(k)
+            for k, v in parsed.items()
+        ):
+            raise ValueError("Cookies must be a flat string-to-string dictionary")
+        return parsed
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(400, detail="X-Arac-Session-Key is not valid JSON.") from exc
+
+
+def _extract_vehicle_and_task(detail: Any) -> tuple[dict[str, Any], list[Any]]:
+    """Safely extract dataVehicle dict and dataTask list from an ARAC detail payload."""
+    if not isinstance(detail, dict):
+        return {}, []
+    raw_vehicle = detail.get("dataVehicle")
+    raw_task = detail.get("dataTask")
+    data_vehicle = raw_vehicle if isinstance(raw_vehicle, dict) else {}
+    data_task = raw_task if isinstance(raw_task, list) else []
+    return data_vehicle, data_task
+
+
 def _require_arac_session_headers(
     request: Request | None = None,
     *,
@@ -91,17 +123,7 @@ def _require_arac_session_headers(
                 401,
                 detail="Missing X-Arac-Session-Key header. Detail: X-Arac-Session-Id X-Arac-Session-Key X-Session-Id X-Session-Key",
             )
-        import json
-
-        try:
-            parsed = json.loads(session_key_raw)
-            if not isinstance(parsed, dict) or not all(
-                isinstance(k, str) and isinstance(v, str) for k, v in parsed.items()
-            ):
-                raise ValueError("Cookies must be a flat string-to-string dictionary")
-            return parsed
-        except (ValueError, TypeError):
-            raise HTTPException(400, detail="X-Arac-Session-Key is not valid JSON.")
+        return _parse_cookies_json(session_key_raw)
 
     sid = x_arac_session_id or x_session_id
     skey = x_arac_session_key or x_session_key
@@ -292,8 +314,8 @@ async def suggest_arac_bus(
                     loop.run_in_executor(None, vehicle_cache.upsert_vehicles_batch, items)
                     return [
                         {
-                            "doorNumber": str(item.get("doorNumber", "")),
-                            "plate": str(item.get("plate", "")),
+                            "doorNumber": _as_str(item.get("doorNumber")) or "",
+                            "plate": _as_str(item.get("plate")) or "",
                         }
                         for item in items
                         if isinstance(item, dict)
@@ -308,8 +330,8 @@ async def suggest_arac_bus(
     cached_hits = await asyncio.to_thread(vehicle_cache.search_vehicles, q, 20)
     return [
         {
-            "doorNumber": str(c.get("door_number", "")),
-            "plate": str(c.get("plate", "")),
+            "doorNumber": _as_str(c.get("door_number")) or "",
+            "plate": _as_str(c.get("plate")) or "",
         }
         for c in cached_hits
     ]
@@ -349,8 +371,7 @@ async def get_arac_bus_auto_detail(
                 detail_vehicle_hash = await client.get_vehicle_hash(kapino)
                 detail = await client.get_detail(detail_vehicle_hash)
 
-                data_vehicle = detail.get("dataVehicle", {})
-                data_task = detail.get("dataTask", [])
+                data_vehicle, data_task = _extract_vehicle_and_task(detail)
 
                 profile = AracClient.normalize_bus_position(data_vehicle)
                 missions = AracClient.normalize_missions(data_task)
@@ -360,8 +381,8 @@ async def get_arac_bus_auto_detail(
                 line_codes = sorted({m.line_code for m in missions if m.line_code})
 
                 active_route = None
-                if data_task and len(data_task) > 0:
-                    active_route = str(data_task[0].get("lineCode", "")) or None
+                if data_task and isinstance(data_task[0], dict):
+                    active_route = _as_str(data_task[0].get("lineCode"))
                 profile.route_code = active_route
 
                 now_iso = datetime.now(timezone.utc).isoformat()
@@ -415,35 +436,31 @@ async def get_arac_bus_detail(
     if not session_key_raw:
         raise HTTPException(401, detail="Missing X-Arac-Session-Key header.")
 
-    import json as _json
+    cookies_dict = _parse_cookies_json(session_key_raw)
 
     try:
-        parsed = _json.loads(session_key_raw)
-        if not isinstance(parsed, dict) or not all(
-            isinstance(k, str) and isinstance(v, str) for k, v in parsed.items()
-        ):
-            raise ValueError("Cookies must be a flat string-to-string dictionary")
-        cookies_dict: dict[str, str] = parsed
-    except (ValueError, TypeError) as exc:
-        raise HTTPException(400, detail="X-Arac-Session-Key is not valid JSON.") from exc
+        async with _isolated_arac_session(cookies=cookies_dict) as temp_session:
+            client = AracClient(temp_session)
+            try:
+                vehicle_hash = await client.get_vehicle_hash(kapino)
+                detail = await client.get_detail(vehicle_hash)
+            except AracApiError as exc:
+                logger.warning("get_arac_bus_detail failed: %s", exc)
+                status = _status_from_arac_error(exc, 503)
+                detail_msg = (
+                    exc.payload
+                    if exc.payload
+                    and isinstance(exc.payload, str)
+                    and not exc.payload.startswith("<")
+                    else str(exc)
+                )
+                raise HTTPException(status, detail=detail_msg) from exc
+    except CookieError as exc:
+        raise HTTPException(
+            400, detail="X-Arac-Session-Key contains invalid cookie characters."
+        ) from exc
 
-    async with _isolated_arac_session(cookies=cookies_dict) as temp_session:
-        client = AracClient(temp_session)
-        try:
-            vehicle_hash = await client.get_vehicle_hash(kapino)
-            detail = await client.get_detail(vehicle_hash)
-        except AracApiError as exc:
-            logger.warning("get_arac_bus_detail failed: %s", exc)
-            status = _status_from_arac_error(exc, 503)
-            detail_msg = (
-                exc.payload
-                if exc.payload and isinstance(exc.payload, str) and not exc.payload.startswith("<")
-                else str(exc)
-            )
-            raise HTTPException(status, detail=detail_msg) from exc
-
-    data_vehicle = detail.get("dataVehicle", {})
-    data_task = detail.get("dataTask", [])
+    data_vehicle, data_task = _extract_vehicle_and_task(detail)
 
     profile = AracClient.normalize_bus_position(data_vehicle)
     missions = AracClient.normalize_missions(data_task)
@@ -454,8 +471,8 @@ async def get_arac_bus_detail(
 
     # Find active route code (fallback to first task's line_code)
     active_route = None
-    if data_task and len(data_task) > 0:
-        active_route = str(data_task[0].get("lineCode", "")) or None
+    if data_task and isinstance(data_task[0], dict):
+        active_route = _as_str(data_task[0].get("lineCode"))
 
     profile.route_code = active_route
 

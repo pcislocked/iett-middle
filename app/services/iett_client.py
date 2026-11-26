@@ -505,6 +505,7 @@ class IettClient:
             f"{settings.iett_soap_base}/UlasimAnaVeri/HatDurakGuzergah.asmx",
             '<GetDurak_json xmlns="http://tempuri.org/"><DurakKodu></DurakKodu></GetDurak_json>',
             '"http://tempuri.org/GetDurak_json"',
+            timeout=aiohttp.ClientTimeout(total=30.0, connect=3.0, sock_connect=3.0),
         )
         return await asyncio.to_thread(parse_all_stops_json, xml)
 

@@ -501,9 +501,15 @@ async def get_stop_detail(
                 item_dict["direction"] = active_cache.get("direction")
             if not item_dict.get("district"):
                 item_dict["district"] = active_cache.get("district")
-            if item_dict.get("latitude") is None and active_cache.get("latitude") is not None:
+            if item_dict.get("latitude") in (None, 0.0) and active_cache.get("latitude") not in (
+                None,
+                0.0,
+            ):
                 item_dict["latitude"] = active_cache["latitude"]
-            if item_dict.get("longitude") is None and active_cache.get("longitude") is not None:
+            if item_dict.get("longitude") in (None, 0.0) and active_cache.get("longitude") not in (
+                None,
+                0.0,
+            ):
                 item_dict["longitude"] = active_cache["longitude"]
         record_stops_batch([item_dict])
         return item_dict

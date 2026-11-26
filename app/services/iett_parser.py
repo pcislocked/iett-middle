@@ -630,6 +630,13 @@ def parse_mobiett_buses(raw: list[dict[str, Any]]) -> list[BusPosition]:
     return result
 
 
+def _parse_optional_coord(val: Any) -> float | None:
+    if val is None or val == "":
+        return None
+    f = float(val)
+    return f if f != 0.0 else None
+
+
 def parse_mobiett_stop(raw: dict[str, Any]) -> StopDetail | None:
     """Parse 'mainGetBusStop' JSON response into StopDetail."""
     try:
@@ -639,8 +646,8 @@ def parse_mobiett_stop(raw: dict[str, Any]) -> StopDetail | None:
         return StopDetail(
             dcode=str(raw.get("DURAK_DURAK_KODU", "")),
             name=raw.get("DURAK_ADI", ""),
-            latitude=float(lat) if lat else 0.0,
-            longitude=float(lon) if lon else 0.0,
+            latitude=_parse_optional_coord(lat),
+            longitude=_parse_optional_coord(lon),
             direction=raw.get("DURAK_YON_BILGISI"),
         )
     except (TypeError, ValueError):

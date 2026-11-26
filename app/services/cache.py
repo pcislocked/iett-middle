@@ -78,6 +78,14 @@ async def cache_get(key: str) -> Any | None:
     return None
 
 
+async def cache_get_stale_ok(key: str) -> Any | None:
+    """Return cached value if within TTL or stale_ttl window."""
+    result = await _cache_get_internal(key)
+    if result is not None:
+        return result[0]
+    return None
+
+
 async def cache_set(
     key: str, value: Any, ttl: int, stale_ttl: int = 0, jitter: bool = False
 ) -> None:
@@ -132,6 +140,18 @@ class SkipCache(Exception):
 _bg_tasks: set[asyncio.Task] = set()
 
 
+async def cancel_background_tasks() -> None:
+    """Cancel and await any active background stale-while-revalidate refresh tasks."""
+    tasks = list(_bg_tasks)
+    if not tasks:
+        return
+    for task in tasks:
+        if not task.done():
+            task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+    _bg_tasks.clear()
+
+
 T = TypeVar("T")
 
 
@@ -147,6 +167,8 @@ async def cache_get_or_fetch(
     Prevents cache stampedes by ensuring only one concurrent fetcher runs per key.
     If data is stale but within stale_ttl, returns stale data and triggers a background fetch.
     """
+    effective_stale = stale_ttl if stale_ttl > 0 else settings.cache_stale_ttl
+
     cached = await _cache_get_internal(key)
     if cached is not None:
         value, is_fresh = cached
@@ -165,15 +187,20 @@ async def cache_get_or_fetch(
         async def background_fetch() -> None:
             try:
                 new_value = await fetcher()
-                await cache_set(key, new_value, ttl, stale_ttl, jitter)
+                await cache_set(key, new_value, ttl, effective_stale, jitter)
                 if not fut.done():
                     fut.set_result(new_value)
             except SkipCache as e:
                 if not fut.done():
                     fut.set_result(e.value)
             except Exception as e:
+                logger.warning(
+                    "Background refresh failed for cache key '%s': %s. Keeping stale fallback.",
+                    key,
+                    e,
+                )
                 if not fut.done():
-                    fut.set_exception(e)
+                    fut.set_result(value)
             finally:
                 async with _lock:
                     if key in _inflight and _inflight[key] is fut:
@@ -206,9 +233,6 @@ async def cache_get_or_fetch(
             if fut.cancelled():
                 return await cache_get_or_fetch(key, ttl, fetcher, stale_ttl, jitter)
             raise
-
-    # Default stale_ttl if 0 passed
-    effective_stale = stale_ttl if stale_ttl > 0 else settings.cache_stale_ttl
 
     try:
         val = await fetcher()
