@@ -354,8 +354,40 @@ def update_fleet(buses: list[BusPosition], is_full_snapshot: bool = True) -> Non
         elif k not in _trail:
             _trail[k] = deque(maxlen=max_entries)
         dumped = b.model_dump()
-        if not dumped.get("plate") and prev is not None and prev.get("plate"):
-            dumped["plate"] = prev["plate"]
+        if prev is not None:
+            if not dumped.get("plate") and prev.get("plate"):
+                dumped["plate"] = prev["plate"]
+            if not is_full_snapshot:
+                for field in (
+                    "speed",
+                    "operator",
+                    "route_name",
+                    "direction",
+                    "direction_letter",
+                    "nearest_stop",
+                    "stop_sequence",
+                ):
+                    if dumped.get(field) is None and prev.get(field) is not None:
+                        dumped[field] = prev[field]
+            for field in (
+                "operator_id",
+                "operator_name",
+                "vehicle_brand",
+                "model_year",
+                "vehicle_type",
+                "seating_capacity",
+                "full_capacity",
+                "accessible",
+                "has_usb",
+                "has_wifi",
+                "has_bicycle_rack",
+                "is_air_conditioned",
+                "garage_code",
+                "garage_name",
+                "vehicle_software_version",
+            ):
+                if dumped.get(field) is None and prev.get(field) is not None:
+                    dumped[field] = prev[field]
         _fleet[k] = dumped
         # Persist last known route even when bus later goes offline / parks
         if b.route_code:
@@ -397,9 +429,11 @@ def update_fleet(buses: list[BusPosition], is_full_snapshot: bool = True) -> Non
             if clean_pl:
                 new_plate_fleet[clean_pl] = b_dict
 
-    global _clean_fleet, _plate_fleet  # noqa: PLW0603
-    _clean_fleet = new_clean_fleet
-    _plate_fleet = new_plate_fleet
+    # Mutate in place so callers importing _clean_fleet by reference see live updates.
+    _clean_fleet.clear()
+    _clean_fleet.update(new_clean_fleet)
+    _plate_fleet.clear()
+    _plate_fleet.update(new_plate_fleet)
 
     # Populate persistent vehicle cache only with new or changed kapino <-> plate pairs
     new_pairs: list[dict[str, Any]] = []

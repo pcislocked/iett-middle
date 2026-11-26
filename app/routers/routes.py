@@ -287,8 +287,14 @@ async def get_route_stops(hat_kodu: str) -> list[dict[str, Any]]:
                 stops = fallback_stops
 
         dumped = [s.model_dump() for s in stops]
-        if dumped:
-            record_stops_batch(dumped)
+        if not dumped:
+            raise SkipCache(dumped)
+        record_stops_batch(dumped)
+        if any(s.get("latitude") is None or s.get("longitude") is None for s in dumped):
+            # Cache incomplete coord-less fallback briefly (60s) to avoid hammering a down SOAP
+            # endpoint without poisoning the 24-hour route stops cache.
+            await cache_set(key, dumped, ttl=60, stale_ttl=60)
+            raise SkipCache(dumped)
         return dumped
 
     return await cache_get_or_fetch(
@@ -361,13 +367,21 @@ async def get_route_schedule(
                 raise HTTPException(
                     502, detail="Hat sefer saatleri servisine ulaşılamadı."
                 ) from exc
+            raw_soap = [
+                normalizers.schedule.from_iett_soap_schedule(d.model_dump()) for d in schedule
+            ]
             data = [
                 {
-                    k: v
-                    for k, v in normalizers.schedule.from_iett_soap_schedule(d.model_dump()).items()
-                    if k != "_source"
+                    "route_code": str(c.get("route_code") or ""),
+                    "route_name": str(c.get("route_name") or c.get("route_code") or ""),
+                    "route_variant": str(c.get("route_variant") or ""),
+                    "direction": str(c.get("direction") or ""),
+                    "day_type": str(c.get("day_type") or ""),
+                    "service_type": str(c.get("service_type") or ""),
+                    "departure_time": str(c.get("departure_time") or ""),
                 }
-                for d in schedule
+                for c in raw_soap
+                if c.get("route_code") and c.get("departure_time")
             ]
         return data
 

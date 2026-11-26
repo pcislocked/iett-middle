@@ -376,3 +376,45 @@ async def test_soap_router_403_failover(router: SoapRouteManager) -> None:
     assert res == "<soap>ok</soap>"
     assert router.get_endpoint(DUMMY_PROXY_1).is_healthy is False
     assert router.get_endpoint(DUMMY_PROXY_2).is_healthy is True
+
+
+def test_soap_router_effective_cooldown_never_overflows(router: SoapRouteManager) -> None:
+    """Dead proxies after thousands of failures must clamp cooldown without OverflowError."""
+    ep = router.get_endpoint(DUMMY_PROXY_1)
+    ep.consecutive_failures = 10_000
+    assert ep.effective_cooldown() == ep.MAX_COOLDOWN_SECONDS
+
+    ep2 = router.get_endpoint(DUMMY_PROXY_2)
+    for _ in range(1000):
+        cooldown = ep2.mark_failure(base_cooldown=60.0)
+        assert cooldown <= ep2.MAX_COOLDOWN_SECONDS
+    assert ep2.effective_cooldown() == ep2.MAX_COOLDOWN_SECONDS
+
+
+@pytest.mark.asyncio()
+async def test_soap_router_concurrent_selection_reserves_slots_and_no_double_count(
+    router: SoapRouteManager,
+) -> None:
+    """Concurrent proxy selections reserve rate-limit slots atomically under lock."""
+    import asyncio
+
+    with (
+        patch.object(settings, "soap_proxy_urls", f"{DUMMY_PROXY_1},{DUMMY_PROXY_2}"),
+        patch.object(settings, "soap_proxy_max_per_window", 1),
+        patch.object(settings, "soap_proxy_window_seconds", 120.0),
+        patch.object(settings, "soap_proxy_min_interval", 0.0),
+    ):
+        (ep1, _), (ep2, _) = await asyncio.gather(
+            router._select_available_proxy([DUMMY_PROXY_1, DUMMY_PROXY_2], set()),
+            router._select_available_proxy([DUMMY_PROXY_1, DUMMY_PROXY_2], set()),
+        )
+        assert {ep1.url, ep2.url} == {DUMMY_PROXY_1, DUMMY_PROXY_2}
+        assert len(ep1.history) == 1
+        assert len(ep2.history) == 1
+
+        # mark_success must not double-count calls against sliding-window quota
+        ep1.mark_success()
+        assert len(ep1.history) == 1
+
+        with pytest.raises(IettApiError, match="SOAP proxy pool rate limit exceeded"):
+            await router._select_available_proxy([DUMMY_PROXY_1, DUMMY_PROXY_2], set())

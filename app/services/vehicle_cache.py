@@ -21,9 +21,9 @@ _init_lock = threading.Lock()
 _write_lock = threading.Lock()
 _initialized = False
 _primary_conn: sqlite3.Connection | None = None
-
-
 _is_memory = False
+_all_conns: set[sqlite3.Connection] = set()
+_conn_gen = 0
 
 
 def _clean_str(val: str | None) -> str:
@@ -32,113 +32,158 @@ def _clean_str(val: str | None) -> str:
     return re.sub(r"[^A-Z0-9]", "", str(val).upper())
 
 
+def _open_vehicle_conn(target: str, *, uri: bool) -> sqlite3.Connection:
+    conn = sqlite3.connect(
+        target,
+        uri=uri,
+        timeout=30.0,
+        check_same_thread=False,
+    )
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout = 30000;")
+    return conn
+
+
+def _init_vehicle_schema(conn: sqlite3.Connection, *, is_memory: bool) -> None:
+    with conn:
+        if not is_memory:
+            conn.execute("PRAGMA journal_mode = WAL;")
+            conn.execute("PRAGMA synchronous = NORMAL;")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS vehicle_cache (
+                clean_kapino TEXT PRIMARY KEY,
+                door_number TEXT NOT NULL,
+                plate TEXT,
+                clean_plate TEXT,
+                hash_value TEXT,
+                hash_updated_at REAL,
+                updated_at REAL NOT NULL
+            );
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_vc_clean_plate ON vehicle_cache(clean_plate);")
+
+
 def get_db_connection() -> sqlite3.Connection:
     global _primary_conn, _initialized, _is_memory
     conn = getattr(_local, "conn", None)
-    if conn is not None:
+    if conn is not None and getattr(_local, "conn_gen", -1) == _conn_gen:
         try:
             conn.execute("SELECT 1;")
             return conn
         except Exception:
             conn = None
 
-    db_target = settings.vehicle_cache_path
-    _is_memory = db_target == ":memory:"
-
-    if _is_memory:
-        conn_str = "file:vehicle_cache_mem?mode=memory&cache=shared"
-        uri = True
-    else:
-        p = Path(db_target)
-        if not p.is_absolute():
-            p = Path(__file__).resolve().parent.parent.parent / p
-        p.parent.mkdir(parents=True, exist_ok=True)
-        conn_str = str(p)
-        uri = False
-
-    try:
-        new_conn = sqlite3.connect(
-            conn_str,
-            uri=uri,
-            timeout=30.0,
-            check_same_thread=False,
-        )
-        if not _is_memory:
-            new_conn.execute("CREATE TABLE IF NOT EXISTS _test_write (id INT);")
-    except Exception as exc:
-        logger.warning("Could not open %s (%s), trying /tmp/vehicles.db", db_target, exc)
-        try:
-            p_tmp = Path("/tmp/vehicles.db")
-            new_conn = sqlite3.connect(
-                str(p_tmp),
-                uri=False,
-                timeout=30.0,
-                check_same_thread=False,
-            )
-            new_conn.execute("CREATE TABLE IF NOT EXISTS _test_write (id INT);")
-        except Exception as exc2:
-            logger.warning(
-                "Could not open /tmp fallback either (%s), using in-memory shared fallback", exc2
-            )
-            _is_memory = True
-            new_conn = sqlite3.connect(
-                "file:vehicle_cache_fallback?mode=memory&cache=shared",
-                uri=True,
-                timeout=30.0,
-                check_same_thread=False,
-            )
-
-    new_conn.row_factory = sqlite3.Row
-
     with _init_lock:
-        if not _initialized:
-            if _is_memory and _primary_conn is None:
-                _primary_conn = new_conn
-            with new_conn:
-                if not _is_memory:
-                    new_conn.execute("PRAGMA journal_mode = WAL;")
-                    new_conn.execute("PRAGMA synchronous = NORMAL;")
-                new_conn.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS vehicle_cache (
-                        clean_kapino TEXT PRIMARY KEY,
-                        door_number TEXT NOT NULL,
-                        plate TEXT,
-                        clean_plate TEXT,
-                        hash_value TEXT,
-                        hash_updated_at REAL,
-                        updated_at REAL NOT NULL
-                    );
-                    """
-                )
-                new_conn.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_vc_clean_plate ON vehicle_cache(clean_plate);"
-                )
-            _initialized = True
+        conn = getattr(_local, "conn", None)
+        if conn is not None and getattr(_local, "conn_gen", -1) == _conn_gen:
+            try:
+                conn.execute("SELECT 1;")
+                return conn
+            except Exception:
+                conn = None
 
-    _local.conn = new_conn
-    return new_conn
+        db_target = settings.vehicle_cache_path
+        if not _initialized:
+            _is_memory = db_target == ":memory:"
+
+        new_conn: sqlite3.Connection | None = None
+        if _is_memory:
+            uri_target = (
+                "file:vehicle_cache_mem?mode=memory&cache=shared"
+                if db_target == ":memory:"
+                else "file:vehicle_cache_fallback?mode=memory&cache=shared"
+            )
+            new_conn = _open_vehicle_conn(uri_target, uri=True)
+            if not _initialized:
+                _init_vehicle_schema(new_conn, is_memory=True)
+                _initialized = True
+            if _primary_conn is None:
+                _primary_conn = new_conn
+        else:
+            p = Path(db_target)
+            if not p.is_absolute():
+                p = Path(__file__).resolve().parent.parent.parent / p
+            try:
+                p.parent.mkdir(parents=True, exist_ok=True)
+                new_conn = _open_vehicle_conn(str(p), uri=False)
+                if not _initialized:
+                    _init_vehicle_schema(new_conn, is_memory=False)
+                    _initialized = True
+                else:
+                    new_conn.execute("PRAGMA synchronous = NORMAL;")
+            except Exception as exc:
+                if new_conn is not None:
+                    try:
+                        new_conn.close()
+                    except Exception:
+                        pass
+                    new_conn = None
+                logger.warning("Could not open %s (%s), trying /tmp/vehicles.db", db_target, exc)
+                try:
+                    p_tmp = Path("/tmp/vehicles.db")
+                    new_conn = _open_vehicle_conn(str(p_tmp), uri=False)
+                    if not _initialized:
+                        _init_vehicle_schema(new_conn, is_memory=False)
+                        _initialized = True
+                    else:
+                        new_conn.execute("PRAGMA synchronous = NORMAL;")
+                except Exception as exc2:
+                    if new_conn is not None:
+                        try:
+                            new_conn.close()
+                        except Exception:
+                            pass
+                        new_conn = None
+                    logger.warning(
+                        "Could not open /tmp fallback either (%s), using in-memory shared fallback",
+                        exc2,
+                    )
+                    _is_memory = True
+                    new_conn = _open_vehicle_conn(
+                        "file:vehicle_cache_fallback?mode=memory&cache=shared", uri=True
+                    )
+                    if not _initialized:
+                        _init_vehicle_schema(new_conn, is_memory=True)
+                        _initialized = True
+                    if _primary_conn is None:
+                        _primary_conn = new_conn
+
+        _all_conns.add(new_conn)
+        _local.conn = new_conn
+        _local.conn_gen = _conn_gen
+        return new_conn
 
 
 def close_connection() -> None:
-    """Close and release the active SQLite connection(s)."""
-    global _primary_conn, _initialized, _is_memory
+    """Close and release all active SQLite connections across worker threads."""
+    global _primary_conn, _initialized, _is_memory, _conn_gen
     with _init_lock:
-        conn = getattr(_local, "conn", None)
-        if conn is not None:
+        _conn_gen += 1
+        conns_to_close = list(_all_conns)
+        _all_conns.clear()
+
+        local_conn = getattr(_local, "conn", None)
+        if local_conn is not None:
+            if local_conn not in conns_to_close:
+                conns_to_close.append(local_conn)
+            _local.conn = None
+        _local.conn_gen = _conn_gen
+
+        if _primary_conn is not None:
+            if _primary_conn not in conns_to_close:
+                conns_to_close.append(_primary_conn)
+            _primary_conn = None
+
+        for conn in conns_to_close:
             try:
                 conn.close()
             except Exception:
                 pass
-            _local.conn = None
 
-        if _primary_conn is not None:
-            try:
-                _primary_conn.close()
-            except Exception:
-                pass
-            _primary_conn = None
         _initialized = False
+        _is_memory = False
 
 
 def clear_cache() -> None:

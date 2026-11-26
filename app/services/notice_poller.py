@@ -17,8 +17,10 @@ async def notice_poll_loop() -> None:
 
     # 1 hour = 3600 seconds
     poll_interval = 3600
+    retry_interval = 60
 
     while True:
+        sleep_seconds = poll_interval
         try:
             session = get_session()
             notices = await get_global_notices(session)
@@ -37,5 +39,6 @@ async def notice_poll_loop() -> None:
             break
         except Exception as e:
             logger.error(f"notice_poller: error fetching notices: {e}", exc_info=True)
+            sleep_seconds = retry_interval
 
-        await asyncio.sleep(poll_interval)
+        await asyncio.sleep(sleep_seconds)

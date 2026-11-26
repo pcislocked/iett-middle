@@ -56,8 +56,18 @@ class MobiettClient:
                     token = str(data["access_token"])
                     MobiettClient._access_token = token
                     # Token expires in 3600 seconds, refresh a bit early (3500)
-                    expires_in = data.get("expires_in", 3600)
-                    MobiettClient._token_expires_at = time.monotonic() + (expires_in - 100)
+                    raw_exp = data.get("expires_in")
+                    if (
+                        isinstance(raw_exp, (int, float))
+                        and not isinstance(raw_exp, bool)
+                        and raw_exp > 0
+                    ):
+                        expires_in = float(raw_exp)
+                    else:
+                        expires_in = 3600.0
+                    MobiettClient._token_expires_at = time.monotonic() + max(
+                        0.0, expires_in - 100.0
+                    )
                     return token
             except Exception as e:
                 raise MobiettApiError(f"OAuth2 failed: {e}") from e
@@ -92,33 +102,31 @@ class MobiettClient:
     async def get_hat_id(self, hat_kodu: str) -> int | None:
         """Get the numeric HAT_ID for a route (e.g. 14M -> 497)."""
         hat_kodu_upper = hat_kodu.upper().strip()
-        if hat_kodu_upper in MobiettClient._hat_id_cache:
-            return MobiettClient._hat_id_cache[hat_kodu_upper]
+        cached_id = MobiettClient._hat_id_cache.get(hat_kodu_upper)
+        if cached_id is not None:
+            return cached_id
 
         # Bound cache size to prevent memory leak
         if len(MobiettClient._hat_id_cache) >= 2000:
             MobiettClient._hat_id_cache.pop(next(iter(MobiettClient._hat_id_cache)))
 
-        # Use mainGetRoute to find the HAT_ID
-        res = await self._post_service(
-            "mainGetRoute",
-            {
-                "HATYONETIM.GUZERGAH.YON": "119",
-                "HATYONETIM.HAT.HAT_KODU": hat_kodu_upper,
-            },
-        )
+        # Use mainGetRoute to find the HAT_ID across outgoing/return directions without caching misses
+        for yon in ("119", "120"):
+            res = await self._post_service(
+                "mainGetRoute",
+                {
+                    "HATYONETIM.GUZERGAH.YON": yon,
+                    "HATYONETIM.HAT.HAT_KODU": hat_kodu_upper,
+                },
+            )
+            if not res or not isinstance(res, list):
+                continue
+            for item in res:
+                if isinstance(item, dict) and item.get("HAT_ID"):
+                    hat_id = int(item["HAT_ID"])
+                    MobiettClient._hat_id_cache[hat_kodu_upper] = hat_id
+                    return hat_id
 
-        if not res or not isinstance(res, list):
-            self._hat_id_cache[hat_kodu_upper] = None
-            return None
-
-        for item in res:
-            if "HAT_ID" in item and item["HAT_ID"]:
-                hat_id = int(item["HAT_ID"])
-                MobiettClient._hat_id_cache[hat_kodu_upper] = hat_id
-                return hat_id
-
-        MobiettClient._hat_id_cache[hat_kodu_upper] = None
         return None
 
     async def get_live_fleet(self, hat_kodu: str) -> list[dict[str, Any]]:
@@ -168,5 +176,8 @@ class MobiettClient:
         if not res or not isinstance(res, dict):
             return []
 
-        data = res.get(str(dcode), {})
-        return data.get("duyuru") or []
+        data = res.get(str(dcode))
+        if not isinstance(data, dict):
+            return []
+        duyuru = data.get("duyuru")
+        return duyuru if isinstance(duyuru, list) else []

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 import aiohttp
@@ -27,19 +28,28 @@ class TrafficClient:
     def __init__(self, session: aiohttp.ClientSession) -> None:
         self._session = session
 
-    async def _get_json(self, path: str) -> list | dict:
+    async def _get_json(self, path: str) -> list | dict | int | float | str:
         url = f"{settings.trafik_base}/{path}"
         try:
             async with self._session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
                 resp.raise_for_status()
                 return await resp.json(content_type=None)
-        except aiohttp.ClientError as exc:
+        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
             raise IettApiError(f"Traffic API GET failed: {exc}") from exc
 
     async def get_traffic_index(self) -> TrafficIndex:
         """City-wide congestion percentage."""
         data = await self._get_json("TrafficIndex_Sc1_Cont")
-        percent = int(data) if isinstance(data, (int, float, str)) else 0
+        if isinstance(data, bool):
+            raise IettApiError(f"Traffic API returned invalid index: {data!r}")
+        if isinstance(data, (int, float, str)):
+            try:
+                raw_val = data.strip() if isinstance(data, str) else data
+                percent = int(float(raw_val))
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise IettApiError(f"Traffic API returned non-numeric index: {data!r}") from exc
+        else:
+            percent = 0
         level = min(7, max(1, round(percent / 16)))
         return TrafficIndex(percent=percent, description=_CONGESTION_LABELS.get(level, "Unknown"))
 

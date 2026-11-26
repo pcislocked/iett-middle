@@ -74,37 +74,64 @@ async def _ensure_token(session: aiohttp.ClientSession) -> str:
                 if resp.status != 200:
                     text = await read_bounded_text(resp, max_bytes=64 * 1024)
                     raise NtcApiError(f"Token fetch failed {resp.status}: {text[:200]}")
-                data = await resp.json()
+                data = await resp.json(content_type=None)
+                if not isinstance(data, dict):
+                    raise NtcApiError(f"Token response is not a JSON object: {type(data).__name__}")
+                access_token = data.get("access_token")
+                if not isinstance(access_token, str) or not access_token:
+                    raise NtcApiError(f"Token response missing access_token: {data}")
+
+                raw_expires_in = data.get("expires_in")
+                raw_expire_date = data.get("expire_date")
+                expires_in_sec = 3600.0
+                if isinstance(raw_expires_in, (int, float)) and not isinstance(
+                    raw_expires_in, bool
+                ):
+                    if 0 < raw_expires_in <= 86400:
+                        expires_in_sec = float(raw_expires_in)
+                elif isinstance(raw_expires_in, str):
+                    try:
+                        parsed_exp = float(raw_expires_in.strip())
+                        if 0 < parsed_exp <= 86400:
+                            expires_in_sec = parsed_exp
+                    except ValueError:
+                        pass
+                elif isinstance(raw_expire_date, (int, float)) and not isinstance(
+                    raw_expire_date, bool
+                ):
+                    candidate = (float(raw_expire_date) / 1000.0) - time.time()
+                    if 60 <= candidate <= 86400:
+                        expires_in_sec = candidate
+
+                _token = access_token
+                _token_expiry = time.monotonic() + expires_in_sec
         except NtcApiError:
             raise
         except Exception as exc:
             raise NtcApiError(f"Token request failed: {exc}") from exc
-
-        _token = data.get("access_token")
-        if not _token:
-            raise NtcApiError(f"Token response missing access_token: {data}")
-        if "expires_in" in data:
-            _token_expiry = time.monotonic() + data["expires_in"]
-        elif "expire_date" in data:
-            expires_in = (data["expire_date"] / 1000.0) - time.time()
-            if expires_in < 60 or expires_in > 86400:
-                # If clock skew makes it negative or too large, assume 1 hour
-                expires_in = 3600
-            _token_expiry = time.monotonic() + expires_in
-        else:
-            _token_expiry = time.monotonic() + 3600
         logger.debug("ntcapi: new token obtained, expires at monotonic %s", _token_expiry)
         return str(_token)
+
+
+async def _invalidate_token() -> None:
+    """Clear the cached Bearer token so the next request fetches a fresh one."""
+    global _token, _token_expiry
+    async with _token_lock:
+        _token = None
+        _token_expiry = 0.0
 
 
 async def _call_service(
     session: aiohttp.ClientSession,
     alias: str,
     data: dict[str, Any],
+    *,
+    _retried: bool = False,
 ) -> Any:
     """POST /service with the given alias and data, returning parsed JSON."""
     token = await _ensure_token(session)
     body = {"alias": alias, "data": data}
+    retry_401 = False
     try:
         async with session.post(
             _SERVICE_URL,
@@ -115,14 +142,21 @@ async def _call_service(
             },
             timeout=aiohttp.ClientTimeout(total=8.0, connect=3.0, sock_connect=3.0),
         ) as resp:
-            if resp.status != 200:
+            if resp.status == 401 and not _retried:
+                retry_401 = True
+            elif resp.status != 200:
                 text = await read_bounded_text(resp, max_bytes=64 * 1024)
                 raise NtcApiError(f"Service call '{alias}' failed {resp.status}: {text[:200]}")
-            return await resp.json()
+            else:
+                return await resp.json()
     except NtcApiError:
         raise
     except Exception as exc:
         raise NtcApiError(f"Service call '{alias}' request failed: {exc}") from exc
+
+    if retry_401:
+        await _invalidate_token()
+        return await _call_service(session, alias, data, _retried=True)
 
 
 # ── public helpers ─────────────────────────────────────────────────────────
@@ -464,7 +498,8 @@ async def get_global_notices(session: aiohttp.ClientSession) -> list[dict[str, A
         if isinstance(res, list):
             return res
         elif isinstance(res, dict) and "data" in res:
-            return res.get("data", [])
+            items = res.get("data")
+            return items if isinstance(items, list) else []
         return []
     except Exception as e:
         logger.warning(f"ntcapi: Failed to fetch global notices: {e}", exc_info=True)

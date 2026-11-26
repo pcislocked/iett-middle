@@ -157,6 +157,9 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
         pass
 
     await cancel_fleet_refresh_task()
+    from app.services.cache import cancel_background_tasks  # noqa: PLC0415
+
+    await cancel_background_tasks()
     await close_session()
     from app.services import stop_cache, vehicle_cache  # noqa: PLC0415
 
@@ -173,14 +176,6 @@ app = FastAPI(
     description="Smart caching proxy for IETT Istanbul public transit APIs.",
     version=settings.app_version,
     lifespan=lifespan,
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["GET", "POST"],
-    allow_headers=["*"],
-    expose_headers=["X-IETT-Updated-At"],
 )
 
 
@@ -228,6 +223,16 @@ async def add_cache_timestamp_header(request: Request, call_next):
         return response
     finally:
         cache_hit_time.reset(token)
+
+
+# Register CORSMiddleware last so it executes outermost and attaches CORS headers even on 429s.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+    expose_headers=["X-IETT-Updated-At"],
+)
 
 
 app.include_router(stops.router, prefix="/v1/stops", tags=["stops"])

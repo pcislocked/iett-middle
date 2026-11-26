@@ -168,40 +168,46 @@ class AracClient:
         else:
             kwargs["data"] = ""
 
-        async with self._session.post(url, **kwargs) as resp:
-            try:
-                text = await read_bounded_text(resp)
-            except ResponseTooLargeError as exc:
-                raise AracApiError(
-                    f"ARAC {path} response exceeded size limit",
-                    status_code=502,
-                ) from exc
-            if resp.status >= 400:
-                raise AracApiError(
-                    f"ARAC {path} failed with status {resp.status}",
-                    status_code=resp.status,
-                    payload=text[:500],
-                )
-            ctype = resp.headers.get("content-type", "")
-            if "application/json" not in ctype:
-                import html as html_lib
-                import re as re_lib
+        try:
+            async with self._session.post(url, **kwargs) as resp:
+                try:
+                    text = await read_bounded_text(resp)
+                except ResponseTooLargeError as exc:
+                    raise AracApiError(
+                        f"ARAC {path} response exceeded size limit",
+                        status_code=502,
+                    ) from exc
+                if resp.status >= 400:
+                    raise AracApiError(
+                        f"ARAC {path} failed with status {resp.status}",
+                        status_code=resp.status,
+                        payload=text[:500],
+                    )
+                ctype = resp.headers.get("content-type", "")
+                if "application/json" not in ctype:
+                    import html as html_lib
+                    import re as re_lib
 
-                stripped = re_lib.sub(r"<[^>]+>", " ", text).strip()
-                stripped = html_lib.unescape(stripped)
-                stripped = re_lib.sub(r"\s+", " ", stripped)
-                raise AracApiError(
-                    f"ARAC {path} returned non-JSON (status {resp.status})",
-                    status_code=503,
-                    payload=stripped or f"HTTP {resp.status}",
-                )
-            try:
-                return json.loads(text)
-            except json.JSONDecodeError as exc:
-                raise AracApiError(
-                    f"ARAC {path} returned malformed JSON",
-                    status_code=resp.status,
-                ) from exc
+                    stripped = re_lib.sub(r"<[^>]+>", " ", text).strip()
+                    stripped = html_lib.unescape(stripped)
+                    stripped = re_lib.sub(r"\s+", " ", stripped)
+                    raise AracApiError(
+                        f"ARAC {path} returned non-JSON (status {resp.status})",
+                        status_code=503,
+                        payload=stripped or f"HTTP {resp.status}",
+                    )
+                try:
+                    return json.loads(text)
+                except json.JSONDecodeError as exc:
+                    raise AracApiError(
+                        f"ARAC {path} returned malformed JSON",
+                        status_code=resp.status,
+                    ) from exc
+        except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+            raise AracApiError(
+                f"ARAC {path} request failed: {exc}",
+                status_code=503,
+            ) from exc
 
     async def get_vehicle_hash(self, kapino: str) -> str:
         """Fetch the dynamic encrypted hash for a door number or plate.
